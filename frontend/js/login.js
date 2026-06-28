@@ -95,6 +95,12 @@ document.addEventListener('DOMContentLoaded', () => {
 function redirectAfterLogin() {
   const host = window.location.hostname;
   const isLocalMachine = (host === 'localhost' || host === '127.0.0.1' || host === '::1');
+  const redirectTarget = getSafeRedirectTarget();
+
+  if (redirectTarget) {
+    window.location.href = redirectTarget;
+    return;
+  }
 
   // Admin can ONLY access the dashboard from the server machine (localhost)
   if (auth.isAdmin() && isLocalMachine) {
@@ -107,5 +113,20 @@ function redirectAfterLogin() {
     } else {
       window.location.href = '/';
     }
+  }
+}
+
+function getSafeRedirectTarget() {
+  const params = new URLSearchParams(window.location.search);
+  const redirect = params.get('redirect');
+  if (!redirect) return '';
+
+  try {
+    const target = new URL(redirect, window.location.origin);
+    if (target.origin !== window.location.origin) return '';
+    if (target.pathname.includes('login.html') || target.pathname.includes('admin.html')) return '';
+    return target.pathname + target.search + target.hash;
+  } catch (_err) {
+    return '';
   }
 }

@@ -1,6 +1,6 @@
 /**
  * Blankup Authentication System
- * Handles login, registration, navbar updating, and session checking.
+ * Handles login, registration, navbar account menu, and session checking.
  */
 
 const AUTH_API = window.location.origin + '/api/auth';
@@ -25,6 +25,27 @@ class AuthManager {
 
   isAdmin() {
     return this.isLoggedIn() && this.user.role === 'admin';
+  }
+
+  getDisplayName() {
+    return this.user?.fullName || this.user?.username || 'Tài khoản';
+  }
+
+  getInitials() {
+    const parts = this.getDisplayName().trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'US';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
   }
 
   getAuthHeaders() {
@@ -84,19 +105,21 @@ class AuthManager {
     }
   }
 
-  logout() {
+  clearSession() {
     this.token = null;
     this.user = null;
     localStorage.removeItem('blankup_token');
     localStorage.removeItem('blankup_user');
+  }
+
+  logout() {
+    this.clearSession();
     window.location.href = '/';
   }
 
-  // Update navbar action buttons based on auth state
   init() {
     this.updateNavbar();
 
-    // Re-check session on load
     if (this.isLoggedIn()) {
       this.checkSession();
     }
@@ -108,7 +131,6 @@ class AuthManager {
         headers: this.getAuthHeaders(),
       });
       if (!response.ok) {
-        // Token expired or invalid
         this.logout();
       }
     } catch (err) {
@@ -117,108 +139,124 @@ class AuthManager {
   }
 
   updateNavbar() {
-    // If we are currently on the login page, don't inject navigation items
     if (window.location.pathname.includes('login.html')) return;
 
     const navbarActions = document.querySelector('.navbar-actions');
     if (!navbarActions) return;
 
-    // Clear existing auth button or menu if present
-    const existingBtn = document.getElementById('navLoginBtn');
-    const existingMenu = document.getElementById('userMenu');
-    if (existingBtn) existingBtn.remove();
-    if (existingMenu) existingMenu.remove();
+    document.getElementById('navLoginBtn')?.remove();
+    document.getElementById('userMenu')?.remove();
 
     if (this.isLoggedIn()) {
-      const name = this.user.fullName || this.user.username;
-      const isAdmin = this.isAdmin();
-      const host = window.location.hostname;
-      const isLocalMachine = (host === 'localhost' || host === '127.0.0.1' || host === '::1');
-      // Admin dashboard link only visible from the server machine
-      const adminItemHtml = (isAdmin && isLocalMachine)
-        ? `<a href="admin.html" class="dropdown-item">📊 Admin Dashboard</a>` 
-        : '';
-
-      const menuHtml = `
-        <div class="user-menu" id="userMenu">
-          <button class="user-menu-trigger" id="userMenuTrigger">
-            <span class="avatar-circle">👤</span>
-            <span class="user-name-text">${name}</span>
-            <span class="chevron-down">▼</span>
-          </button>
-          <div class="user-dropdown" id="userDropdown">
-            <div class="user-dropdown-header">
-              <strong>${name}</strong>
-              <span>@${this.user.username} (${this.user.role})</span>
-            </div>
-            <hr>
-            <a href="studio.html" class="dropdown-item">🎨 AI Design Studio</a>
-            ${adminItemHtml}
-            <hr>
-            <button class="dropdown-item logout-btn" id="navLogoutBtn">
-              <span>🚪</span> <span data-i18n="nav.logout">Đăng xuất</span>
-            </button>
-          </div>
-        </div>
-      `;
-
-      // Insert before language toggle if it exists, or just append
-      const langToggle = document.getElementById('langToggle');
-      if (langToggle) {
-        langToggle.insertAdjacentHTML('beforebegin', menuHtml);
-      } else {
-        navbarActions.insertAdjacentHTML('beforeend', menuHtml);
-      }
-
-      // Bind dropdown toggle
-      const trigger = document.getElementById('userMenuTrigger');
-      const dropdown = document.getElementById('userDropdown');
-      if (trigger && dropdown) {
-        trigger.addEventListener('click', (e) => {
-          e.stopPropagation();
-          dropdown.classList.toggle('show');
-        });
-
-        // Close dropdown when clicking outside
-        document.addEventListener('click', () => {
-          dropdown.classList.remove('show');
-        });
-      }
-
-      // Bind logout button
-      const logoutBtn = document.getElementById('navLogoutBtn');
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => this.logout());
-      }
+      this.renderUserMenu(navbarActions);
     } else {
-      const loginBtnHtml = `
-        <button class="btn btn-ghost btn-sm" id="navLoginBtn" data-i18n="nav.login" style="margin-right: 10px;">Đăng nhập</button>
-      `;
-
-      const langToggle = document.getElementById('langToggle');
-      if (langToggle) {
-        langToggle.insertAdjacentHTML('beforebegin', loginBtnHtml);
-      } else {
-        navbarActions.insertAdjacentHTML('beforeend', loginBtnHtml);
-      }
-
-      // Bind redirect opening click
-      const loginBtn = document.getElementById('navLoginBtn');
-      if (loginBtn) {
-        loginBtn.addEventListener('click', () => {
-          window.location.href = '/login.html';
-        });
-      }
+      this.renderLoginButton(navbarActions);
     }
 
-    // Update translations for newly injected elements
     if (window.i18n && typeof window.i18n.updateDOM === 'function') {
       window.i18n.updateDOM();
     }
   }
+
+  renderUserMenu(navbarActions) {
+    const name = this.getDisplayName();
+    const safeName = this.escapeHtml(name);
+    const safeUsername = this.escapeHtml(this.user.username || '');
+    const safeRole = this.escapeHtml(this.user.role || 'user');
+    const initials = this.escapeHtml(this.getInitials());
+    const host = window.location.hostname;
+    const isLocalMachine = (host === 'localhost' || host === '127.0.0.1' || host === '::1');
+    const adminItemHtml = (this.isAdmin() && isLocalMachine)
+      ? `<a href="admin.html" class="dropdown-item"><span class="dropdown-item-icon">AD</span><span>Admin Dashboard</span></a>`
+      : '';
+
+    const menuHtml = `
+      <div class="user-menu" id="userMenu">
+        <button class="user-menu-trigger" id="userMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="avatar-circle">${initials}</span>
+          <span class="user-trigger-copy">
+            <span class="user-trigger-label">Đang đăng nhập</span>
+            <span class="user-name-text">${safeName}</span>
+          </span>
+          <span class="chevron-down">▾</span>
+        </button>
+        <div class="user-dropdown" id="userDropdown">
+          <div class="user-dropdown-header">
+            <div class="user-dropdown-avatar">${initials}</div>
+            <div>
+              <strong>${safeName}</strong>
+              <span>@${safeUsername} · ${safeRole}</span>
+            </div>
+          </div>
+          <hr>
+          <a href="studio.html" class="dropdown-item"><span class="dropdown-item-icon">AI</span><span>AI Design Studio</span></a>
+          ${adminItemHtml}
+          <button class="dropdown-item" id="navProfileBtn" type="button"><span class="dropdown-item-icon">ID</span><span>Thông tin tài khoản</span></button>
+          <hr>
+          <button class="dropdown-item" id="navSwitchAccountBtn" type="button"><span class="dropdown-item-icon">IN</span><span>Đăng nhập tài khoản khác</span></button>
+          <button class="dropdown-item logout-btn" id="navLogoutBtn" type="button"><span class="dropdown-item-icon">OUT</span><span data-i18n="nav.logout">Đăng xuất</span></button>
+        </div>
+      </div>
+    `;
+
+    const langToggle = document.getElementById('langToggle');
+    if (langToggle) {
+      langToggle.insertAdjacentHTML('beforebegin', menuHtml);
+    } else {
+      navbarActions.insertAdjacentHTML('beforeend', menuHtml);
+    }
+
+    this.bindUserMenuActions();
+  }
+
+  bindUserMenuActions() {
+    const trigger = document.getElementById('userMenuTrigger');
+    const dropdown = document.getElementById('userDropdown');
+    if (trigger && dropdown) {
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = dropdown.classList.toggle('show');
+        trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+
+      dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+      document.addEventListener('click', () => {
+        dropdown.classList.remove('show');
+        trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    document.getElementById('navProfileBtn')?.addEventListener('click', () => {
+      alert(`Tài khoản đang đăng nhập:\n${this.getDisplayName()}\n@${this.user.username}\nVai trò: ${this.user.role}`);
+    });
+
+    document.getElementById('navSwitchAccountBtn')?.addEventListener('click', () => {
+      this.clearSession();
+      window.location.href = '/login.html';
+    });
+
+    document.getElementById('navLogoutBtn')?.addEventListener('click', () => this.logout());
+  }
+
+  renderLoginButton(navbarActions) {
+    const loginBtnHtml = `
+      <button class="btn btn-ghost btn-sm" id="navLoginBtn" data-i18n="nav.login" style="margin-right: 10px;">Đăng nhập</button>
+    `;
+
+    const langToggle = document.getElementById('langToggle');
+    if (langToggle) {
+      langToggle.insertAdjacentHTML('beforebegin', loginBtnHtml);
+    } else {
+      navbarActions.insertAdjacentHTML('beforeend', loginBtnHtml);
+    }
+
+    document.getElementById('navLoginBtn')?.addEventListener('click', () => {
+      window.location.href = '/login.html';
+    });
+  }
 }
 
-// Global instance
 const auth = new AuthManager();
 document.addEventListener('DOMContentLoaded', () => {
   auth.init();

@@ -3,34 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Dashboard — Blankup</title>
-  
-  <!-- Blocking Auth Check: Only allow admin from server machine -->
+  <title>Admin Dashboard - Blankup</title>
+
   <script>
     (function() {
-      // 1. Must be on the server machine (localhost only)
       var host = window.location.hostname;
       var isLocalMachine = (host === 'localhost' || host === '127.0.0.1' || host === '::1');
       if (!isLocalMachine) {
-        alert('Truy cập bị từ chối! Admin Dashboard chỉ có thể truy cập từ máy chủ.');
+        alert('Truy cập bị từ chối. Admin Dashboard chỉ truy cập từ máy chủ.');
         window.location.href = '/';
         return;
       }
 
-      // 2. Must have valid admin session
       var token = localStorage.getItem('blankup_token');
       var userStr = localStorage.getItem('blankup_user');
       var isAdmin = false;
       if (token && userStr) {
         try {
           var user = JSON.parse(userStr);
-          if (user.role === 'admin') {
-            isAdmin = true;
-          }
+          isAdmin = user.role === 'admin';
         } catch (e) {}
       }
       if (!isAdmin) {
-        alert('Truy cập bị từ chối! Bạn cần đăng nhập với tài khoản Admin.');
+        alert('Bạn cần đăng nhập bằng tài khoản Admin.');
         window.location.href = '/login.html';
       }
     })();
@@ -40,11 +35,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/admin.css?v=admin-pro-2">
 </head>
 <body class="admin-theme">
-
-  <!-- ====== NAVIGATION ====== -->
   <nav class="navbar scrolled" id="navbar">
     <div class="container">
       <a href="/" class="navbar-logo">
@@ -63,176 +56,224 @@
           <span class="lang-vi active" data-lang="vi">VI</span>
           <span class="lang-en" data-lang="en">EN</span>
         </div>
-        <a href="/" class="btn btn-ghost btn-sm">← <span data-i18n="nav.home">Trang chủ</span></a>
+        <button class="btn btn-secondary btn-sm" id="adminRefreshBtn" type="button">Làm mới</button>
+        <button class="btn btn-ghost btn-sm" id="adminExportBtn" type="button">Xuất CSV</button>
+        <a href="/" class="btn btn-ghost btn-sm">← Trang chủ</a>
       </div>
     </div>
   </nav>
 
-  <!-- ====== MAIN CONTENT ====== -->
   <div class="admin-wrapper container">
-    <!-- Sidebar -->
     <aside class="admin-sidebar">
       <div class="sidebar-header">
-        <div class="admin-avatar">🛠️</div>
+        <div class="admin-avatar">AD</div>
         <div class="admin-info">
-          <h4 data-i18n="admin.welcome">Xin chào Admin</h4>
-          <span class="admin-badge">System Administrator</span>
+          <h4>Xin chào Admin</h4>
+          <span class="admin-badge">System Operator</span>
         </div>
       </div>
-      
+
+      <div class="admin-system-card">
+        <div>
+          <span class="system-label">Console status</span>
+          <strong>Live Control</strong>
+        </div>
+        <span class="system-pulse">Online</span>
+      </div>
+
       <nav class="sidebar-menu">
         <button class="sidebar-link active" data-tab="overview">
-          <span class="menu-icon">📊</span> <span data-i18n="admin.overview">Tổng quan</span>
+          <span class="menu-icon">01</span> <span>Tổng quan</span>
         </button>
         <button class="sidebar-link" data-tab="orders">
-          <span class="menu-icon">📦</span> <span data-i18n="admin.orders">Đơn hàng</span>
+          <span class="menu-icon">02</span> <span>Đơn hàng</span>
         </button>
         <button class="sidebar-link" data-tab="users">
-          <span class="menu-icon">👥</span> <span data-i18n="admin.users">Người dùng</span>
+          <span class="menu-icon">03</span> <span>Người dùng</span>
         </button>
         <button class="sidebar-link" data-tab="designs">
-          <span class="menu-icon">🎨</span> <span data-i18n="admin.designs">Thiết kế AI</span>
+          <span class="menu-icon">04</span> <span>Thiết kế AI</span>
         </button>
       </nav>
     </aside>
 
-    <!-- Main Workspace -->
     <main class="admin-workspace">
-      
-      <!-- ================== TAB: OVERVIEW ================== -->
       <section class="tab-panel active" id="panel-overview">
         <div class="panel-header">
-          <h2 data-i18n="admin.overview">Tổng quan</h2>
-          <span class="panel-subtitle">Thống kê tài chính và vận hành thời gian thực</span>
+          <div>
+            <span class="panel-kicker">Admin Command Center</span>
+            <h2>Tổng quan vận hành</h2>
+            <span class="panel-subtitle">Theo dõi đơn hàng, doanh thu, thanh toán QR và hoạt động tạo mẫu.</span>
+          </div>
+          <div class="panel-live-chip"><span></span> Dữ liệu realtime</div>
         </div>
 
-        <!-- Stats Grid -->
+        <div class="ops-command-strip">
+          <div>
+            <span class="ops-eyebrow">BLANKUP OPS</span>
+            <strong>Payment command center</strong>
+            <small>Ưu tiên kiểm tra đơn QR, chuyển thiếu và đơn chờ xử lý.</small>
+          </div>
+          <div class="ops-strip-metrics">
+            <span><b id="ops-paid-revenue">0đ</b> đã nhận</span>
+            <span><b id="ops-awaiting-money">0đ</b> đang chờ</span>
+            <span><b id="ops-underpaid-count">0</b> chuyển thiếu</span>
+          </div>
+        </div>
+
         <div class="stats-grid">
           <div class="stat-card revenue-card animate-fade-in">
-            <div class="stat-icon">💵</div>
+            <div class="stat-icon">VNĐ</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stats.revenue">Doanh thu thực</span>
+              <span class="stat-label">Doanh thu thực</span>
               <h2 class="stat-value text-glow" id="stat-revenue">0đ</h2>
             </div>
             <div class="card-glow"></div>
           </div>
 
           <div class="stat-card pending-revenue-card animate-fade-in">
-            <div class="stat-icon">⏳</div>
+            <div class="stat-icon">...</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stats.pendingRevenue">Doanh thu chờ</span>
+              <span class="stat-label">Doanh thu chờ</span>
               <h2 class="stat-value" id="stat-pending-revenue">0đ</h2>
             </div>
           </div>
 
           <div class="stat-card animate-fade-in">
-            <div class="stat-icon">📈</div>
+            <div class="stat-icon">AVG</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stats.averageValue">Giá trị TB</span>
+              <span class="stat-label">Giá trị TB</span>
               <h2 class="stat-value" id="stat-average-value">0đ</h2>
             </div>
           </div>
 
           <div class="stat-card animate-fade-in">
-            <div class="stat-icon">🛍️</div>
+            <div class="stat-icon">ORD</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stats.totalCount">Tổng số đơn</span>
+              <span class="stat-label">Tổng số đơn</span>
               <h2 class="stat-value" id="stat-total-orders">0</h2>
             </div>
           </div>
 
           <div class="stat-card animate-fade-in">
-            <div class="stat-icon">👥</div>
+            <div class="stat-icon">PAY</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stats.usersCount">Người dùng hệ thống</span>
+              <span class="stat-label">Đơn đã thanh toán</span>
+              <h2 class="stat-value" id="stat-paid-orders">0</h2>
+            </div>
+          </div>
+
+          <div class="stat-card animate-fade-in">
+            <div class="stat-icon">QR</div>
+            <div class="stat-data">
+              <span class="stat-label">Chờ chuyển khoản</span>
+              <h2 class="stat-value" id="stat-awaiting-payment">0</h2>
+            </div>
+          </div>
+
+          <div class="stat-card animate-fade-in">
+            <div class="stat-icon">USR</div>
+            <div class="stat-data">
+              <span class="stat-label">Người dùng</span>
               <h2 class="stat-value" id="stat-users-count">0</h2>
             </div>
           </div>
 
           <div class="stat-card animate-fade-in">
-            <div class="stat-icon">🎨</div>
+            <div class="stat-icon">AI</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stats.designsCount">Số mẫu AI gen</span>
+              <span class="stat-label">Mẫu AI gen</span>
               <h2 class="stat-value" id="stat-designs-count">0</h2>
             </div>
           </div>
         </div>
 
-        <!-- Analysis & Recent Grid -->
         <div class="overview-grid">
-          <!-- Category Breakdown -->
           <div class="dashboard-card breakdown-card">
-            <h3 class="card-title" data-i18n="admin.categoryBreakdown">Phân tích danh mục</h3>
-            <div class="breakdown-list" id="categoryBreakdownList">
-              <!-- JS rendered progress bars -->
-            </div>
+            <h3 class="card-title">Phân tích danh mục</h3>
+            <div class="breakdown-list" id="categoryBreakdownList"></div>
           </div>
 
-          <!-- Status Summary -->
           <div class="dashboard-card status-summary-card">
             <h3 class="card-title">Trạng thái đơn hàng</h3>
             <div class="status-summary-stats">
               <div class="status-indicator completed">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.stats.completedCount">Đơn hoàn thành</span>
+                <span class="indicator-label">Hoàn thành</span>
                 <strong id="summary-completed">0</strong>
               </div>
               <div class="status-indicator pending">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.stats.pendingCount">Đơn đang xử lý</span>
+                <span class="indicator-label">Đang xử lý</span>
                 <strong id="summary-pending">0</strong>
               </div>
               <div class="status-indicator cancelled">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.stats.cancelledCount">Đơn đã hủy</span>
+                <span class="indicator-label">Đã hủy</span>
                 <strong id="summary-cancelled">0</strong>
+              </div>
+              <div class="status-indicator paid">
+                <span class="indicator-dot"></span>
+                <span class="indicator-label">Đã nhận tiền</span>
+                <strong id="summary-paid">0</strong>
+              </div>
+              <div class="status-indicator awaiting">
+                <span class="indicator-dot"></span>
+                <span class="indicator-label">Chờ chuyển khoản</span>
+                <strong id="summary-awaiting">0</strong>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Recent Orders -->
-        <div class="dashboard-card recent-orders-card" style="margin-top: 24px;">
+        <div class="dashboard-card recent-orders-card">
           <div class="card-header-flex">
-            <h3 class="card-title" data-i18n="admin.recentOrders">Đơn hàng gần đây</h3>
+            <h3 class="card-title">Đơn hàng gần đây</h3>
             <button class="btn btn-ghost btn-sm" id="viewAllOrdersBtn">Xem tất cả đơn</button>
           </div>
           <div class="table-container">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.orderId">Mã đơn</th>
-                  <th data-i18n="admin.customer">Khách hàng</th>
-                  <th data-i18n="admin.product">Sản phẩm</th>
-                  <th data-i18n="admin.total">Tổng tiền</th>
-                  <th data-i18n="admin.status">Trạng thái</th>
-                  <th data-i18n="admin.date">Ngày đặt</th>
-                  <th data-i18n="admin.actions">Thao tác</th>
+                  <th>Mã đơn</th>
+                  <th>Khách hàng</th>
+                  <th>Sản phẩm</th>
+                  <th>Tổng tiền</th>
+                  <th>Thanh toán</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày đặt</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
-              <tbody id="recentOrdersTableBody">
-                <!-- JS populated -->
-              </tbody>
+              <tbody id="recentOrdersTableBody"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ================== TAB: ORDERS ================== -->
       <section class="tab-panel" id="panel-orders">
         <div class="panel-header">
-          <h2 data-i18n="admin.ordersList">Danh sách đơn hàng</h2>
-          <span class="panel-subtitle">Quản lý tất cả đơn hàng COD và thiết kế của khách hàng</span>
+          <h2>Danh sách đơn hàng</h2>
+          <span class="panel-subtitle">Quản lý COD, QR chuyển khoản, trạng thái thanh toán và file thiết kế của khách.</span>
         </div>
 
-        <!-- Filter controls -->
-        <div class="filter-bar">
+        <div class="filter-bar admin-order-toolbar">
           <div class="filter-group">
             <button class="filter-pill active" data-filter="all">Tất cả</button>
             <button class="filter-pill" data-filter="pending">Đang xử lý</button>
             <button class="filter-pill" data-filter="completed">Hoàn thành</button>
             <button class="filter-pill" data-filter="cancelled">Đã hủy</button>
           </div>
+          <select class="admin-select" id="paymentFilterSelect" aria-label="Lọc thanh toán">
+            <option value="all">Tất cả thanh toán</option>
+            <option value="BANK_TRANSFER">QR chuyển khoản</option>
+            <option value="COD">COD</option>
+            <option value="paid">Đã thanh toán</option>
+            <option value="awaiting_transfer">Chờ chuyển khoản</option>
+            <option value="underpaid">Chuyển thiếu</option>
+          </select>
+          <input class="admin-search" id="orderSearchInput" type="search" placeholder="Tìm mã đơn, khách, SĐT, nội dung CK...">
+          <span class="orders-result-count" id="ordersResultCount">0 đơn</span>
         </div>
 
         <div class="dashboard-card">
@@ -240,86 +281,73 @@
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.orderId">Mã đơn</th>
-                  <th data-i18n="admin.customer">Khách hàng</th>
-                  <th data-i18n="admin.product">Sản phẩm</th>
-                  <th data-i18n="admin.total">Tổng tiền</th>
-                  <th data-i18n="admin.status">Trạng thái</th>
-                  <th data-i18n="admin.date">Ngày đặt</th>
-                  <th data-i18n="admin.actions">Thao tác</th>
+                  <th>Mã đơn</th>
+                  <th>Khách hàng</th>
+                  <th>Sản phẩm</th>
+                  <th>Tổng tiền</th>
+                  <th>Thanh toán</th>
+                  <th>Trạng thái</th>
+                  <th>Ngày đặt</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
-              <tbody id="allOrdersTableBody">
-                <!-- JS populated -->
-              </tbody>
+              <tbody id="allOrdersTableBody"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ================== TAB: USERS ================== -->
       <section class="tab-panel" id="panel-users">
         <div class="panel-header">
-          <h2 data-i18n="admin.usersList">Danh sách người dùng</h2>
-          <span class="panel-subtitle">Người dùng đã đăng ký tài khoản trên hệ thống</span>
+          <h2>Danh sách người dùng</h2>
+          <span class="panel-subtitle">Người dùng đã đăng ký tài khoản trên hệ thống.</span>
         </div>
-
         <div class="dashboard-card">
           <div class="table-container">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.username">Tên đăng nhập</th>
-                  <th data-i18n="admin.fullName">Họ và tên</th>
-                  <th data-i18n="admin.role">Vai trò</th>
-                  <th data-i18n="admin.registered">Ngày đăng ký</th>
-                  <th>Số đơn hàng</th>
-                  <th data-i18n="admin.totalSpend">Đã chi tiêu</th>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ và tên</th>
+                  <th>Vai trò</th>
+                  <th>Ngày đăng ký</th>
+                  <th>Số đơn</th>
+                  <th>Đã chi tiêu</th>
                 </tr>
               </thead>
-              <tbody id="usersTableBody">
-                <!-- JS populated -->
-              </tbody>
+              <tbody id="usersTableBody"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ================== TAB: DESIGNS ================== -->
       <section class="tab-panel" id="panel-designs">
         <div class="panel-header">
-          <h2 data-i18n="admin.designsList">Thư viện thiết kế</h2>
-          <span class="panel-subtitle">Tất cả mẫu thiết kế được khách hàng tạo bằng AI</span>
+          <h2>Thư viện thiết kế</h2>
+          <span class="panel-subtitle">Tất cả mẫu thiết kế được khách tạo bằng AI.</span>
         </div>
-
-        <div class="designs-grid" id="designsGrid">
-          <!-- JS populated -->
-        </div>
+        <div class="designs-grid" id="designsGrid"></div>
       </section>
-
     </main>
   </div>
 
-  <!-- ====== DESIGN PREVIEW MODAL ====== -->
   <div class="modal-overlay" id="designPreviewModal">
     <div class="modal design-preview-modal">
       <div class="modal-header">
-        <h3 class="modal-title">Xem thiết kế áo thun</h3>
-        <button class="modal-close" id="previewModalClose">✕</button>
+        <h3 class="modal-title">Chi tiết đơn hàng</h3>
+        <button class="modal-close" id="previewModalClose">×</button>
       </div>
       <div class="modal-body">
         <div class="preview-layout">
           <div class="shirt-mockup-wrapper">
             <div class="admin-preview-side-toggle" id="adminPreviewSideToggle">
-              <button class="admin-side-btn active" data-side="front">Front</button>
-              <button class="admin-side-btn" data-side="back">Back</button>
+              <button class="admin-side-btn active" data-side="front">Mặt trước</button>
+              <button class="admin-side-btn" data-side="back">Mặt sau</button>
             </div>
-            <!-- Mockup container -->
             <div class="mockup-container-admin" id="mockupContainerAdmin">
-              <img class="mockup-tshirt-admin" id="mockupTshirtAdmin" src="" alt="T-shirt mockup">
+              <img class="mockup-tshirt-admin" id="mockupTshirtAdmin" src="" alt="Mockup áo">
               <div class="mockup-design-overlay-admin" id="mockupDesignAdmin"></div>
             </div>
-            <!-- Shirt colors selector for admin preview convenience -->
             <div class="preview-color-selector">
               <button class="admin-color-dot active" data-color="#ffffff" style="background:#ffffff;"></button>
               <button class="admin-color-dot" data-color="#000000" style="background:#000000;"></button>
@@ -331,43 +359,22 @@
           </div>
 
           <div class="design-details-info">
-            <h4 class="info-heading">Thông tin đơn hàng & Thiết kế</h4>
-            <div class="info-row">
-              <span class="info-label">Mã đơn hàng:</span>
-              <span class="info-val" id="prev-order-id">N/A</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Khách hàng:</span>
-              <span class="info-val" id="prev-customer-name">N/A</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Liên hệ:</span>
-              <span class="info-val" id="prev-customer-contact">N/A</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Địa chỉ:</span>
-              <span class="info-val" id="prev-customer-address">N/A</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Ghi chú:</span>
-              <span class="info-val" id="prev-customer-note">N/A</span>
-            </div>
+            <h4 class="info-heading">Thông tin đơn hàng</h4>
+            <div class="info-row"><span class="info-label">Mã đơn:</span><span class="info-val" id="prev-order-id">N/A</span></div>
+            <div class="info-row"><span class="info-label">Khách hàng:</span><span class="info-val" id="prev-customer-name">N/A</span></div>
+            <div class="info-row"><span class="info-label">Liên hệ:</span><span class="info-val" id="prev-customer-contact">N/A</span></div>
+            <div class="info-row"><span class="info-label">Địa chỉ:</span><span class="info-val" id="prev-customer-address">N/A</span></div>
+            <div class="info-row"><span class="info-label">Ghi chú:</span><span class="info-val" id="prev-customer-note">N/A</span></div>
             <hr>
-            <div class="info-row">
-              <span class="info-label">Sản phẩm:</span>
-              <span class="info-val" id="prev-product-details">N/A</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Số lượng:</span>
-              <span class="info-val" id="prev-quantity">N/A</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Người tạo (Author):</span>
-              <span class="info-val font-weight-bold" id="prev-author">N/A</span>
-            </div>
+            <div class="info-row"><span class="info-label">Sản phẩm:</span><span class="info-val" id="prev-product-details">N/A</span></div>
+            <div class="info-row"><span class="info-label">Số lượng:</span><span class="info-val" id="prev-quantity">N/A</span></div>
+            <div class="info-row"><span class="info-label">Người tạo:</span><span class="info-val" id="prev-author">N/A</span></div>
+            <div class="info-row"><span class="info-label">Thanh toán:</span><span class="info-val" id="prev-payment">N/A</span></div>
+            <div class="info-row"><span class="info-label">Nội dung CK:</span><span class="info-val" id="prev-transfer-content">N/A</span></div>
+            <div class="info-row"><span class="info-label">Thời gian nhận:</span><span class="info-val" id="prev-paid-at">N/A</span></div>
             <div class="design-svg-source-wrapper">
-              <span class="info-label" style="display:block; margin-bottom:8px;">File SVG nguồn:</span>
-              <a href="" id="downloadSvgLink" class="btn btn-secondary btn-sm" download="blankup-custom.svg">⬇️ Tải file SVG gốc</a>
+              <span class="info-label">File thiết kế:</span>
+              <a href="" id="downloadSvgLink" class="btn btn-secondary btn-sm" download="blankup-custom.png">Tải file thiết kế</a>
             </div>
           </div>
         </div>
@@ -375,9 +382,9 @@
     </div>
   </div>
 
-  <!-- Scripts -->
+  <div class="admin-toast" id="adminToast"></div>
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
-  <script src="js/admin.js?v=order-preview-1"></script>
+  <script src="js/admin.js?v=admin-pro-2"></script>
 </body>
 </html>

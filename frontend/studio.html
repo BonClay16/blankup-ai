@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/studio.css?v=placement-fix-3">
+  <link rel="stylesheet" href="css/studio.css?v=checkout-qr-3">
 </head>
 <body>
 
@@ -334,6 +334,27 @@
 
           <div class="order-divider" data-i18n="order.info">Thông tin giao hàng</div>
 
+          <div class="payment-method-panel">
+            <div class="payment-method-title">Phương thức thanh toán</div>
+            <div class="payment-method-options" id="paymentMethodOptions">
+              <button type="button" class="payment-method-option active" data-payment-method="COD">
+                <span class="payment-method-icon">COD</span>
+                <span>
+                  <strong>Thanh toán khi nhận hàng</strong>
+                  <small>Kiểm tra hàng rồi thanh toán cho shipper.</small>
+                </span>
+              </button>
+              <button type="button" class="payment-method-option" data-payment-method="BANK_TRANSFER">
+                <span class="payment-method-icon">QR</span>
+                <span>
+                  <strong>QR chuyển khoản</strong>
+                  <small>Quét QR từ app ngân hàng, tự điền số tiền và nội dung.</small>
+                </span>
+              </button>
+            </div>
+            <div class="payment-method-note" id="paymentMethodNote">Thanh toán khi nhận hàng (COD).</div>
+          </div>
+
           <form id="orderForm">
             <div class="form-group">
               <label data-i18n="order.name">Họ tên *</label>
@@ -363,6 +384,17 @@
           <h3 class="order-success-title" data-i18n="order.success.title">Đặt hàng thành công!</h3>
           <p class="order-success-id" id="orderSuccessId"></p>
           <p class="order-success-note" data-i18n="order.success.note">Chúng tôi sẽ liên hệ xác nhận trong vòng 24 giờ.</p>
+          <div class="bank-transfer-box" id="bankTransferBox">
+            <div class="bank-transfer-title">Quét QR chuyển khoản</div>
+            <div class="bank-transfer-qr">
+              <img id="successQrImage" src="" alt="QR chuyển khoản">
+            </div>
+            <div class="bank-transfer-status" id="bankTransferStatus">Đang chờ hệ thống xác nhận chuyển khoản...</div>
+            <div class="bank-transfer-row"><span>Ngân hàng</span><strong id="successBankName">MB Bank</strong></div>
+            <div class="bank-transfer-row"><span>Chủ tài khoản</span><strong id="successAccountName">BLANKUP</strong></div>
+            <div class="bank-transfer-row"><span>Số tài khoản</span><strong id="successAccountNumber">0123456789</strong></div>
+            <div class="bank-transfer-row"><span>Nội dung</span><strong id="successTransferContent">BLANKUP</strong></div>
+          </div>
           <button class="btn btn-primary" id="orderCloseBtn" data-i18n="order.close">Đóng</button>
         </div>
       </div>
@@ -372,10 +404,16 @@
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
+  <script>
+    if (!auth.isLoggedIn()) {
+      alert('Bạn cần đăng nhập hoặc đăng ký tài khoản để sử dụng AI Studio.');
+      window.location.href = '/login.html?redirect=studio.html';
+    }
+  </script>
   <script type="importmap">
     {"imports":{"three":"/vendor/three/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}
   </script>
   <script type="module" src="js/tshirt-360.js?v=15"></script>
-  <script src="js/studio.js?v=placement-fix-3"></script>
+  <script src="js/studio.js?v=checkout-qr-3"></script>
 </body>
 </html>

@@ -554,6 +554,73 @@
   -webkit-user-drag: none;
 }
 
+.mockup-design-overlay::after {
+  content: '';
+  position: absolute;
+  top: calc(40% + var(--print-y, -12%));
+  left: calc(50% + var(--print-x, 0%));
+  width: calc(40% * var(--print-scale, 1));
+  height: calc(34% * var(--print-scale, 1));
+  transform: translate(-50%, -50%);
+  border: 1.5px solid rgba(255, 107, 0, 0.9);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 4px rgba(255, 107, 0, 0.08),
+    0 12px 26px rgba(15, 23, 42, 0.08);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.mockup-design-overlay.active-text::after {
+  top: calc(46% + var(--text-y, 18%));
+  left: calc(50% + var(--text-x, 0%));
+  width: calc(48% * var(--text-scale, 1));
+  height: calc(15% * var(--text-scale, 1));
+}
+
+.mockup-container.interaction-position .mockup-design-overlay::after,
+.mockup-container.is-positioning-print .mockup-design-overlay::after {
+  opacity: 1;
+}
+
+.placement-resize-handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 8px 18px rgba(255, 107, 0, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  cursor: nwse-resize;
+  pointer-events: auto;
+  z-index: 8;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  touch-action: none;
+}
+
+.placement-resize-image {
+  top: calc(40% + var(--print-y, -12%) + (17% * var(--print-scale, 1)));
+  left: calc(50% + var(--print-x, 0%) + (20% * var(--print-scale, 1)));
+}
+
+.placement-resize-text {
+  top: calc(46% + var(--text-y, 18%) + (7.5% * var(--text-scale, 1)));
+  left: calc(50% + var(--text-x, 0%) + (24% * var(--text-scale, 1)));
+}
+
+.mockup-design-overlay.active-image .placement-resize-image,
+.mockup-design-overlay.active-text .placement-resize-text {
+  opacity: 1;
+}
+
+.placement-resize-handle:hover,
+.mockup-container.is-resizing-print .placement-resize-handle {
+  transform: translate(-50%, -50%) scale(1.16);
+}
+
 .mockup-container.interaction-position.has-real-3d .mockup-design-overlay {
   display: block !important;
   z-index: 4;
@@ -573,6 +640,11 @@
 .mockup-design-overlay img.processed-print {
   mix-blend-mode: normal;
   filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.08)) saturate(1.05);
+}
+
+.mockup-design-overlay img.is-selected,
+.mockup-print-text.is-selected {
+  filter: drop-shadow(0 6px 16px rgba(255, 107, 0, 0.18)) saturate(1.07);
 }
 
 .mockup-print-text {
@@ -614,6 +686,45 @@
 .mockup-container.is-positioning-print .mockup-design-overlay img,
 .mockup-container.is-positioning-print .mockup-print-text {
   outline-color: rgba(255, 107, 0, 0.65);
+}
+
+.mockup-container.is-ai-generating::before {
+  content: 'AI dang hoan thien anh that...';
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 8px 13px;
+  border: 1px solid rgba(255, 107, 0, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-heading);
+  font-size: 0.74rem;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.mockup-container.is-ai-generating::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  width: 7px;
+  height: 7px;
+  margin-left: -104px;
+  z-index: 13;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(255, 107, 0, 0.14);
+  animation: pulseDot 1s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 0.45; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .preview-empty {
@@ -1077,6 +1188,154 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: #065f46;
+}
+
+.cod-badge {
+  display: none;
+}
+
+.payment-method-panel {
+  margin: 0 0 20px;
+}
+
+.payment-method-title {
+  margin-bottom: 10px;
+  color: var(--text-heading);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.payment-method-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.payment-method-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-heading);
+  text-align: left;
+  cursor: pointer;
+}
+
+.payment-method-option:hover,
+.payment-method-option.active {
+  border-color: var(--accent);
+  background: #fff7ed;
+  box-shadow: 0 10px 24px rgba(255, 107, 0, 0.1);
+}
+
+.payment-method-icon {
+  width: 46px;
+  min-width: 46px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.payment-method-option strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.payment-method-option small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.payment-method-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.bank-transfer-box {
+  display: none;
+  margin: 18px 0 22px;
+  padding: 16px;
+  border: 1px solid rgba(255, 107, 0, 0.2);
+  border-radius: var(--radius-md);
+  background: #fff7ed;
+  text-align: left;
+}
+
+.bank-transfer-box.show {
+  display: block;
+}
+
+.bank-transfer-title {
+  margin-bottom: 10px;
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.bank-transfer-qr {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 14px;
+}
+
+.bank-transfer-qr img {
+  width: min(220px, 100%);
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 8px solid #ffffff;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+.bank-transfer-status {
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text-heading);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.bank-transfer-status.paid {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.bank-transfer-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  color: var(--text-body);
+  font-size: 0.82rem;
+}
+
+.bank-transfer-row strong {
+  color: var(--text-heading);
+  text-align: right;
 }
 
 /* Order Success */

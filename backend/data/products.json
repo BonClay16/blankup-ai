@@ -1,106 +1,193 @@
 [
-  {
-    "id": "prod-1",
-    "name": "Áo Thun Basic",
-    "nameEn": "Basic T-Shirt",
-    "description": "Áo thun cotton 100% cao cấp, form regular fit thoải mái",
-    "descriptionEn": "Premium 100% cotton t-shirt, comfortable regular fit",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "tshirt",
-    "colors": ["#ffffff", "#000000", "#1e293b", "#6b7280", "#dc2626", "#2563eb"],
-    "sizes": ["S", "M", "L", "XL", "2XL"],
-    "badge": "Bán chạy"
-  },
-  {
-    "id": "prod-2",
-    "name": "Áo Thun Oversize",
-    "nameEn": "Oversize T-Shirt",
-    "description": "Form oversize trẻ trung, chất liệu cotton thoáng mát",
-    "descriptionEn": "Youthful oversize fit, breathable cotton material",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "oversize",
-    "colors": ["#ffffff", "#000000", "#1e293b", "#f5f5dc", "#4a5568"],
-    "sizes": ["M", "L", "XL", "2XL"],
-    "badge": ""
-  },
-  {
-    "id": "prod-3",
-    "name": "Áo Polo Classic",
-    "nameEn": "Classic Polo",
-    "description": "Áo polo lịch lãm, phù hợp đi làm và dạo phố",
-    "descriptionEn": "Elegant polo shirt, perfect for work and casual outings",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "polo",
-    "colors": ["#ffffff", "#000000", "#1e3a5f", "#8b0000"],
-    "sizes": ["S", "M", "L", "XL"],
-    "badge": ""
-  },
-  {
-    "id": "prod-4",
-    "name": "Hoodie Premium",
-    "nameEn": "Premium Hoodie",
-    "description": "Hoodie dày dặn, giữ ấm tốt, có túi kangaroo",
-    "descriptionEn": "Thick premium hoodie with kangaroo pocket",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "hoodie",
-    "colors": ["#000000", "#1e293b", "#374151", "#ffffff"],
-    "sizes": ["M", "L", "XL", "2XL"],
-    "badge": "Mới"
-  },
-  {
-    "id": "prod-5",
-    "name": "Áo Thun Cổ Tròn",
-    "nameEn": "Crew Neck T-Shirt",
-    "description": "Thiết kế cổ tròn classic, cotton co giãn 4 chiều",
-    "descriptionEn": "Classic crew neck design, 4-way stretch cotton",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "tshirt",
-    "colors": ["#ffffff", "#000000", "#0f172a", "#065f46", "#7c2d12"],
-    "sizes": ["S", "M", "L", "XL", "2XL"],
-    "badge": ""
-  },
-  {
-    "id": "prod-6",
-    "name": "Áo Thun V-Neck",
-    "nameEn": "V-Neck T-Shirt",
-    "description": "Cổ chữ V thanh lịch, tôn dáng, cotton mịn",
-    "descriptionEn": "Elegant V-neck design, flattering fit, soft cotton",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "tshirt",
-    "colors": ["#ffffff", "#000000", "#1e293b", "#1e40af"],
-    "sizes": ["S", "M", "L", "XL"],
-    "badge": ""
-  },
-  {
-    "id": "prod-7",
-    "name": "Áo Polo Thể Thao",
-    "nameEn": "Sport Polo",
-    "description": "Chất liệu thể thao, thoáng khí, co giãn tốt",
-    "descriptionEn": "Athletic material, breathable, excellent stretch",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "polo",
-    "colors": ["#ffffff", "#000000", "#1e3a5f", "#dc2626", "#059669"],
-    "sizes": ["S", "M", "L", "XL", "2XL"],
-    "badge": ""
-  },
-  {
-    "id": "prod-8",
-    "name": "Hoodie Zip",
-    "nameEn": "Zip-Up Hoodie",
-    "description": "Hoodie khóa kéo tiện lợi, form slim fit",
-    "descriptionEn": "Convenient zip-up hoodie, slim fit design",
-    "price": 200000,
-    "priceUsd": 8,
-    "category": "hoodie",
-    "colors": ["#000000", "#1e293b", "#374151"],
-    "sizes": ["M", "L", "XL", "2XL"],
-    "badge": ""
-  }
+    {
+        "id":  "prod-1",
+        "name":  "Ão Thun Basic",
+        "nameEn":  "Basic T-Shirt",
+        "description":  "Ão thun cotton 100% cao cáº¥p, form regular fit thoáº£i mÃ¡i",
+        "descriptionEn":  "Premium 100% cotton t-shirt, comfortable regular fit",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "tshirt",
+        "colors":  [
+                       "#ffffff",
+                       "#000000",
+                       "#1e293b",
+                       "#6b7280",
+                       "#dc2626",
+                       "#2563eb"
+                   ],
+        "sizes":  [
+                      "S",
+                      "M",
+                      "L",
+                      "XL",
+                      "2XL"
+                  ],
+        "badge":  "BÃ¡n cháº¡y"
+    },
+    {
+        "id":  "prod-2",
+        "name":  "Ão Thun Oversize",
+        "nameEn":  "Oversize T-Shirt",
+        "description":  "Form oversize tráº» trung, cháº¥t liá»‡u cotton thoÃ¡ng mÃ¡t",
+        "descriptionEn":  "Youthful oversize fit, breathable cotton material",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "oversize",
+        "colors":  [
+                       "#ffffff",
+                       "#000000",
+                       "#1e293b",
+                       "#f5f5dc",
+                       "#4a5568"
+                   ],
+        "sizes":  [
+                      "M",
+                      "L",
+                      "XL",
+                      "2XL"
+                  ],
+        "badge":  ""
+    },
+    {
+        "id":  "prod-3",
+        "name":  "Ão Polo Classic",
+        "nameEn":  "Classic Polo",
+        "description":  "Ão polo lá»‹ch lÃ£m, phÃ¹ há»£p Ä‘i lÃ m vÃ  dáº¡o phá»‘",
+        "descriptionEn":  "Elegant polo shirt, perfect for work and casual outings",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "polo",
+        "colors":  [
+                       "#ffffff",
+                       "#000000",
+                       "#1e3a5f",
+                       "#8b0000"
+                   ],
+        "sizes":  [
+                      "S",
+                      "M",
+                      "L",
+                      "XL"
+                  ],
+        "badge":  ""
+    },
+    {
+        "id":  "prod-4",
+        "name":  "Hoodie Premium",
+        "nameEn":  "Premium Hoodie",
+        "description":  "Hoodie dÃ y dáº·n, giá»¯ áº¥m tá»‘t, cÃ³ tÃºi kangaroo",
+        "descriptionEn":  "Thick premium hoodie with kangaroo pocket",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "hoodie",
+        "colors":  [
+                       "#000000",
+                       "#1e293b",
+                       "#374151",
+                       "#ffffff"
+                   ],
+        "sizes":  [
+                      "M",
+                      "L",
+                      "XL",
+                      "2XL"
+                  ],
+        "badge":  "Má»›i"
+    },
+    {
+        "id":  "prod-5",
+        "name":  "Ão Thun Cá»• TrÃ²n",
+        "nameEn":  "Crew Neck T-Shirt",
+        "description":  "Thiáº¿t káº¿ cá»• trÃ²n classic, cotton co giÃ£n 4 chiá»u",
+        "descriptionEn":  "Classic crew neck design, 4-way stretch cotton",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "tshirt",
+        "colors":  [
+                       "#ffffff",
+                       "#000000",
+                       "#0f172a",
+                       "#065f46",
+                       "#7c2d12"
+                   ],
+        "sizes":  [
+                      "S",
+                      "M",
+                      "L",
+                      "XL",
+                      "2XL"
+                  ],
+        "badge":  ""
+    },
+    {
+        "id":  "prod-6",
+        "name":  "Ão Thun V-Neck",
+        "nameEn":  "V-Neck T-Shirt",
+        "description":  "Cá»• chá»¯ V thanh lá»‹ch, tÃ´n dÃ¡ng, cotton má»‹n",
+        "descriptionEn":  "Elegant V-neck design, flattering fit, soft cotton",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "tshirt",
+        "colors":  [
+                       "#ffffff",
+                       "#000000",
+                       "#1e293b",
+                       "#1e40af"
+                   ],
+        "sizes":  [
+                      "S",
+                      "M",
+                      "L",
+                      "XL"
+                  ],
+        "badge":  ""
+    },
+    {
+        "id":  "prod-7",
+        "name":  "Ão Polo Thá»ƒ Thao",
+        "nameEn":  "Sport Polo",
+        "description":  "Cháº¥t liá»‡u thá»ƒ thao, thoÃ¡ng khÃ­, co giÃ£n tá»‘t",
+        "descriptionEn":  "Athletic material, breathable, excellent stretch",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "polo",
+        "colors":  [
+                       "#ffffff",
+                       "#000000",
+                       "#1e3a5f",
+                       "#dc2626",
+                       "#059669"
+                   ],
+        "sizes":  [
+                      "S",
+                      "M",
+                      "L",
+                      "XL",
+                      "2XL"
+                  ],
+        "badge":  ""
+    },
+    {
+        "id":  "prod-8",
+        "name":  "Hoodie Zip",
+        "nameEn":  "Zip-Up Hoodie",
+        "description":  "Hoodie khÃ³a kÃ©o tiá»‡n lá»£i, form slim fit",
+        "descriptionEn":  "Convenient zip-up hoodie, slim fit design",
+        "price":  10000,
+        "priceUsd":  8,
+        "category":  "hoodie",
+        "colors":  [
+                       "#000000",
+                       "#1e293b",
+                       "#374151"
+                   ],
+        "sizes":  [
+                      "M",
+                      "L",
+                      "XL",
+                      "2XL"
+                  ],
+        "badge":  ""
+    }
 ]

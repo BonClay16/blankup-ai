@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { authenticate } = require('./auth');
 
 const router = express.Router();
 const designsFilePath = path.join(__dirname, '../data/designs.json');
@@ -350,41 +351,112 @@ function normalizeSearchText(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .toLowerCase();
 }
 
 function cleanSidePrompt(segment, side) {
   const sideWords = side === 'back'
-    ? '(?:mat\\s*sau|phia\\s*sau|sau\\s*lung|lung\\s*ao|sau\\s*ao|back)'
-    : '(?:mat\\s*truoc|phia\\s*truoc|truoc\\s*ao|front)';
+    ? '(?:mat\\s*sau|phia\\s*sau|sau\\s*lung|lung\\s*ao|sau\\s*ao|sau|back)'
+    : '(?:mat\\s*truoc|phia\\s*truoc|truoc\\s*ao|truoc|tru c|tr c|front)';
 
-  return normalizeSearchText(segment)
-    .replace(new RegExp(`\\b(?:in|o|tren|vao|cho|phan)?\\s*${sideWords}\\b`, 'gi'), ' ')
-    .replace(/\b(?:mau\s*ao|ao\s*thun|ao|thiet\s*ke|hinh|graphic|artwork|print)\b/gi, ' ')
+  const cleaned = normalizeSearchText(segment)
+    .replace(new RegExp(`\\b(?:in|o|tren|vao|cho|phan)?\\s*${sideWords}\\b`, 'giu'), ' ')
+    .replace(/\b(?:mau\s*ao|ao\s*thun|ao|o|thiet\s*ke|hinh|graphic|artwork|print)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
     .trim();
+  return normalizeVietnameseLandmarkIdea(cleaned);
+}
+
+function normalizeVietnameseLandmarkIdea(idea) {
+  const normalized = normalizeSearchText(idea);
+  const parts = [];
+  if (/\b(lang bac|l ng b c|lang chu tich ho chi minh|ho chi minh mausoleum)\b/.test(normalized)) {
+    parts.push('Ho Chi Minh Mausoleum landmark');
+  }
+  if (/\b(dinh doc lap|dinh c l p|dinh thong nhat|independence palace)\b/.test(normalized)) {
+    parts.push('Independence Palace Saigon landmark');
+  }
+  if (/\b(hoa sen|lotus|sen)\b/.test(normalized)) {
+    parts.push('Vietnamese lotus flower');
+  }
+  return parts.length ? `${parts.join(' with ')} illustration` : idea;
+}
+
+function cleanSideTextPrompt(segment, side) {
+  const sideWords = side === 'back'
+    ? '(?:mat\\s*sau|phia\\s*sau|sau\\s*lung|lung\\s*ao|sau\\s*ao|sau|back)'
+    : '(?:mat\\s*truoc|phia\\s*truoc|truoc\\s*ao|truoc|tru c|tr c|front)';
+
+  return normalizeSearchText(segment)
+    .replace(/\b(?:in|them|viet|chu|text|lettering|slogan|cau\s*chu|dong\s*chu|o|tren|vao|cho|phan)\b/giu, ' ')
+    .replace(new RegExp(`\\b${sideWords}\\b`, 'giu'), ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+    .trim()
+    .slice(0, 80);
+}
+
+function extractTextSides(prompt) {
+  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
+  const textSides = { front: '', back: '' };
+  segments.forEach((segment) => {
+    const searchable = normalizeSearchText(segment);
+    const wantsText = /\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable);
+    if (!wantsText) return;
+    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front|truoc|tru c|tr c)\b/.test(searchable);
+    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back|sau)\b/.test(searchable);
+    if (hasFront) textSides.front = cleanSideTextPrompt(segment, 'front') || textSides.front;
+    if (hasBack) textSides.back = cleanSideTextPrompt(segment, 'back') || textSides.back;
+  });
+  return textSides.front || textSides.back ? textSides : null;
+}
+
+function addSideIdea(ideas, idea) {
+  const clean = String(idea || '').trim();
+  if (!clean) return;
+  const key = normalizeSearchText(clean);
+  if (!ideas.some((existing) => normalizeSearchText(existing) === key)) {
+    ideas.push(clean);
+  }
 }
 
 function extractPrintSides(prompt) {
   const rawPrompt = String(prompt || '').trim();
   const segments = rawPrompt.split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
-  const sides = { front: '', back: '' };
+  const sideIdeas = { front: [], back: [] };
 
   segments.forEach((segment) => {
     const searchable = normalizeSearchText(segment);
-    const hasFront = /\b(mat truoc|phia truoc|truoc ao|front)\b/.test(searchable);
-    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|back)\b/.test(searchable);
+    if (/\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable)) return;
+    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front)\b/.test(searchable)
+      || /\btruoc\b/.test(searchable)
+      || /\btru c\b/.test(searchable)
+      || /\btr c\b/.test(searchable);
+    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back)\b/.test(searchable)
+      || /\bsau\b/.test(searchable);
 
-    if (hasFront) sides.front = cleanSidePrompt(segment, 'front') || sides.front;
-    if (hasBack) sides.back = cleanSidePrompt(segment, 'back') || sides.back;
+    if (hasFront) addSideIdea(sideIdeas.front, cleanSidePrompt(segment, 'front'));
+    if (hasBack) addSideIdea(sideIdeas.back, cleanSidePrompt(segment, 'back'));
   });
 
-  if (!sides.front && !sides.back) return null;
+  if (sideIdeas.back.length && !sideIdeas.front.length && segments.length > 1) {
+    const frontSegment = segments.find((segment) => {
+      const searchable = normalizeSearchText(segment);
+      return !(/\b(mat sau|phia sau|sau ao|sau lung|lung ao|back|sau)\b/.test(searchable));
+    });
+    if (frontSegment) addSideIdea(sideIdeas.front, cleanSidePrompt(frontSegment, 'front'));
+  }
+
+  const front = sideIdeas.front.join(' and ');
+  const back = sideIdeas.back.join(' and ');
+
+  if (!front && !back) return null;
 
   return {
-    front: sides.front || (sides.back ? 'minimal complementary front chest artwork matching the same theme' : rawPrompt),
-    back: sides.back,
+    front: front || (back ? 'minimal complementary front chest artwork matching the same theme' : rawPrompt),
+    back,
   };
 }
 
@@ -653,9 +725,12 @@ async function postOpenAIImageEdit(formData) {
   try {
     return await postOpenAIForm('https://api.openai.com/v1/images/edits', formData);
   } catch (err) {
-    if (/transparent background is not supported|background.*not supported/i.test(err.message || '') && formData.has?.('background')) {
-      formData.delete('background');
-      return await postOpenAIForm('https://api.openai.com/v1/images/edits', formData);
+    const message = err.message || '';
+    if (/input_fidelity.*not support|does not support the 'input_fidelity' parameter|unknown parameter.*input_fidelity/i.test(message)) {
+      return await postOpenAIForm('https://api.openai.com/v1/images/edits', cloneFormDataWithout(formData, ['input_fidelity']));
+    }
+    if (/transparent background is not supported|background.*not supported/i.test(message) && formData.has?.('background')) {
+      return await postOpenAIForm('https://api.openai.com/v1/images/edits', cloneFormDataWithout(formData, ['background']));
     }
     throw err;
   }
@@ -779,6 +854,19 @@ async function postOpenAIImageGeneration(body) {
   }
 }
 
+function supportsInputFidelity(model = OPENAI_IMAGE_MODEL) {
+  return !/^gpt-image-2$/i.test(model);
+}
+
+function cloneFormDataWithout(formData, omittedKeys = []) {
+  const clone = new FormData();
+  const omitted = new Set(omittedKeys);
+  for (const [key, value] of formData.entries()) {
+    if (!omitted.has(key)) clone.append(key, value);
+  }
+  return clone;
+}
+
 async function editOpenAIImage(file, idea, designId, style = DEFAULT_STYLE, customText = '') {
   const enhancedReferencePrompt = await enhanceImagePrompt(
     idea || 'Turn this reference image into an original standalone print graphic',
@@ -809,7 +897,9 @@ async function editOpenAIImage(file, idea, designId, style = DEFAULT_STYLE, cust
     formData.append('quality', OPENAI_IMAGE_QUALITY);
     formData.append('background', OPENAI_IMAGE_BACKGROUND);
     formData.append('output_format', OPENAI_IMAGE_OUTPUT_FORMAT);
-    formData.append('input_fidelity', 'high');
+    if (supportsInputFidelity()) {
+      formData.append('input_fidelity', 'high');
+    }
   }
   formData.append('image', new Blob([buffer], { type: file.mimetype }), file.originalname);
 
@@ -834,6 +924,7 @@ function saveDesignRecord({
   finalProductPrompt,
   printSides,
   customText,
+  customTextSides,
 }) {
   const designs = readDesigns();
   designs.push({
@@ -856,6 +947,7 @@ function saveDesignRecord({
     finalProductPrompt,
     printSides,
     customText,
+    customTextSides,
     aiProvider: designUrl?.startsWith('/uploads/') ? 'ai' : 'mock',
   });
   writeDesigns(designs);
@@ -876,17 +968,18 @@ function writeDesigns(data) {
 // POST /api/ai-design/generate
 // AI design generation from text prompt
 // ---------------------------------------------------------------------------
-router.post('/generate', async (req, res) => {
+router.post('/generate', authenticate, async (req, res) => {
   try {
-    const { prompt, style, author } = req.body;
+    const { prompt, style } = req.body;
     const customText = normalizeCustomText(req.body.customText);
+    const customTextSides = extractTextSides(prompt);
 
     if (!prompt) {
       return res.status(400).json({ success: false, error: 'A prompt is required.' });
     }
 
     const designId = 'design-' + Date.now();
-    const authorName = author || 'Guest';
+    const authorName = req.user.fullName || req.user.username;
     let designUrl;
     let frontDesignUrl;
     let backDesignUrl;
@@ -905,16 +998,18 @@ router.post('/generate', async (req, res) => {
       if (candidate === 'openai' && hasOpenAIConfig()) {
         try {
           if (printSides?.back) {
-            const frontResult = await generateOpenAIImage(printSides.front, style, `${designId}-front`, {
-              side: 'front',
-              originalPrompt: prompt,
-              customText,
-            });
-            const backResult = await generateOpenAIImage(printSides.back, style, `${designId}-back`, {
-              side: 'back',
-              originalPrompt: prompt,
-              customText,
-            });
+            const [frontResult, backResult] = await Promise.all([
+              generateOpenAIImage(printSides.front, style, `${designId}-front`, {
+                side: 'front',
+                originalPrompt: prompt,
+                customText,
+              }),
+              generateOpenAIImage(printSides.back, style, `${designId}-back`, {
+                side: 'back',
+                originalPrompt: prompt,
+                customText,
+              }),
+            ]);
             frontDesignUrl = frontResult.designUrl;
             backDesignUrl = backResult.designUrl;
             designUrl = frontDesignUrl;
@@ -952,16 +1047,18 @@ router.post('/generate', async (req, res) => {
       if (candidate === 'cloudflare' && hasCloudflareConfig()) {
         try {
           if (printSides?.back) {
-            const frontResult = await generateCloudflareImage(printSides.front, style, `${designId}-front`, {
-              side: 'front',
-              originalPrompt: prompt,
-              customText,
-            });
-            const backResult = await generateCloudflareImage(printSides.back, style, `${designId}-back`, {
-              side: 'back',
-              originalPrompt: prompt,
-              customText,
-            });
+            const [frontResult, backResult] = await Promise.all([
+              generateCloudflareImage(printSides.front, style, `${designId}-front`, {
+                side: 'front',
+                originalPrompt: prompt,
+                customText,
+              }),
+              generateCloudflareImage(printSides.back, style, `${designId}-back`, {
+                side: 'back',
+                originalPrompt: prompt,
+                customText,
+              }),
+            ]);
             frontDesignUrl = frontResult.designUrl;
             backDesignUrl = backResult.designUrl;
             designUrl = frontDesignUrl;
@@ -1026,6 +1123,7 @@ router.post('/generate', async (req, res) => {
       finalProductPrompt,
       printSides,
       customText,
+      customTextSides,
     });
 
     res.json({
@@ -1046,6 +1144,7 @@ router.post('/generate', async (req, res) => {
       finalProductPrompt,
       printSides,
       customText,
+      customTextSides,
     });
   } catch (err) {
     console.error('[AI-Design] Error generating design:', err.message);
@@ -1057,11 +1156,11 @@ router.post('/generate', async (req, res) => {
 // POST /api/ai-design/generate-from-image
 // AI design generation from an uploaded image
 // ---------------------------------------------------------------------------
-router.post('/generate-from-image', upload.single('image'), async (req, res) => {
+router.post('/generate-from-image', authenticate, upload.single('image'), async (req, res) => {
   try {
     const idea = req.body.idea || '';
     const style = req.body.style || DEFAULT_STYLE;
-    const author = req.body.author || 'Guest';
+    const author = req.user.fullName || req.user.username;
     const customText = normalizeCustomText(req.body.customText);
     const file = req.file;
 

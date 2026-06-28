@@ -6,7 +6,14 @@
 const API_BASE = window.location.origin + '/api';
 
 const BASIC_PRODUCT_COLORS = ['#ffffff', '#000000', '#1e293b', '#6b7280', '#dc2626', '#2563eb', '#059669'];
-const UNIFORM_PRODUCT_PRICE = 200000;
+const UNIFORM_PRODUCT_PRICE = 10000;
+const BANK_TRANSFER_INFO = {
+  bankId: '970422',
+  bankName: 'MB Bank',
+  accountName: 'LE LY HUY',
+  accountNumber: '0967145402',
+  template: 'compact2',
+};
 
 const PRODUCT_TYPES = {
   tshirt: {
@@ -36,6 +43,8 @@ const state = {
   selectedColor: '#ffffff',
   selectedSize: 'M',
   quantity: 1,
+  selectedPaymentMethod: 'COD',
+  paymentPollingTimer: null,
   currentView: 'front',
   selectedStyle: 'minimalist',
   uploadedFile: null,
@@ -47,6 +56,9 @@ const state = {
   compositeDesignUrls: { front: null, back: null },
   compositeCacheKey: '',
   interactionMode: 'position',
+  activePlacementLayer: 'image',
+  isGeneratingAi: false,
+  customTextSides: { front: '', back: '' },
   designProcessVersion: 0,
   viewer3d: null,
 };
@@ -75,9 +87,15 @@ function getCompositeCacheKey(designs) {
   return JSON.stringify({
     designs,
     customText: state.customText,
+    customTextSides: state.customTextSides,
     printPlacement: state.printPlacement,
     textPlacement: state.textPlacement,
   });
+}
+
+function getSideCustomText(side = state.currentView) {
+  const key = side === 'back' ? 'back' : 'front';
+  return state.customTextSides?.[key] || state.currentDesign?.customTextSides?.[key] || state.customText || '';
 }
 
 async function getCompositeDesignsForViewer(designs) {
@@ -85,8 +103,8 @@ async function getCompositeDesignsForViewer(designs) {
   if (state.compositeCacheKey === cacheKey) return state.compositeDesignUrls;
 
   const [front, back] = await Promise.all([
-    buildCompositePrintUrl(designs.front),
-    designs.back ? buildCompositePrintUrl(designs.back) : Promise.resolve(null),
+    buildCompositePrintUrl(designs.front, 'front'),
+    designs.back ? buildCompositePrintUrl(designs.back, 'back') : Promise.resolve(null),
   ]);
   state.compositeCacheKey = cacheKey;
   state.compositeDesignUrls = { front, back };
@@ -104,8 +122,9 @@ function loadImageForCanvas(url) {
   });
 }
 
-async function buildCompositePrintUrl(designUrl) {
-  if (!designUrl && !state.customText) return '';
+async function buildCompositePrintUrl(designUrl, side = state.currentView) {
+  const sideText = getSideCustomText(side);
+  if (!designUrl && !sideText) return '';
   const size = 1024;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -125,8 +144,8 @@ async function buildCompositePrintUrl(designUrl) {
         const ratio = Math.min(maxW / img.width, maxH / img.height);
         const w = img.width * ratio;
         const h = img.height * ratio;
-        const x = size * 0.5 - w / 2;
-        const y = size * 0.44 - h / 2;
+        const x = size * (0.5 + imagePlacement.x / 100) - w / 2;
+        const y = size * (0.44 + imagePlacement.y / 100) - h / 2;
         ctx.drawImage(img, x, y, w, h);
       }
     } catch (err) {
@@ -134,8 +153,8 @@ async function buildCompositePrintUrl(designUrl) {
     }
   }
 
-  if (state.customText) {
-    const text = state.customText.toUpperCase();
+  if (sideText) {
+    const text = sideText.toUpperCase();
     const fontSize = Math.max(34, 82 * textPlacement.scale);
     const x = size * (0.5 + textPlacement.x / 100);
     const y = size * (0.5 + textPlacement.y / 100);
@@ -192,9 +211,14 @@ function setInteractionMode(mode = 'position') {
     btn.classList.toggle('active', btn.dataset.interactionMode === state.interactionMode);
   });
   window.tshirt360Viewer?.setInteractionMode?.(state.interactionMode);
-  if (state.currentDesign || state.printDesignUrl || state.customText) {
+  if (state.currentDesign || state.printDesignUrl || getSideCustomText()) {
     applyCurrentDesignToViewer();
   }
+}
+
+function setActivePlacementLayer(layer = 'image') {
+  state.activePlacementLayer = layer === 'text' ? 'text' : 'image';
+  updateOverlayPlacement();
 }
 
 function updateDesignOverlayForSide() {
@@ -202,12 +226,15 @@ function updateDesignOverlayForSide() {
   if (!designOverlay) return;
 
   const activeUrl = getPreparedDesignUrl();
-  if (!activeUrl && !state.customText) return;
+  const activeText = getSideCustomText();
+  if (!activeUrl && !activeText) return;
 
   state.printDesignUrl = activeUrl;
   designOverlay.innerHTML = [
-    activeUrl ? `<img src="${escapeAttr(activeUrl)}" alt="AI Generated Design" class="mockup-print-design processed-print" style="animation: fadeIn 0.5s ease;">` : '',
-    state.customText ? `<div class="mockup-print-text">${escapeHtml(state.customText)}</div>` : '',
+    activeUrl ? `<img src="${escapeAttr(activeUrl)}" alt="AI Generated Design" class="mockup-print-design processed-print" draggable="false" style="animation: fadeIn 0.5s ease;">` : '',
+    activeText ? `<div class="mockup-print-text">${escapeHtml(activeText)}</div>` : '',
+    activeUrl ? '<button type="button" class="placement-resize-handle placement-resize-image" data-placement-target="image" aria-label="Resize design"></button>' : '',
+    activeText ? '<button type="button" class="placement-resize-handle placement-resize-text" data-placement-target="text" aria-label="Resize text"></button>' : '',
   ].join('');
   updateOverlayPlacement();
   updateThreeTexture();
@@ -544,8 +571,8 @@ function initThreeViewerEnabled() {
 
   const frontGeometry = createCurvedShirtGeometry(1);
   const backGeometry = createCurvedShirtGeometry(-1);
-  const frontTexture = createThreeTexture(true);
-  const backTexture = createThreeTexture(false);
+  const frontTexture = createThreeTexture(true, true);
+  const backTexture = createThreeTexture(true, false);
 
   const frontMaterial = new THREE.MeshStandardMaterial({
     map: frontTexture,
@@ -678,16 +705,16 @@ function updateThreeTexture() {
   const viewer = state.viewer3d;
   if (!viewer) return;
 
-  viewer.frontTexture.image = createShirtTexture(true);
-  viewer.backTexture.image = createShirtTexture(false);
+  viewer.frontTexture.image = createShirtTexture(true, true);
+  viewer.backTexture.image = createShirtTexture(true, false);
   viewer.frontTexture.needsUpdate = true;
   viewer.backTexture.needsUpdate = true;
   viewer.shirtCore.material.color.set(state.selectedColor);
   viewer.collar.material.color.set(state.selectedColor);
 }
 
-function createThreeTexture(includeDesign) {
-  const texture = new THREE.CanvasTexture(createShirtTexture(includeDesign));
+function createThreeTexture(includeDesign, isFront = true) {
+  const texture = new THREE.CanvasTexture(createShirtTexture(includeDesign, isFront));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   return texture;
@@ -743,7 +770,7 @@ function createShirtCore() {
   );
 }
 
-function createShirtTexture(includeDesign = true) {
+function createShirtTexture(includeDesign = true, isFront = true) {
   const canvas = document.createElement('canvas');
   canvas.width = 900;
   canvas.height = 1080;
@@ -772,12 +799,13 @@ function createShirtTexture(includeDesign = true) {
   ctx.stroke();
   ctx.restore();
 
-  if (includeDesign) drawThreeDesign(ctx, canvas);
+  if (includeDesign) drawThreeDesign(ctx, canvas, isFront ? 'front' : 'back');
   return canvas;
 }
 
-function drawThreeDesign(ctx, canvas) {
-  if (!state.printDesignUrl && !state.customText) return;
+function drawThreeDesign(ctx, canvas, side = state.currentView) {
+  const sideText = getSideCustomText(side);
+  if (!state.printDesignUrl && !sideText) return;
   const placement = state.printPlacement || { x: 0, y: -12, scale: 1 };
 
   if (state.printDesignUrl && !drawThreeDesign.cache) drawThreeDesign.cache = {};
@@ -808,7 +836,7 @@ function drawThreeDesign(ctx, canvas) {
     const h = img.height * ratio;
     ctx.drawImage(img, centerX - w / 2, centerY - h / 2, w, h);
   }
-  if (state.customText) {
+  if (sideText) {
     const fontSize = Math.max(26, 50 * textPlacement.scale);
     const textX = canvas.width * (0.5 + textPlacement.x / 100);
     const textY = canvas.height * (0.46 + textPlacement.y / 100);
@@ -818,8 +846,8 @@ function drawThreeDesign(ctx, canvas) {
     ctx.lineWidth = Math.max(4, fontSize * 0.12);
     ctx.strokeStyle = isLightColor(state.selectedColor) ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.55)';
     ctx.fillStyle = isLightColor(state.selectedColor) ? '#111827' : '#ffffff';
-    ctx.strokeText(state.customText.toUpperCase(), textX, textY);
-    ctx.fillText(state.customText.toUpperCase(), textX, textY);
+    ctx.strokeText(sideText.toUpperCase(), textX, textY);
+    ctx.fillText(sideText.toUpperCase(), textX, textY);
   }
   ctx.restore();
 }
@@ -900,6 +928,7 @@ function initPrintControls() {
   [xInput, yInput, scaleInput].forEach(input => {
     if (!input) return;
     input.addEventListener('input', () => {
+      setActivePlacementLayer('image');
       state.printPlacement = {
         x: Number(xInput?.value || 0),
         y: Number(yInput?.value || -12),
@@ -914,6 +943,7 @@ function initPrintControls() {
   [textXInput, textYInput, textScaleInput].forEach(input => {
     if (!input) return;
     input.addEventListener('input', () => {
+      setActivePlacementLayer('text');
       state.textPlacement = {
         x: Number(textXInput?.value || 0),
         y: Number(textYInput?.value || 18),
@@ -944,6 +974,7 @@ function initPrintControls() {
   quickPlacementBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.placementTarget;
+      setActivePlacementLayer(target === 'text' ? 'text' : 'image');
       const direction = btn.dataset.placementAction === 'larger' ? 1 : -1;
       const step = target === 'text' ? 0.12 : 0.1;
       if (target === 'text') {
@@ -969,58 +1000,130 @@ function initPrintControls() {
 
   if (designOverlay && mockupContainer) {
     let dragging = false;
+    let resizing = false;
     let startX = 0;
     let startY = 0;
     let startPlacement = { ...state.printPlacement };
     let dragLayer = 'image';
+    let startDistance = 1;
 
     designOverlay.addEventListener('pointerdown', (event) => {
       if (state.interactionMode !== 'position') return;
       const target = event.target;
-      if (!target.closest?.('.mockup-print-design, .mockup-print-text')) return;
-      dragLayer = target.closest('.mockup-print-text') ? 'text' : 'image';
+      const resizeHandle = target.closest?.('.placement-resize-handle');
+      const draggableLayer = target.closest?.('.mockup-print-design, .mockup-print-text');
+      if (!resizeHandle && !draggableLayer) return;
+
+      dragLayer = resizeHandle?.dataset.placementTarget || (target.closest('.mockup-print-text') ? 'text' : 'image');
+      setActivePlacementLayer(dragLayer);
       dragging = true;
+      resizing = Boolean(resizeHandle);
       mockupContainer.classList.add('is-positioning-print');
+      mockupContainer.classList.toggle('is-resizing-print', resizing);
       startX = event.clientX;
       startY = event.clientY;
       startPlacement = dragLayer === 'text' ? { ...state.textPlacement } : { ...state.printPlacement };
+      const rect = mockupContainer.getBoundingClientRect();
+      const center = getPlacementPixelCenter(rect, dragLayer, startPlacement);
+      startDistance = Math.max(24, Math.hypot(event.clientX - center.x, event.clientY - center.y));
       designOverlay.setPointerCapture(event.pointerId);
+      event.preventDefault();
       event.stopPropagation();
     });
 
     designOverlay.addEventListener('pointermove', (event) => {
       if (!dragging) return;
       const rect = mockupContainer.getBoundingClientRect();
-      const dx = ((event.clientX - startX) / rect.width) * 100;
-      const dy = ((event.clientY - startY) / rect.height) * 100;
-      const nextX = Math.max(-80, Math.min(80, startPlacement.x + dx));
-      const nextY = Math.max(-75, Math.min(45, startPlacement.y + dy));
-      if (dragLayer === 'text') {
-        state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
-        if (textXInput) textXInput.value = String(Math.round(nextX));
-        if (textYInput) textYInput.value = String(Math.round(nextY));
+      if (resizing) {
+        const center = getPlacementPixelCenter(rect, dragLayer, startPlacement);
+        const distance = Math.max(24, Math.hypot(event.clientX - center.x, event.clientY - center.y));
+        const ratio = distance / startDistance;
+        const minScale = dragLayer === 'text' ? 0.3 : 0.2;
+        const maxScale = dragLayer === 'text' ? 2.6 : 2.2;
+        const nextScale = Math.max(minScale, Math.min(maxScale, startPlacement.scale * ratio));
+        if (dragLayer === 'text') {
+          state.textPlacement = { ...state.textPlacement, scale: nextScale };
+          if (textScaleInput) textScaleInput.value = String(Math.round(nextScale * 100));
+        } else {
+          state.printPlacement = { ...state.printPlacement, scale: nextScale };
+          if (scaleInput) scaleInput.value = String(Math.round(nextScale * 100));
+        }
       } else {
-        state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
-        if (xInput) xInput.value = String(Math.round(nextX));
-        if (yInput) yInput.value = String(Math.round(nextY));
+        const dx = ((event.clientX - startX) / rect.width) * 100;
+        const dy = ((event.clientY - startY) / rect.height) * 100;
+        const nextX = Math.max(-80, Math.min(80, startPlacement.x + dx));
+        const nextY = Math.max(-75, Math.min(45, startPlacement.y + dy));
+        if (dragLayer === 'text') {
+          state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
+          if (textXInput) textXInput.value = String(Math.round(nextX));
+          if (textYInput) textYInput.value = String(Math.round(nextY));
+        } else {
+          state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
+          if (xInput) xInput.value = String(Math.round(nextX));
+          if (yInput) yInput.value = String(Math.round(nextY));
+        }
       }
       state.compositeCacheKey = '';
       updateOverlayPlacement();
       applyCurrentDesignToViewer();
+      event.preventDefault();
       event.stopPropagation();
     });
 
     const stopDrag = (event) => {
       dragging = false;
+      resizing = false;
       mockupContainer.classList.remove('is-positioning-print');
+      mockupContainer.classList.remove('is-resizing-print');
       event?.stopPropagation?.();
     };
     designOverlay.addEventListener('pointerup', stopDrag);
     designOverlay.addEventListener('pointercancel', stopDrag);
   }
 
+  document.addEventListener('keydown', (event) => {
+    const activeTag = document.activeElement?.tagName?.toLowerCase();
+    if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+    if (state.interactionMode !== 'position') return;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    const step = event.shiftKey ? 5 : 1;
+    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+    nudgePlacement(state.activePlacementLayer, dx, dy);
+    event.preventDefault();
+  });
+
   setInteractionMode(state.interactionMode);
   updateOverlayPlacement();
+}
+
+function getPlacementPixelCenter(rect, layer, placement) {
+  const baseY = layer === 'text' ? 0.46 : 0.4;
+  return {
+    x: rect.left + rect.width * (0.5 + placement.x / 100),
+    y: rect.top + rect.height * (baseY + placement.y / 100),
+  };
+}
+
+function nudgePlacement(layer, dx, dy) {
+  const xInput = document.getElementById(layer === 'text' ? 'textPosX' : 'printPosX');
+  const yInput = document.getElementById(layer === 'text' ? 'textPosY' : 'printPosY');
+  if (layer === 'text') {
+    const nextX = Math.max(-80, Math.min(80, state.textPlacement.x + dx));
+    const nextY = Math.max(-75, Math.min(45, state.textPlacement.y + dy));
+    state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
+    if (xInput) xInput.value = String(Math.round(nextX));
+    if (yInput) yInput.value = String(Math.round(nextY));
+  } else {
+    const nextX = Math.max(-80, Math.min(80, state.printPlacement.x + dx));
+    const nextY = Math.max(-75, Math.min(45, state.printPlacement.y + dy));
+    state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
+    if (xInput) xInput.value = String(Math.round(nextX));
+    if (yInput) yInput.value = String(Math.round(nextY));
+  }
+  state.compositeCacheKey = '';
+  updateOverlayPlacement();
+  applyCurrentDesignToViewer();
 }
 
 function updateOverlayPlacement() {
@@ -1035,7 +1138,12 @@ function updateOverlayPlacement() {
   designOverlay.style.setProperty('--text-x', `${textPlacement.x}%`);
   designOverlay.style.setProperty('--text-y', `${textPlacement.y}%`);
   designOverlay.style.setProperty('--text-scale', String(textPlacement.scale));
+  designOverlay.classList.toggle('active-image', state.activePlacementLayer !== 'text');
+  designOverlay.classList.toggle('active-text', state.activePlacementLayer === 'text');
+  designOverlay.querySelector('.mockup-print-design')?.classList.toggle('is-selected', state.activePlacementLayer !== 'text');
+  designOverlay.querySelector('.mockup-print-text')?.classList.toggle('is-selected', state.activePlacementLayer === 'text');
   mockupContainer?.classList.toggle('has-custom-text', Boolean(state.customText));
+  mockupContainer?.classList.toggle('is-ai-generating', Boolean(state.isGeneratingAi));
 }
 
 /* ============================================================
@@ -1104,6 +1212,148 @@ function initGenerateButtons() {
   }
 }
 
+function normalizeSideSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .toLowerCase();
+}
+
+function cleanDraftSidePrompt(segment, side) {
+  const text = normalizeSideSearchText(segment);
+  const sidePattern = side === 'back'
+    ? /\b(?:mat\s*sau|phia\s*sau|sau\s*lung|lung\s*ao|sau\s*ao|sau|back)\b/g
+    : /\b(?:mat\s*truoc|phia\s*truoc|truoc\s*ao|truoc|tru c|tr c|front)\b/g;
+  const cleaned = text
+    .replace(sidePattern, ' ')
+    .replace(/\b(?:in|o|tren|vao|cho|phan|mau\s*ao|ao\s*thun|ao|thiet\s*ke|hinh|graphic|artwork|print)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+    .trim();
+  return normalizeDraftLandmarkIdea(cleaned);
+}
+
+function normalizeDraftLandmarkIdea(idea) {
+  const normalized = normalizeSideSearchText(idea);
+  const parts = [];
+  if (/\b(lang bac|l ng b c|lang chu tich ho chi minh|ho chi minh mausoleum)\b/.test(normalized)) {
+    parts.push('Ho Chi Minh Mausoleum landmark');
+  }
+  if (/\b(dinh doc lap|dinh c l p|dinh thong nhat|independence palace)\b/.test(normalized)) {
+    parts.push('Independence Palace Saigon landmark');
+  }
+  if (/\b(hoa sen|lotus|sen)\b/.test(normalized)) {
+    parts.push('Vietnamese lotus flower');
+  }
+  return parts.length ? `${parts.join(' with ')} illustration` : idea;
+}
+
+function cleanSideTextPrompt(segment, side) {
+  const text = normalizeSideSearchText(segment);
+  const sidePattern = side === 'back'
+    ? /\b(?:mat\s*sau|phia\s*sau|sau\s*lung|lung\s*ao|sau\s*ao|sau|back)\b/g
+    : /\b(?:mat\s*truoc|phia\s*truoc|truoc\s*ao|truoc|tru c|tr c|front)\b/g;
+  return text
+    .replace(/\b(?:in|them|viet|chu|text|lettering|slogan|cau chu|dong chu|o|tren|vao|cho|phan)\b/g, ' ')
+    .replace(sidePattern, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+    .trim()
+    .slice(0, 80);
+}
+
+function extractPromptTextSides(prompt) {
+  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
+  const textSides = { front: '', back: '' };
+  segments.forEach((segment) => {
+    const searchable = normalizeSideSearchText(segment);
+    const wantsText = /\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable);
+    if (!wantsText) return;
+    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front|truoc|tru c|tr c)\b/.test(searchable);
+    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back|sau)\b/.test(searchable);
+    if (hasFront) textSides.front = cleanSideTextPrompt(segment, 'front') || textSides.front;
+    if (hasBack) textSides.back = cleanSideTextPrompt(segment, 'back') || textSides.back;
+  });
+  return textSides.front || textSides.back ? textSides : null;
+}
+
+function addDraftSideIdea(ideas, idea) {
+  const clean = String(idea || '').trim();
+  if (!clean) return;
+  const key = normalizeSideSearchText(clean);
+  if (!ideas.some((existing) => normalizeSideSearchText(existing) === key)) {
+    ideas.push(clean);
+  }
+}
+
+function extractDraftPrintSides(prompt) {
+  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
+  const sideIdeas = { front: [], back: [] };
+  segments.forEach((segment) => {
+    const searchable = normalizeSideSearchText(segment);
+    if (/\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable)) return;
+    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front)\b/.test(searchable)
+      || /\btruoc\b/.test(searchable)
+      || /\btru c\b/.test(searchable)
+      || /\btr c\b/.test(searchable);
+    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back)\b/.test(searchable)
+      || /\bsau\b/.test(searchable);
+    if (hasFront) addDraftSideIdea(sideIdeas.front, cleanDraftSidePrompt(segment, 'front'));
+    if (hasBack) addDraftSideIdea(sideIdeas.back, cleanDraftSidePrompt(segment, 'back'));
+  });
+  if (sideIdeas.back.length && !sideIdeas.front.length && segments.length > 1) {
+    const frontSegment = segments.find((segment) => {
+      const searchable = normalizeSideSearchText(segment);
+      return !(/\b(mat sau|phia sau|sau ao|sau lung|lung ao|back|sau)\b/.test(searchable));
+    });
+    if (frontSegment) addDraftSideIdea(sideIdeas.front, cleanDraftSidePrompt(frontSegment, 'front'));
+  }
+  const sides = {
+    front: sideIdeas.front.join(' and '),
+    back: sideIdeas.back.join(' and '),
+  };
+  return sides.front || sides.back ? sides : null;
+}
+
+async function showInstantDraftDesign(prompt, style = state.selectedStyle) {
+  const draftSides = extractDraftPrintSides(prompt);
+  const promptTextSides = extractPromptTextSides(prompt);
+  state.customTextSides = promptTextSides || { front: '', back: '' };
+  const textOnly = Boolean(promptTextSides && !draftSides);
+  const draftDesign = textOnly
+    ? {
+      success: true,
+      designId: 'text-only-' + Date.now(),
+      designUrl: '',
+      frontDesignUrl: '',
+      prompt,
+      style,
+      author: auth.user?.fullName || auth.user?.username || '',
+    }
+    : generateMockDesign(style, draftSides?.front || prompt);
+  draftDesign.provider = 'instant-draft';
+  draftDesign.isDraft = true;
+  draftDesign.frontDesignUrl = draftDesign.designUrl;
+  if (draftSides?.back) {
+    const backDraft = generateMockDesign(style, draftSides.back);
+    draftDesign.backDesignUrl = backDraft.designUrl;
+    draftDesign.printSides = {
+      front: draftSides.front || prompt,
+      back: draftSides.back,
+    };
+  }
+  if (promptTextSides) {
+    draftDesign.customTextSides = promptTextSides;
+  }
+  state.currentDesign = draftDesign;
+  state.isGeneratingAi = true;
+  setActivePlacementLayer('image');
+  await showDesignOnMockup(draftDesign.designUrl);
+  updateOverlayPlacement();
+  return draftDesign;
+}
+
 async function generateFromPrompt() {
   const prompt = document.getElementById('promptInput')?.value?.trim();
   if (!prompt) {
@@ -1113,16 +1363,25 @@ async function generateFromPrompt() {
 
   const btn = document.getElementById('generatePromptBtn');
   setLoading(btn, true);
-
-  const requestBody = { prompt, style: state.selectedStyle, customText: state.customText };
-  if (auth.isLoggedIn()) {
-    requestBody.author = auth.user.fullName || auth.user.username;
+  const draftDesign = await showInstantDraftDesign(prompt, state.selectedStyle);
+  if (draftDesign.designId?.startsWith('text-only-')) {
+    state.isGeneratingAi = false;
+    updateOverlayPlacement();
+    setLoading(btn, false);
+    return;
   }
+
+  const requestBody = {
+    prompt,
+    style: state.selectedStyle,
+    customText: state.customText,
+    author: auth.user?.fullName || auth.user?.username || '',
+  };
 
   try {
     const response = await fetch(`${API_BASE}/ai-design/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: auth.getAuthHeaders(),
       body: JSON.stringify(requestBody),
     });
 
@@ -1133,21 +1392,24 @@ async function generateFromPrompt() {
 
     if (data.success && data.designUrl) {
       state.currentDesign = data;
-      showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      state.customTextSides = data.customTextSides || state.customTextSides || { front: '', back: '' };
+      state.isGeneratingAi = false;
+      await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
     }
   } catch (err) {
+    state.isGeneratingAi = false;
+    updateOverlayPlacement();
     if (err.message && err.message !== 'Failed to fetch') {
       alert(err.message);
       console.warn('AI generation failed:', err.message);
       setLoading(btn, false);
       return;
     }
-    console.warn('API unavailable, using mock design');
-    const mockDesign = generateMockDesign(state.selectedStyle, prompt);
-    state.currentDesign = mockDesign;
-    showDesignOnMockup(mockDesign.designUrl);
+    console.warn('API unavailable, keeping instant draft design');
   }
 
+  state.isGeneratingAi = false;
+  updateOverlayPlacement();
   setLoading(btn, false);
 }
 
@@ -1167,12 +1429,13 @@ async function generateFromImage() {
     formData.append('idea', idea);
     formData.append('style', state.selectedStyle);
     formData.append('customText', state.customText);
-    if (auth.isLoggedIn()) {
-      formData.append('author', auth.user.fullName || auth.user.username);
-    }
+    formData.append('author', auth.user?.fullName || auth.user?.username || '');
 
     const response = await fetch(`${API_BASE}/ai-design/generate-from-image`, {
       method: 'POST',
+      headers: {
+        Authorization: auth.token ? `Bearer ${auth.token}` : '',
+      },
       body: formData,
     });
 
@@ -1583,7 +1846,7 @@ function generateMockDesign(style, prompt) {
   const svgTemplate = designs[style] || designs.abstract;
   const designUrl = `data:image/svg+xml;charset=utf-8,${svgTemplate}`;
 
-  const authorName = auth.isLoggedIn() ? (auth.user.fullName || auth.user.username) : 'Guest';
+  const authorName = auth.user?.fullName || auth.user?.username || '';
 
   return {
     success: true,
@@ -1605,12 +1868,23 @@ function initOrderFlow() {
   const modalClose = document.getElementById('modalClose');
   const orderForm = document.getElementById('orderForm');
   const orderCloseBtn = document.getElementById('orderCloseBtn');
+  const paymentMethodOptions = document.getElementById('paymentMethodOptions');
+
+  if (paymentMethodOptions) {
+    paymentMethodOptions.querySelectorAll('.payment-method-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.selectedPaymentMethod = btn.dataset.paymentMethod || 'COD';
+        updatePaymentMethodUI();
+      });
+    });
+  }
 
   // Open order modal
   if (orderBtn) {
     orderBtn.addEventListener('click', () => {
       if (!state.currentDesign) return;
       updateOrderSummary();
+      updatePaymentMethodUI();
       
       // Pre-fill user's name if logged in
       if (auth.isLoggedIn()) {
@@ -1661,11 +1935,40 @@ function initOrderFlow() {
   }
 }
 
+function updatePaymentMethodUI() {
+  const note = document.getElementById('paymentMethodNote');
+  document.querySelectorAll('.payment-method-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.paymentMethod === state.selectedPaymentMethod);
+  });
+  if (!note) return;
+  if (state.selectedPaymentMethod === 'BANK_TRANSFER') {
+    note.textContent = 'Sau khi tạo đơn, hệ thống sẽ hiển thị QR chuyển khoản và chờ xác nhận thanh toán.';
+  } else {
+    note.textContent = 'Thanh toán khi nhận hàng (COD).';
+  }
+}
+
+function getOrderTotalAmount() {
+  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
+  return product.price * state.quantity;
+}
+
+function buildVietQrUrl({ amount, transferContent }) {
+  const bankId = encodeURIComponent(BANK_TRANSFER_INFO.bankId);
+  const accountNumber = encodeURIComponent(BANK_TRANSFER_INFO.accountNumber);
+  const template = encodeURIComponent(BANK_TRANSFER_INFO.template || 'compact2');
+  const params = new URLSearchParams({
+    amount: String(amount || 0),
+    addInfo: transferContent || '',
+    accountName: BANK_TRANSFER_INFO.accountName || '',
+  });
+  return `https://img.vietqr.io/image/${bankId}-${accountNumber}-${template}.png?${params.toString()}`;
+}
+
 function updateOrderSummary() {
   const isVi = i18n.currentLang === 'vi';
   const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
-  const basePrice = product.price;
-  const total = basePrice * state.quantity;
+  const total = getOrderTotalAmount();
 
   const colorNames = {
     '#ffffff': isVi ? 'Trắng' : 'White',
@@ -1716,12 +2019,13 @@ async function submitOrder() {
     size: state.selectedSize,
     quantity: state.quantity,
     customText: state.customText,
+    customTextSides: state.customTextSides,
     printPlacement: state.printPlacement,
     textPlacement: state.textPlacement,
     customer: { name, phone, address, note },
-    payment: 'COD',
-    userId: auth.isLoggedIn() ? auth.user.id : null,
-    authorName: auth.isLoggedIn() ? (auth.user.fullName || auth.user.username) : 'Guest',
+    payment: state.selectedPaymentMethod,
+    userId: auth.user?.id,
+    authorName: auth.user?.fullName || auth.user?.username || '',
   };
 
   try {
@@ -1735,7 +2039,7 @@ async function submitOrder() {
     if (!response.ok || data.success === false) {
       throw new Error(data.error || (i18n.currentLang === 'vi' ? 'Đặt hàng thất bại. Vui lòng thử lại.' : 'Order failed. Please try again.'));
     }
-    showOrderSuccess(data.orderId || 'BU-' + Date.now());
+    showOrderSuccess(data.orderId || 'BU-' + Date.now(), data.payment || state.selectedPaymentMethod, data.transferContent);
   } catch (err) {
     alert(err.message || (i18n.currentLang === 'vi' ? 'Đặt hàng thất bại. Vui lòng thử lại.' : 'Order failed. Please try again.'));
   }
@@ -1744,14 +2048,119 @@ async function submitOrder() {
   submitBtn.innerHTML = `<span data-i18n="order.submit">${i18n.t('order.submit')}</span>`;
 }
 
-function showOrderSuccess(orderId) {
+function showOrderSuccess(orderId, paymentMethod = state.selectedPaymentMethod, transferContent = '') {
   const formContent = document.getElementById('orderFormContent');
   const successContent = document.getElementById('orderSuccess');
   const orderIdEl = document.getElementById('orderSuccessId');
+  const titleEl = successContent?.querySelector('.order-success-title');
+  const noteEl = successContent?.querySelector('.order-success-note');
+  const iconEl = successContent?.querySelector('.order-success-icon');
+  const bankBox = document.getElementById('bankTransferBox');
+  const isBankTransfer = paymentMethod === 'BANK_TRANSFER';
 
   if (formContent) formContent.style.display = 'none';
   if (successContent) successContent.classList.add('show');
-  if (orderIdEl) orderIdEl.textContent = `${i18n.t('order.success.desc')}${orderId}`;
+  if (orderIdEl) {
+    orderIdEl.textContent = isBankTransfer
+      ? `Mã đơn: ${orderId}. Vui lòng chuyển khoản đúng số tiền và nội dung bên dưới.`
+      : `${i18n.t('order.success.desc')}${orderId}`;
+  }
+  if (titleEl) {
+    titleEl.textContent = isBankTransfer ? 'Đang chờ thanh toán' : 'Đặt hàng thành công!';
+  }
+  if (noteEl) {
+    noteEl.textContent = isBankTransfer
+      ? 'Đơn hàng sẽ chuyển sang trạng thái thành công sau khi hệ thống xác nhận giao dịch.'
+      : 'Chúng tôi sẽ liên hệ xác nhận trong vòng 24 giờ.';
+  }
+  if (iconEl) iconEl.textContent = isBankTransfer ? '⏳' : '🎉';
+  if (bankBox) {
+    bankBox.classList.toggle('show', isBankTransfer);
+    const transferText = transferContent || `BLANKUP ${orderId}`;
+    const qrImage = document.getElementById('successQrImage');
+    const statusEl = document.getElementById('bankTransferStatus');
+    document.getElementById('successBankName').textContent = BANK_TRANSFER_INFO.bankName;
+    document.getElementById('successAccountName').textContent = BANK_TRANSFER_INFO.accountName;
+    document.getElementById('successAccountNumber').textContent = BANK_TRANSFER_INFO.accountNumber;
+    document.getElementById('successTransferContent').textContent = transferText;
+    if (statusEl) {
+      statusEl.textContent = isBankTransfer
+        ? 'Đang chờ hệ thống xác nhận chuyển khoản...'
+        : '';
+      statusEl.classList.toggle('paid', false);
+    }
+    if (qrImage) {
+      qrImage.src = buildVietQrUrl({
+        amount: getOrderTotalAmount(),
+        transferContent: transferText,
+      });
+      qrImage.alt = `QR chuyển khoản ${orderId}`;
+    }
+  }
+
+  stopPaymentPolling();
+  if (isBankTransfer) {
+    startPaymentPolling(orderId);
+  }
+}
+
+function stopPaymentPolling() {
+  if (state.paymentPollingTimer) {
+    clearInterval(state.paymentPollingTimer);
+    state.paymentPollingTimer = null;
+  }
+}
+
+async function refreshPaymentStatus(orderId) {
+  const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`);
+  if (!response.ok) return;
+  const result = await response.json();
+  const order = result?.data;
+  if (order?.paymentStatus === 'paid') {
+    markBankTransferPaid(orderId);
+    stopPaymentPolling();
+  } else if (order?.paymentStatus === 'underpaid') {
+    const statusEl = document.getElementById('bankTransferStatus');
+    if (statusEl) {
+      const received = Number(order.paymentReceivedAmount || 0).toLocaleString('vi-VN') + 'đ';
+      statusEl.textContent = `Hệ thống đã nhận ${received}, nhưng số tiền chưa đủ. Vui lòng kiểm tra lại đơn hàng.`;
+    }
+  }
+}
+
+function startPaymentPolling(orderId) {
+  let checks = 0;
+  refreshPaymentStatus(orderId).catch(() => {});
+  state.paymentPollingTimer = setInterval(() => {
+    checks += 1;
+    if (checks > 120) {
+      stopPaymentPolling();
+      const statusEl = document.getElementById('bankTransferStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Chưa thấy giao dịch. Bạn vẫn có thể đóng cửa sổ, shop sẽ kiểm tra lại theo mã đơn.';
+      }
+      return;
+    }
+    refreshPaymentStatus(orderId).catch(() => {});
+  }, 5000);
+}
+
+function markBankTransferPaid(orderId) {
+  const successContent = document.getElementById('orderSuccess');
+  const titleEl = successContent?.querySelector('.order-success-title');
+  const noteEl = successContent?.querySelector('.order-success-note');
+  const iconEl = successContent?.querySelector('.order-success-icon');
+  const orderIdEl = document.getElementById('orderSuccessId');
+  const statusEl = document.getElementById('bankTransferStatus');
+
+  if (titleEl) titleEl.textContent = 'Thanh toán thành công!';
+  if (noteEl) noteEl.textContent = 'Đơn hàng đã được xác nhận thanh toán. Chúng tôi sẽ xử lý và liên hệ bạn sớm.';
+  if (iconEl) iconEl.textContent = '✅';
+  if (orderIdEl) orderIdEl.textContent = `Mã đơn: ${orderId}`;
+  if (statusEl) {
+    statusEl.textContent = 'Đã nhận chuyển khoản. Cảm ơn bạn!';
+    statusEl.classList.add('paid');
+  }
 }
 
 function resetOrderModal() {
@@ -1761,6 +2170,9 @@ function resetOrderModal() {
 
   if (formContent) formContent.style.display = 'block';
   if (successContent) successContent.classList.remove('show');
+  stopPaymentPolling();
+  document.getElementById('bankTransferBox')?.classList.remove('show');
+  document.getElementById('successQrImage')?.removeAttribute('src');
   if (orderForm) orderForm.reset();
 }
 

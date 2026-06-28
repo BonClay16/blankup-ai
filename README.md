@@ -108,6 +108,7 @@ OPENAI_IMAGE_QUALITY=low
 OPENAI_IMAGE_BACKGROUND=auto
 OPENAI_IMAGE_OUTPUT_FORMAT=png
 ENABLE_AI_PRODUCT_MOCKUP=false
+PAYMENT_WEBHOOK_SECRET=...
 
 SQL_SERVER=.\SQLEXPRESS
 SQL_DATABASE=BlankupDB
@@ -129,6 +130,7 @@ Xem day du cac bien trong `backend/.env.example`.
 
 - Artwork AI co the khac chi tiet so voi prompt, dac biet voi meme/nhan vat co ten. Prompt enhancer da giam sai lech, nhung model anh van co do ngau nhien.
 - De chat luong artwork va image+idea tot nhat, cau hinh `OPENAI_API_KEY`; backend se uu tien OpenAI image edit/generation roi moi fallback sang Cloudflare. Neu chi co Cloudflare, luong upload anh khong doc duoc pixel anh that ma chi dung y tuong text lam fallback.
+- De tu xac nhan QR chuyen khoan, can ket noi provider co webhook giao dich ngan hang va tro callback ve `/api/orders/payment-webhook` kem header `x-webhook-secret` hoac `Authorization: Bearer ...` trung voi `PAYMENT_WEBHOOK_SECRET`.
 - Decal hien tai duoc chieu vao phan than truoc cua tung model. Neu thay model ao khac, can kiem tra lai vi tri, kich thuoc va huong decal trong `frontend/js/tshirt-360.js`.
 - Model GLB dang dung da duoc nen Meshopt. `GLTFLoader` can `MeshoptDecoder`; khong xoa doan import/cau hinh nay.
 - Model goc `tshirt.glb` va `tshirt-optimized.glb` la file trung gian, khong can dua len Git. Chi can cac model web dang dung trong `frontend/assets/models/`.

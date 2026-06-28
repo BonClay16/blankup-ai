@@ -32,8 +32,76 @@ function writeOrders(orders) {
   }
 }
 
+function getNestedValue(source, paths) {
+  for (const pathKey of paths) {
+    const value = pathKey.split('.').reduce((current, key) => current?.[key], source);
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return null;
+}
+
+function normalizeAmount(value) {
+  if (typeof value === 'number') return value;
+  return Number(String(value || '').replace(/[^\d.-]/g, '')) || 0;
+}
+
+function extractBankTransferPayload(body = {}) {
+  const description = String(getNestedValue(body, [
+    'description',
+    'content',
+    'transferContent',
+    'transactionContent',
+    'transaction_content',
+    'data.description',
+    'data.content',
+    'data.transferContent',
+    'data.transactionContent',
+    'data.transaction_content',
+  ]) || '');
+
+  const amount = normalizeAmount(getNestedValue(body, [
+    'amount',
+    'transferAmount',
+    'transactionAmount',
+    'transaction_amount',
+    'data.amount',
+    'data.transferAmount',
+    'data.transactionAmount',
+    'data.transaction_amount',
+  ]));
+
+  const transactionId = String(getNestedValue(body, [
+    'transactionId',
+    'transaction_id',
+    'reference',
+    'refNo',
+    'data.transactionId',
+    'data.transaction_id',
+    'data.reference',
+    'data.refNo',
+  ]) || '');
+
+  const orderId = (description.match(/BU-?[A-Z0-9-]+/i) || [])[0]?.toUpperCase() || '';
+
+  return { amount, description, transactionId, orderId };
+}
+
+function normalizePaymentCode(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function isAuthorizedPaymentWebhook(req) {
+  const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const authValue = String(req.headers.authorization || '');
+  const bearer = authValue.replace(/^Bearer\s+/i, '');
+  const apiKey = authValue.replace(/^ApiKey\s+/i, '').replace(/^Apikey\s+/i, '');
+  const headerSecret = req.headers['x-webhook-secret'];
+  return bearer === secret || apiKey === secret || headerSecret === secret;
+}
+
 // Map product category to default price
-const UNIFORM_PRODUCT_PRICE = 200000;
+const UNIFORM_PRODUCT_PRICE = 10000;
 const PRODUCT_PRICES = {
   tshirt: UNIFORM_PRODUCT_PRICE,
   oversize: UNIFORM_PRODUCT_PRICE,
@@ -64,11 +132,25 @@ router.get('/', authenticate, (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/orders
-// Create a new order (Supports guest or authenticated users)
+// Create a new order (Authenticated users only)
 // ---------------------------------------------------------------------------
-router.post('/', (req, res) => {
+router.post('/', authenticate, (req, res) => {
   try {
-    const { designUrl, frontDesignUrl, backDesignUrl, productType, color, size, quantity, customer, payment, userId, authorName } = req.body;
+    const {
+      designUrl,
+      frontDesignUrl,
+      backDesignUrl,
+      productType,
+      color,
+      size,
+      quantity,
+      customer,
+      payment,
+      customText,
+      customTextSides,
+      printPlacement,
+      textPlacement,
+    } = req.body;
 
     // --- Basic validation ---------------------------------------------------
     if (!customer || !customer.name || !customer.phone || !customer.address) {
@@ -87,6 +169,8 @@ router.post('/', (req, res) => {
 
     // --- Determine price ----------------------------------------------------
     const basePrice = PRODUCT_PRICES[productType.toLowerCase()] || UNIFORM_PRODUCT_PRICE;
+    const normalizedPayment = ['COD', 'BANK_TRANSFER'].includes(payment) ? payment : 'COD';
+    const normalizedQuantity = Number(quantity) || 1;
 
     // --- Build order --------------------------------------------------------
     const order = {
@@ -97,20 +181,31 @@ router.post('/', (req, res) => {
       productType,
       color: color || '#ffffff',
       size,
-      quantity: Number(quantity) || 1,
+      quantity: normalizedQuantity,
       price: basePrice,
+      total: basePrice * normalizedQuantity,
       customer: {
         name: customer.name,
         phone: customer.phone,
         address: customer.address,
         note: customer.note || '',
       },
-      payment: payment || 'COD',
+      payment: normalizedPayment,
+      paymentStatus: normalizedPayment === 'BANK_TRANSFER' ? 'awaiting_transfer' : 'cod_pending',
+      transferContent: normalizedPayment === 'BANK_TRANSFER' ? null : undefined,
+      customText: customText || '',
+      customTextSides: customTextSides || null,
+      printPlacement: printPlacement || null,
+      textPlacement: textPlacement || null,
       status: 'pending',
-      userId: userId || null,
-      authorName: authorName || 'Guest',
+      userId: req.user.id,
+      authorName: req.user.fullName || req.user.username,
       createdAt: new Date().toISOString(),
     };
+
+    if (normalizedPayment === 'BANK_TRANSFER') {
+      order.transferContent = `BLANKUP ${order.orderId}`;
+    }
 
     const orders = readOrders();
     orders.push(order);
@@ -121,11 +216,97 @@ router.post('/', (req, res) => {
     res.status(201).json({
       success: true,
       orderId: order.orderId,
-      message: 'Đặt hàng thành công! Chúng tôi sẽ liên hệ bạn sớm nhất.',
+      payment: order.payment,
+      paymentStatus: order.paymentStatus,
+      transferContent: order.transferContent,
+      message: normalizedPayment === 'BANK_TRANSFER'
+        ? 'Đơn hàng đã được tạo và đang chờ xác nhận chuyển khoản.'
+        : 'Đặt hàng thành công! Chúng tôi sẽ liên hệ bạn sớm nhất.',
     });
   } catch (err) {
     console.error('[Orders] Error creating order:', err.message);
     res.status(500).json({ success: false, error: 'Failed to create order' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/orders/payment-webhook
+// Mark a bank transfer as paid when a payment provider posts a transaction.
+// ---------------------------------------------------------------------------
+router.post('/payment-webhook', (req, res) => {
+  try {
+    if (!isAuthorizedPaymentWebhook(req)) {
+      return res.status(process.env.PAYMENT_WEBHOOK_SECRET ? 401 : 503).json({
+        success: false,
+        error: process.env.PAYMENT_WEBHOOK_SECRET
+          ? 'Unauthorized payment webhook'
+          : 'PAYMENT_WEBHOOK_SECRET is not configured',
+      });
+    }
+
+    const { amount, description, transactionId, orderId } = extractBankTransferPayload(req.body);
+    if (!orderId || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Webhook payload must include an order code and transfer amount.',
+      });
+    }
+
+    const orders = readOrders();
+    const webhookOrderCode = normalizePaymentCode(orderId);
+    const webhookDescription = normalizePaymentCode(description);
+    const orderIndex = orders.findIndex((order) => {
+      if (order.orderId === orderId) return true;
+      const storedOrderCode = normalizePaymentCode(order.orderId);
+      const storedTransferContent = normalizePaymentCode(order.transferContent);
+      return webhookOrderCode === storedOrderCode
+        || webhookDescription.includes(storedOrderCode)
+        || (storedTransferContent && webhookDescription.includes(storedTransferContent));
+    });
+
+    if (orderIndex === -1) {
+      return res.status(404).json({ success: false, error: `Order "${orderId}" not found` });
+    }
+
+    const order = orders[orderIndex];
+    if (order.payment !== 'BANK_TRANSFER') {
+      return res.status(400).json({ success: false, error: 'Order is not a bank transfer order.' });
+    }
+
+    if (amount < Number(order.total || 0)) {
+      order.paymentStatus = 'underpaid';
+      order.paymentReceivedAmount = amount;
+      order.paymentCheckedAt = new Date().toISOString();
+      writeOrders(orders);
+      return res.status(400).json({
+        success: false,
+        error: 'Transfer amount is lower than order total.',
+        data: order,
+      });
+    }
+
+    order.paymentStatus = 'paid';
+    order.paymentReceivedAmount = amount;
+    order.paymentTransactionId = transactionId || order.paymentTransactionId || null;
+    order.paymentDescription = description;
+    order.paidAt = new Date().toISOString();
+    order.paymentCheckedAt = order.paidAt;
+    writeOrders(orders);
+
+    console.log(`[Orders] Bank transfer paid: ${order.orderId} (${amount})`);
+
+    res.json({
+      success: true,
+      message: 'Payment confirmed.',
+      data: {
+        orderId: order.orderId,
+        paymentStatus: order.paymentStatus,
+        paidAt: order.paidAt,
+      },
+    });
+  } catch (err) {
+    console.error('[Orders] Error confirming payment:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to confirm payment' });
   }
 });
 
@@ -195,6 +376,59 @@ router.put('/:id/status', authenticate, (req, res) => {
   } catch (err) {
     console.error('[Orders] Error updating status:', err.message);
     res.status(500).json({ success: false, error: 'Failed to update order status' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/orders/:id/payment
+// Update payment status manually (Admin only)
+// ---------------------------------------------------------------------------
+router.put('/:id/payment', authenticate, (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { paymentStatus, receivedAmount, transactionId, note } = req.body;
+    const allowedStatuses = ['cod_pending', 'awaiting_transfer', 'paid', 'underpaid'];
+    if (!paymentStatus || !allowedStatuses.includes(paymentStatus)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid paymentStatus. Must be one of: ${allowedStatuses.join(', ')}`,
+      });
+    }
+
+    const orders = readOrders();
+    const orderIndex = orders.findIndex((o) => o.orderId === req.params.id);
+    if (orderIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: `Order with id "${req.params.id}" not found`,
+      });
+    }
+
+    const order = orders[orderIndex];
+    order.paymentStatus = paymentStatus;
+    order.paymentCheckedAt = new Date().toISOString();
+    if (receivedAmount !== undefined) order.paymentReceivedAmount = Number(receivedAmount) || 0;
+    if (transactionId) order.paymentTransactionId = transactionId;
+    if (note) order.paymentAdminNote = note;
+    if (paymentStatus === 'paid') {
+      order.paymentReceivedAmount = Number(receivedAmount || order.total || order.price || 0);
+      order.paidAt = order.paidAt || new Date().toISOString();
+    }
+
+    writeOrders(orders);
+
+    console.log(`[Orders] Order ${req.params.id} payment updated to: ${paymentStatus}`);
+    res.json({
+      success: true,
+      message: 'Payment status updated successfully.',
+      data: order,
+    });
+  } catch (err) {
+    console.error('[Orders] Error updating payment:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to update payment status' });
   }
 });
 
