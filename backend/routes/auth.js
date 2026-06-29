@@ -48,6 +48,11 @@ function publicUser(user) {
   };
 }
 
+function isValidEmail(email) {
+  if (!email) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 // ---------------------------------------------------------------------------
 // Helper: authenticate middleware (extracts user from mock token)
 // ---------------------------------------------------------------------------
@@ -71,7 +76,7 @@ async function authenticate(req, res, next) {
     if (pool) {
       const result = await pool.request()
         .input('id', sql.NVarChar, userId)
-        .query('SELECT id, username, fullName, email, avatar, provider, role FROM Users WHERE id = @id');
+        .query('SELECT id, username, fullName, email, avatar, provider, role, createdAt FROM Users WHERE id = @id');
       user = result.recordset[0];
     } else {
       user = readFileUsers().find((item) => item.id === userId);
@@ -230,7 +235,7 @@ router.post('/login', async (req, res) => {
 
     const result = await pool.request()
       .input('username', sql.NVarChar, normalizedUsername)
-      .query('SELECT id, username, password, fullName, email, avatar, provider, role FROM Users WHERE username = @username AND provider = \'local\'');
+      .query('SELECT id, username, password, fullName, email, avatar, provider, role, createdAt FROM Users WHERE username = @username AND provider = \'local\'');
 
     if (result.recordset.length === 0) {
       return res.status(401).json({
@@ -259,6 +264,7 @@ router.post('/login', async (req, res) => {
         avatar: user.avatar,
         role: user.role,
         provider: user.provider,
+        createdAt: user.createdAt,
       },
       token: 'mock-token-' + user.id,
       message: 'Đăng nhập thành công!',
@@ -414,8 +420,156 @@ router.get('/me', authenticate, (req, res) => {
       avatar: req.user.avatar,
       role: req.user.role,
       provider: req.user.provider,
+      createdAt: req.user.createdAt,
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/auth/me  (Update current account)
+// ---------------------------------------------------------------------------
+router.patch('/me', authenticate, async (req, res) => {
+  try {
+    const {
+      username,
+      fullName,
+      email,
+      currentPassword,
+      newPassword,
+    } = req.body;
+
+    const normalizedUsername = username ? String(username).trim().toLowerCase() : '';
+    const normalizedFullName = fullName ? String(fullName).trim() : '';
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : '';
+    const wantsPasswordChange = Boolean(newPassword);
+
+    if (!normalizedFullName) {
+      return res.status(400).json({ success: false, error: 'Họ và tên là bắt buộc.' });
+    }
+
+    if (!normalizedUsername) {
+      return res.status(400).json({ success: false, error: 'Tên đăng nhập là bắt buộc.' });
+    }
+
+    if (!/^[a-z0-9._-]{3,30}$/.test(normalizedUsername)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tên đăng nhập chỉ gồm chữ thường, số, dấu chấm, gạch dưới hoặc gạch ngang, dài 3-30 ký tự.',
+      });
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, error: 'Email không hợp lệ.' });
+    }
+
+    if (wantsPasswordChange) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, error: 'Vui lòng nhập mật khẩu hiện tại.' });
+      }
+
+      if (String(newPassword).length < 6) {
+        return res.status(400).json({ success: false, error: 'Mật khẩu mới cần ít nhất 6 ký tự.' });
+      }
+    }
+
+    const pool = getPoolOrNull();
+    let updatedUser;
+
+    if (!pool) {
+      const users = readFileUsers();
+      const userIndex = users.findIndex((item) => item.id === req.user.id);
+
+      if (userIndex === -1) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản.' });
+      }
+
+      const user = users[userIndex];
+      const usernameTaken = users.some((item) => item.id !== user.id && item.username === normalizedUsername);
+      if (usernameTaken) {
+        return res.status(400).json({ success: false, error: 'Tên đăng nhập đã tồn tại.' });
+      }
+
+      if (wantsPasswordChange) {
+        if ((user.provider || 'local') !== 'local') {
+          return res.status(400).json({ success: false, error: 'Tài khoản mạng xã hội không dùng mật khẩu nội bộ.' });
+        }
+
+        if (user.password !== currentPassword) {
+          return res.status(401).json({ success: false, error: 'Mật khẩu hiện tại không đúng.' });
+        }
+
+        user.password = String(newPassword);
+      }
+
+      user.username = normalizedUsername;
+      user.fullName = normalizedFullName;
+      user.email = normalizedEmail || null;
+      user.updatedAt = new Date().toISOString();
+      users[userIndex] = user;
+      writeFileUsers(users);
+      updatedUser = user;
+    } else {
+      const current = await pool.request()
+        .input('id', sql.NVarChar, req.user.id)
+        .query('SELECT id, username, password, fullName, email, avatar, provider, role, createdAt FROM Users WHERE id = @id');
+
+      if (current.recordset.length === 0) {
+        return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản.' });
+      }
+
+      const user = current.recordset[0];
+      const usernameCheck = await pool.request()
+        .input('id', sql.NVarChar, req.user.id)
+        .input('username', sql.NVarChar, normalizedUsername)
+        .query('SELECT id FROM Users WHERE username = @username AND id <> @id');
+
+      if (usernameCheck.recordset.length > 0) {
+        return res.status(400).json({ success: false, error: 'Tên đăng nhập đã tồn tại.' });
+      }
+
+      if (wantsPasswordChange) {
+        if ((user.provider || 'local') !== 'local') {
+          return res.status(400).json({ success: false, error: 'Tài khoản mạng xã hội không dùng mật khẩu nội bộ.' });
+        }
+
+        if (user.password !== currentPassword) {
+          return res.status(401).json({ success: false, error: 'Mật khẩu hiện tại không đúng.' });
+        }
+      }
+
+      await pool.request()
+        .input('id', sql.NVarChar, req.user.id)
+        .input('username', sql.NVarChar, normalizedUsername)
+        .input('fullName', sql.NVarChar, normalizedFullName)
+        .input('email', sql.NVarChar, normalizedEmail || null)
+        .input('password', sql.NVarChar, wantsPasswordChange ? String(newPassword) : user.password)
+        .query(`
+          UPDATE Users
+          SET username = @username,
+              fullName = @fullName,
+              email = @email,
+              password = @password
+          WHERE id = @id
+        `);
+
+      updatedUser = {
+        ...user,
+        username: normalizedUsername,
+        fullName: normalizedFullName,
+        email: normalizedEmail || null,
+        password: wantsPasswordChange ? String(newPassword) : user.password,
+      };
+    }
+
+    res.json({
+      success: true,
+      user: publicUser(updatedUser),
+      message: 'Cập nhật tài khoản thành công.',
+    });
+  } catch (err) {
+    console.error('[Auth] Error updating account:', err.message);
+    res.status(500).json({ success: false, error: 'Cập nhật tài khoản thất bại. Vui lòng thử lại.' });
+  }
 });
 
 module.exports = {
