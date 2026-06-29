@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize all modules
   initNavbar();
   initScrollAnimations();
+  initHomeMotion();
   loadProducts();
   initTestimonials();
   initContactForm();
@@ -84,6 +85,74 @@ function initScrollAnimations() {
 
   document.querySelectorAll('.animate-on-scroll').forEach(el => {
     observer.observe(el);
+  });
+}
+
+function initHomeMotion() {
+  if (!document.body.classList.contains('home-page')) return;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const hero = document.querySelector('.hero');
+
+  document.querySelectorAll(`
+    .section-header,
+    .products-filter,
+    .ai-content,
+    .contact-left,
+    .contact-form-card,
+    .footer-brand,
+    .footer-grid > div
+  `).forEach((el, index) => {
+    el.classList.add('home-reveal');
+    el.style.setProperty('--reveal-delay', `${Math.min(index * 45, 260)}ms`);
+  });
+
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, {
+    threshold: 0.16,
+    rootMargin: '0px 0px -72px 0px'
+  });
+
+  document.querySelectorAll('.home-reveal').forEach(el => revealObserver.observe(el));
+
+  if (reduceMotion || !hero) return;
+
+  let raf = null;
+  let targetX = 0;
+  let targetY = 0;
+  let currentX = 0;
+  let currentY = 0;
+
+  function renderParallax() {
+    currentX += (targetX - currentX) * 0.09;
+    currentY += (targetY - currentY) * 0.09;
+    hero.style.setProperty('--mx', currentX.toFixed(3));
+    hero.style.setProperty('--my', currentY.toFixed(3));
+
+    if (Math.abs(targetX - currentX) > 0.001 || Math.abs(targetY - currentY) > 0.001) {
+      raf = requestAnimationFrame(renderParallax);
+    } else {
+      raf = null;
+    }
+  }
+
+  hero.addEventListener('pointermove', (event) => {
+    const rect = hero.getBoundingClientRect();
+    targetX = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+    targetY = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+    if (!raf) raf = requestAnimationFrame(renderParallax);
+  });
+
+  hero.addEventListener('pointerleave', () => {
+    targetX = 0;
+    targetY = 0;
+    if (!raf) raf = requestAnimationFrame(renderParallax);
   });
 }
 

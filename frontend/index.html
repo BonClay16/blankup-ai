@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=home-cook-2">
+  <link rel="stylesheet" href="css/style.css?v=home-cook-5">
 </head>
-<body>
+<body class="home-page">
 
   <!-- ====== NAVIGATION ====== -->
   <nav class="navbar" id="navbar">
@@ -56,10 +56,31 @@
     <div class="hero-decor hero-decor-1"></div>
     <div class="hero-decor hero-decor-2"></div>
     <div class="hero-decor hero-decor-3"></div>
+    <div class="hero-motion-field" aria-hidden="true">
+      <span class="motion-orb orb-1"></span>
+      <span class="motion-orb orb-2"></span>
+      <span class="motion-orb orb-3"></span>
+      <span class="motion-line line-1"></span>
+      <span class="motion-line line-2"></span>
+      <span class="motion-line line-3"></span>
+      <span class="motion-ring ring-1"></span>
+      <span class="motion-ring ring-2"></span>
+      <span class="motion-chip chip-1"></span>
+      <span class="motion-chip chip-2"></span>
+      <span class="motion-spark spark-1"></span>
+      <span class="motion-spark spark-2"></span>
+      <span class="motion-spark spark-3"></span>
+    </div>
 
     <div class="container">
       <div class="hero-content">
         <div class="hero-badge" data-i18n="hero.badge">✨ Nền tảng thiết kế áo AI đầu tiên</div>
+        <div class="hero-status-strip">
+          <span class="status-dot"></span>
+          <span>Live AI print lab</span>
+          <span class="status-divider"></span>
+          <span>High quality mockups</span>
+        </div>
         <h1 class="hero-title">
           <span data-i18n="hero.title1">Not Just A</span><br>
           <span class="highlight" data-i18n="hero.titleHighlight">Shirt</span>
@@ -183,6 +204,24 @@
             <div class="card-subtext">COD Available</div>
           </div>
         </div>
+      </div>
+
+      <div class="hero-corner-panel">
+        <div class="corner-mask corner-mask-top" aria-hidden="true">
+          <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M56 56V0C56 30.9279 30.9279 56 0 56H56Z" fill="#ffffff"/></svg>
+        </div>
+        <div class="corner-mask corner-mask-left" aria-hidden="true">
+          <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M56 56H0C30.9279 56 56 30.9279 56 0V56Z" fill="#ffffff"/></svg>
+        </div>
+        <a href="#how-it-works" class="corner-doc-link">
+          <span class="corner-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17L17 7M9 7H17V15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span>
+            <strong>Quy trình</strong>
+            <small>Xem cách hoạt động</small>
+          </span>
+        </a>
       </div>
     </div>
   </section>
@@ -541,6 +580,6 @@
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
-  <script src="js/app.js?v=uniform-price-1"></script>
+  <script src="js/app.js?v=home-motion-1"></script>
 </body>
 </html>
