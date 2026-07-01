@@ -89,7 +89,7 @@ async function initDatabase() {
     // 3. Create tables
     await createTables();
 
-    // 4. Seed default admin user if Users table is empty
+    // 4. Ensure required demo users exist
     await seedAdminUser();
 
     return pool;
@@ -169,13 +169,43 @@ async function createTables() {
 // ---------------------------------------------------------------------------
 async function seedAdminUser() {
   const result = await pool.request().query(`SELECT COUNT(*) as cnt FROM Users`);
+  const adminResult = await pool.request()
+    .input('adminUsername', sql.NVarChar, 'admin')
+    .query('SELECT id, role, provider FROM Users WHERE username = @adminUsername');
+
+  if (adminResult.recordset.length === 0) {
+    console.log('[DB] Seeding default admin user...');
+    await pool.request().query(`
+      INSERT INTO Users (id, username, password, fullName, role, provider, createdAt)
+      VALUES ('u-admin', 'admin', 'admin123', 'System Admin', 'admin', 'local', '2026-06-01T12:00:00.000Z')
+    `);
+  } else {
+    const admin = adminResult.recordset[0];
+    if (admin.role !== 'admin' || admin.provider !== 'local') {
+      console.log('[DB] Repairing default admin role/provider...');
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, admin.id)
+      .input('password', sql.NVarChar, 'admin123')
+      .input('fullName', sql.NVarChar, 'System Admin')
+      .input('role', sql.NVarChar, 'admin')
+      .input('provider', sql.NVarChar, 'local')
+      .query(`
+        UPDATE Users
+        SET password = @password,
+            fullName = @fullName,
+            role = @role,
+            provider = @provider
+        WHERE id = @id
+      `);
+  }
   if (result.recordset[0].cnt === 0) {
-    console.log('[DB] Seeding default admin and sample users...');
+    console.log('[DB] Seeding default sample users...');
     const request = pool.request();
     await request.query(`
       INSERT INTO Users (id, username, password, fullName, role, provider, createdAt)
       VALUES
-        ('u-admin', 'admin', 'admin123', 'System Admin', 'admin', 'local', '2026-06-01T12:00:00.000Z'),
         ('u-1', 'minht', 'password123', N'Minh T.', 'user', 'local', '2026-06-15T08:30:00.000Z'),
         ('u-2', 'ann', 'password123', N'An N.', 'user', 'local', '2026-06-16T14:20:00.000Z'),
         ('u-3', 'huongl', 'password123', N'Hương L.', 'user', 'local', '2026-06-17T09:15:00.000Z')

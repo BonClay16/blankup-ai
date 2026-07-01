@@ -131,6 +131,45 @@ router.get('/', authenticate, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/orders/me
+// Retrieve orders owned by the logged-in user
+// ---------------------------------------------------------------------------
+router.get('/me', authenticate, (req, res) => {
+  try {
+    const orders = readOrders();
+    const userOrders = orders
+      .filter((order) => order.userId === req.user.id)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const summary = userOrders.reduce((acc, order) => {
+      const total = Number(order.total || ((order.price || 0) * (order.quantity || 1)));
+      acc.totalOrders += 1;
+      acc.totalSpend += order.status === 'completed' ? total : 0;
+      acc.pendingOrders += order.status === 'pending' ? 1 : 0;
+      acc.completedOrders += order.status === 'completed' ? 1 : 0;
+      acc.cancelledOrders += order.status === 'cancelled' ? 1 : 0;
+      return acc;
+    }, {
+      totalOrders: 0,
+      totalSpend: 0,
+      pendingOrders: 0,
+      completedOrders: 0,
+      cancelledOrders: 0,
+    });
+
+    res.json({
+      success: true,
+      count: userOrders.length,
+      summary,
+      data: userOrders,
+    });
+  } catch (err) {
+    console.error('[Orders] Error fetching user orders:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch user orders' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/orders
 // Create a new order (Authenticated users only)
 // ---------------------------------------------------------------------------
