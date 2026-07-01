@@ -1,7 +1,8 @@
-/**
- * Blankup Authentication System
- * Handles login, registration, navbar account menu, and session checking.
- */
+// Immediate Theme Initialization (prevents page flicker)
+(function() {
+  const currentTheme = localStorage.getItem('blankup_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', currentTheme);
+})();
 
 const AUTH_API = window.location.origin + '/api/auth';
 
@@ -118,11 +119,32 @@ class AuthManager {
   }
 
   init() {
+    this.initThemeToggle();
     this.updateNavbar();
 
     if (this.isLoggedIn()) {
       this.checkSession();
     }
+  }
+
+  initThemeToggle() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (!btn) return;
+    
+    // Set active class or state initially
+    const syncButtonState = () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      btn.setAttribute('aria-label', `Switch to ${current === 'dark' ? 'light' : 'dark'} theme`);
+    };
+    syncButtonState();
+
+    btn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const target = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', target);
+      localStorage.setItem('blankup_theme', target);
+      syncButtonState();
+    });
   }
 
   async checkSession() {
@@ -164,9 +186,7 @@ class AuthManager {
     const safeUsername = this.escapeHtml(this.user.username || '');
     const safeRole = this.escapeHtml(this.user.role || 'user');
     const initials = this.escapeHtml(this.getInitials());
-    const host = window.location.hostname;
-    const isLocalMachine = (host === 'localhost' || host === '127.0.0.1' || host === '::1');
-    const adminItemHtml = (this.isAdmin() && isLocalMachine)
+    const adminItemHtml = this.isAdmin()
       ? `<a href="admin.html" class="dropdown-item"><span class="dropdown-item-icon">AD</span><span>Admin Dashboard</span></a>`
       : '';
 

@@ -29,37 +29,7 @@ app.use('/uploads', express.static(uploadsDir));
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three/build')));
 app.use('/vendor/three/examples', express.static(path.join(__dirname, 'node_modules/three/examples')));
 
-// ---------------------------------------------------------------------------
-// Block admin.html for non-localhost requests (security: admin only on server)
-// ---------------------------------------------------------------------------
-app.use('/admin.html', (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocalhost = (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip === 'localhost'
-  );
 
-  if (!isLocalhost) {
-    console.warn(`[Security] Blocked remote access to admin.html from IP: ${ip}`);
-    return res.status(403).send(`
-      <!DOCTYPE html>
-      <html><head><title>403 - Access Denied</title>
-      <style>body{font-family:Inter,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f8fafc;color:#334155;text-align:center;}
-      .box{background:white;padding:60px;border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.05);max-width:500px;}
-      h1{font-size:4rem;color:#ff6b00;margin-bottom:16px;}
-      p{font-size:1.1rem;margin-bottom:24px;color:#64748b;}
-      a{color:#ff6b00;text-decoration:none;font-weight:600;}</style></head>
-      <body><div class="box">
-        <h1>🔒 403</h1>
-        <p>Truy cập bị từ chối.<br>Admin Dashboard chỉ có thể truy cập từ máy chủ.</p>
-        <a href="/">← Quay lại Trang chủ</a>
-      </div></body></html>
-    `);
-  }
-  next();
-});
 
 // Serve the frontend as static files
 const frontendDir = path.join(__dirname, '../frontend');

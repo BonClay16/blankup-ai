@@ -8,29 +8,22 @@ const ordersFilePath = path.join(__dirname, '../data/orders.json');
 const designsFilePath = path.join(__dirname, '../data/designs.json');
 
 // ---------------------------------------------------------------------------
-// Localhost-only middleware: Admin API can ONLY be accessed from the server machine
+// Role-based Admin authorization middleware
 // ---------------------------------------------------------------------------
-function localhostOnly(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocalhost = (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip === 'localhost'
-  );
-
-  if (!isLocalhost) {
-    console.warn(`[Admin] Blocked remote admin access attempt from IP: ${ip}`);
+function requireAdmin(req, res, next) {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
     return res.status(403).json({
       success: false,
-      error: 'Truy cập bị từ chối. Admin Dashboard chỉ có thể truy cập từ máy chủ.',
+      error: 'Truy cập bị từ chối. Quyền Admin là bắt buộc.',
     });
   }
-  next();
 }
 
-// Apply localhost restriction to ALL admin routes
-router.use(localhostOnly);
+// Apply token authentication and admin check to ALL admin routes
+router.use(authenticate);
+router.use(requireAdmin);
 
 // Helper function to read orders
 function readOrders() {
@@ -64,11 +57,8 @@ function readDesigns() {
 // GET /api/admin/stats
 // Returns overview statistics, recent orders, and user list (Admin only)
 // ---------------------------------------------------------------------------
-router.get('/stats', authenticate, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
 
     const orders = readOrders();
     const users = await readUsers();

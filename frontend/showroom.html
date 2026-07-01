@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blankup — 3D Virtual Showroom</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  
+  <style>
+    /* ---------- CSS variables matching main project ---------- */
+    :root {
+      --accent: #ff6b00;
+      --accent-glow: 0 0 20px rgba(255, 107, 0, 0.4);
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: #05070c;
+      color: #cbd5e1;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* ---------- Showroom Canvas ---------- */
+    #showroomCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      display: block;
+    }
+
+    /* ---------- UI Overlay ---------- */
+    .ui-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 30px;
+    }
+
+    .ui-layer * {
+      pointer-events: auto;
+    }
+
+    /* Header */
+    .showroom-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      font-family: var(--font-heading);
+      font-weight: 900;
+      font-size: 1.5rem;
+      color: #f8fafc;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+    }
+
+    .logo-highlight {
+      color: var(--accent);
+    }
+
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      color: #f8fafc;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(8px);
+    }
+
+    .btn-back:hover {
+      background: rgba(255, 107, 0, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: var(--accent-glow);
+    }
+
+    /* Footer & Navigation Instructions */
+    .showroom-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      width: 100%;
+    }
+
+    .instructions-card {
+      background: rgba(10, 15, 26, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 16px 24px;
+      border-radius: 16px;
+      backdrop-filter: blur(12px);
+      max-width: 360px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .instructions-card h3 {
+      font-family: var(--font-heading);
+      color: #f8fafc;
+      font-size: 1rem;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .instructions-card p {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* Interactive Details Card */
+    .details-card {
+      position: absolute;
+      top: 100px;
+      right: 30px;
+      width: 320px;
+      background: rgba(15, 20, 32, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 24px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+      transform: translateX(380px);
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 20;
+    }
+
+    .details-card.active {
+      transform: translateX(0);
+    }
+
+    .details-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 1.2rem;
+      transition: color 0.2s;
+    }
+
+    .details-close:hover {
+      color: #f8fafc;
+    }
+
+    .details-image {
+      width: 100%;
+      height: 160px;
+      border-radius: 12px;
+      background: #1e293b;
+      margin-bottom: 16px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .details-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .details-category {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(255, 107, 0, 0.1);
+      padding: 4px 10px;
+      border-radius: 99px;
+      margin-bottom: 8px;
+    }
+
+    .details-title {
+      font-family: var(--font-heading);
+      color: #f8fafc;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .details-desc {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .details-action {
+      display: block;
+      width: 100%;
+      text-align: center;
+      padding: 12px;
+      background: linear-gradient(135deg, #ff6b00, #ff8c33);
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border-radius: 10px;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(255, 107, 0, 0.2);
+    }
+
+    .details-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 107, 0, 0.3);
+    }
+
+    /* Loading Screen */
+    .loader-overlay {
+      position: absolute;
+      inset: 0;
+      background: #05070c;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.8s ease-out;
+    }
+
+    .loader-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(255, 107, 0, 0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loader-text {
+      font-family: var(--font-heading);
+      color: #f8fafc;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    .loader-progress {
+      width: 200px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .loader-bar {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+      box-shadow: var(--accent-glow);
+      transition: width 0.3s;
+    }
+  </style>
+
+  <!-- Import Map for ES Modules -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div class="loader-overlay" id="loaderOverlay">
+    <div class="loader-spinner"></div>
+    <div class="loader-text">DỰNG PHÒNG TRƯNG BÀY 3D...</div>
+    <div class="loader-progress">
+      <div class="loader-bar" id="loaderBar"></div>
+    </div>
+  </div>
+
+  <!-- Main Canvas for 3D Viewport -->
+  <canvas id="showroomCanvas"></canvas>
+
+  <!-- UI Overlay Layer -->
+  <div class="ui-layer">
+    <!-- Header -->
+    <header class="showroom-header">
+      <a href="/" class="brand-logo">
+        <svg class="logo-icon" viewBox="0 0 38 38" fill="none">
+          <rect width="38" height="38" rx="10" fill="#ff6b00"/>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.9"/>
+          <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
+          <path d="M22 18 L28 12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="29" cy="11" r="2" fill="white"/>
+        </svg>
+        <span>BLANK<span class="logo-highlight">UP</span></span>
+      </a>
+      <a href="/" class="btn-back">← Quay lại Trang chủ</a>
+    </header>
+
+    <!-- Footer -->
+    <footer class="showroom-footer">
+      <!-- Instructions -->
+      <div class="instructions-card">
+        <h3>✨ Tương tác 3D</h3>
+        <p>Di chuyển chuột để đảo camera theo chiều sâu. Click và kéo chuột trái để xoay phòng trưng bày. Click trực tiếp vào các vật thể phát sáng để khám phá tác phẩm.</p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Floating Details Card -->
+  <div class="details-card" id="detailsCard">
+    <button class="details-close" id="detailsCloseBtn">&times;</button>
+    <div class="details-image" id="detailsImage">
+      <!-- Image or 3D preview placeholder -->
+      <div style="color: #64748b; font-size: 0.8rem;">Đang tải hình ảnh...</div>
+    </div>
+    <span class="details-category" id="detailsCategory">ARTWORK</span>
+    <h2 class="details-title" id="detailsTitle">Tên Tác Phẩm</h2>
+    <p class="details-desc" id="detailsDesc">Mô tả tác phẩm chi tiết được hiển thị tại đây khi người dùng tương tác.</p>
+    <a href="studio.html" class="details-action" id="detailsAction">Ứng dụng lên Áo 3D →</a>
+  </div>
+
+  <!-- Load 3D logic module -->
+  <script type="module" src="js/showroom.js"></script>
+</body>
+</html>

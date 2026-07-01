@@ -255,6 +255,18 @@ document.addEventListener('DOMContentLoaded', () => {
   initViewToggle();
   initThreeViewer();
   loadCommunityDesigns();
+
+  // Load design from query parameters (e.g. from 3D Showroom)
+  const urlParams = new URLSearchParams(window.location.search);
+  const designUrlParam = urlParams.get('designUrl');
+  if (designUrlParam) {
+    const titleParam = urlParams.get('title') || '3D Showroom Artwork';
+    setTimeout(() => {
+      if (typeof window.loadCommunityDesign === 'function') {
+        window.loadCommunityDesign(designUrlParam, titleParam, 'abstract', '3D Showroom');
+      }
+    }, 300);
+  }
 });
 
 /* ============================================================
