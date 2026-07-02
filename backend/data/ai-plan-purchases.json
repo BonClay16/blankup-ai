@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "id": "AIP-MR38H02ASTF0",
+    "userId": "u-1782979064566",
+    "planId": "plan-studio-plus",
+    "planCode": "studio_plus",
+    "planName": "Studio Plus",
+    "priceVnd": 199000,
+    "highCreditsAdded": 30,
+    "lowCreditsAdded": 5,
+    "voucherCode": null,
+    "discountAmount": 0,
+    "finalAmount": 199000,
+    "paymentStatus": "awaiting_transfer",
+    "paymentMethod": "BANK_TRANSFER",
+    "transferContent": "BLANKUP AIP-MR38H02ASTF0",
+    "paymentReceivedAmount": 0,
+    "paymentTransactionId": null,
+    "paymentDescription": null,
+    "paymentCheckedAt": null,
+    "createdAt": "2026-07-02T08:19:21.874Z",
+    "paidAt": null
+  }
+]
