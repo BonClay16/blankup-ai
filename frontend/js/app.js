@@ -166,17 +166,52 @@ async function loadProducts() {
   if (!grid) return;
 
   try {
-    const response = await fetch(`${API_BASE}/products`);
+    const response = await fetch(`${API_BASE}/ai-design/gallery`);
     if (!response.ok) throw new Error('Failed to fetch');
-    allProducts = await response.json();
+    const result = await response.json();
+    allProducts = (result.data || []).map(designToProductCard);
+    if (!allProducts.length) allProducts = getFallbackCommunityDesigns().map(designToProductCard);
     renderProducts(allProducts);
     initProductFilter();
   } catch (err) {
-    console.warn('API not available, using fallback data');
-    allProducts = getFallbackProducts();
+    console.warn('API not available, using fallback community designs');
+    allProducts = getFallbackCommunityDesigns().map(designToProductCard);
     renderProducts(allProducts);
     initProductFilter();
   }
+}
+
+function designToProductCard(design) {
+  const prompt = design.prompt || 'Community design';
+  const style = design.style || 'abstract';
+  const previewUrl = design.frontDesignUrl || design.designUrl || '';
+  const params = new URLSearchParams({
+    designUrl: previewUrl,
+    prompt,
+    style,
+    author: design.author || 'Blankup',
+  });
+
+  if (design.backDesignUrl) params.set('backDesignUrl', design.backDesignUrl);
+  if (design.productMockupUrl) params.set('productMockupUrl', design.productMockupUrl);
+  if (design.productMockupBlank) params.set('productMockupBlank', 'true');
+
+  return {
+    ...design,
+    name: prompt,
+    nameEn: design.promptEn || prompt,
+    description: `Bởi ${design.author || 'Blankup'} · ${design.likes || 0} lượt thích`,
+    descriptionEn: `By ${design.author || 'Blankup'} · ${design.likes || 0} likes`,
+    price: 10000,
+    priceUsd: 1,
+    category: style,
+    colors: [],
+    badge: i18n.t('style.' + style) || style,
+    designPreviewUrl: previewUrl,
+    communityMeta: design.author || 'Blankup',
+    ctaText: i18n.currentLang === 'vi' ? 'Dùng thiết kế này' : 'Use this design',
+    href: `studio.html?${params.toString()}`,
+  };
 }
 
 function renderProducts(products) {
@@ -187,38 +222,41 @@ function renderProducts(products) {
   grid.innerHTML = products.map(product => {
     const name = isVi ? product.name : (product.nameEn || product.name);
     const desc = isVi ? product.description : (product.descriptionEn || product.description);
-    const price = isVi
+    const price = product.communityMeta || (isVi
       ? `${product.price.toLocaleString('vi-VN')}đ`
-      : `$${product.priceUsd || Math.round(product.price / 25000)}`;
+      : `$${product.priceUsd || Math.round(product.price / 25000)}`);
 
     const colorsHtml = (product.colors || []).slice(0, 5).map(c =>
       `<span class="color-dot" style="background:${c}" title="${c}"></span>`
     ).join('');
 
     const badgeHtml = product.badge
-      ? `<span class="product-badge">${product.badge}</span>`
+      ? `<span class="product-badge">${escapeHtml(product.badge)}</span>`
       : '';
 
     // SVG t-shirt illustrations by category
     const mainColor = (product.colors && product.colors[0]) || '#ffffff';
     const svgVisual = getProductSVG(product.category, mainColor);
+    const visualHtml = product.designPreviewUrl
+      ? `<img class="shared-design-image" src="${escapeAttr(product.designPreviewUrl)}" alt="${escapeAttr(name)}">`
+      : `<div class="tshirt-visual">${svgVisual}</div>`;
 
     return `
       <div class="product-card animate-on-scroll" data-category="${product.category}">
         <div class="product-image">
           ${badgeHtml}
-          <div class="tshirt-visual">${svgVisual}</div>
+          ${visualHtml}
         </div>
         <div class="product-info">
-          <h3 class="product-name">${name}</h3>
-          <p class="product-desc">${desc}</p>
+          <h3 class="product-name">${escapeHtml(name)}</h3>
+          <p class="product-desc">${escapeHtml(desc)}</p>
           <div class="product-meta">
             <div class="product-price">
-              <span class="price-label">${i18n.t('products.from')} </span>${price}
+              <span class="price-label">${product.communityMeta ? '' : i18n.t('products.from') + ' '}</span>${price}
             </div>
             <div class="product-colors">${colorsHtml}</div>
           </div>
-          <a href="studio.html" class="product-cta" data-i18n="products.customize">${i18n.t('products.customize')}</a>
+          <a href="${product.href || 'studio.html'}" class="product-cta">${product.designPreviewUrl ? (isVi ? 'Dùng thiết kế này' : 'Use this design') : i18n.t('products.customize')}</a>
         </div>
       </div>
     `;
@@ -251,6 +289,53 @@ i18n.onChange(() => {
     renderProducts(allProducts);
   }
 });
+
+function getFallbackCommunityDesigns() {
+  return [
+    { prompt: 'Rồng Việt Nam cyberpunk', promptEn: 'Vietnamese dragon cyberpunk', style: 'streetwear', author: 'Minh T.', likes: 234 },
+    { prompt: 'Hoa sen tối giản', promptEn: 'Minimalist lotus flower', style: 'minimalist', author: 'An N.', likes: 189 },
+    { prompt: 'Samurai anime', promptEn: 'Anime samurai', style: 'anime', author: 'Khoa P.', likes: 312 },
+    { prompt: 'Typography nghệ thuật', promptEn: 'Artistic typography', style: 'typography', author: 'Đức M.', likes: 145 },
+  ].map((design) => ({
+    ...design,
+    designUrl: makeFallbackDesignSvg(design.style, design.prompt),
+    frontDesignUrl: makeFallbackDesignSvg(design.style, design.prompt),
+  }));
+}
+
+function makeFallbackDesignSvg(style, prompt) {
+  const palettes = {
+    minimalist: ['#f8fafc', '#111827', '#ff6b00'],
+    streetwear: ['#111827', '#ff6b00', '#ffffff'],
+    anime: ['#1f2937', '#f97316', '#fde68a'],
+    typography: ['#0f172a', '#60a5fa', '#fb7185'],
+  };
+  const [bg, primary, accent] = palettes[style] || palettes.streetwear;
+  const safePrompt = escapeHtml(prompt).slice(0, 28);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480">
+      <rect width="480" height="480" rx="36" fill="${bg}"/>
+      <circle cx="150" cy="150" r="86" fill="${accent}" opacity="0.24"/>
+      <circle cx="330" cy="300" r="118" fill="${primary}" opacity="0.16"/>
+      <path d="M120 310 L240 92 L360 310 Z" fill="none" stroke="${accent}" stroke-width="18" stroke-linejoin="round"/>
+      <text x="240" y="250" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" font-weight="900" fill="${primary}">BLANKUP</text>
+      <text x="240" y="295" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="${primary}" opacity="0.72">${safePrompt}</text>
+    </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, '&#096;');
+}
 
 /* ============================================================
    TESTIMONIALS CAROUSEL

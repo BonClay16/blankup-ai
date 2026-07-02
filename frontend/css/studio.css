@@ -1045,6 +1045,16 @@
 
 .preview-actions .btn {
   flex: 1;
+  min-width: 0;
+  padding-left: 16px;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+
+#shareDesignBtn.is-shared {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: #ecfdf5;
+  color: #047857;
 }
 
 /* ---------- Order Modal ---------- */

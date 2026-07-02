@@ -51,7 +51,7 @@ const translations = {
     // Products
     'products.badge': 'Bộ sưu tập',
     'products.title': 'Sản phẩm của chúng tôi',
-    'products.subtitle': 'Chọn kiểu áo bạn yêu thích, để AI lo phần thiết kế',
+    'products.subtitle': 'Khám phá thiết kế cộng đồng, chọn mẫu bạn thích rồi đưa vào AI Studio để chỉnh tiếp',
     'products.all': 'Tất cả',
     'products.tshirt': 'Áo thun',
     'products.oversize': 'Oversize',
@@ -274,7 +274,7 @@ const translations = {
     // Products
     'products.badge': 'Collection',
     'products.title': 'Our Products',
-    'products.subtitle': 'Choose your favorite shirt type, let AI handle the design',
+    'products.subtitle': 'Explore community designs, pick one you like, then remix it in AI Studio',
     'products.all': 'All',
     'products.tshirt': 'T-Shirt',
     'products.oversize': 'Oversize',

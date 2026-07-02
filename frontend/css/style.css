@@ -784,8 +784,21 @@ ul {
   transition: transform var(--transition-base);
 }
 
+.shared-design-image {
+  width: min(72%, 190px);
+  height: min(72%, 190px);
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  filter: drop-shadow(0 18px 28px rgba(15, 23, 42, 0.12));
+  transition: transform var(--transition-base);
+}
+
 .product-card:hover .tshirt-visual {
   transform: scale(1.1);
+}
+
+.product-card:hover .shared-design-image {
+  transform: scale(1.08);
 }
 
 .product-badge {

@@ -252,6 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initGenerateButtons();
   initPrintControls();
   initOrderFlow();
+  initShareDesign();
   initViewToggle();
   initThreeViewer();
   loadCommunityDesigns();
@@ -260,10 +261,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const designUrlParam = urlParams.get('designUrl');
   if (designUrlParam) {
-    const titleParam = urlParams.get('title') || '3D Showroom Artwork';
+    const titleParam = urlParams.get('prompt') || urlParams.get('title') || '3D Showroom Artwork';
+    const styleParam = urlParams.get('style') || 'abstract';
+    const authorParam = urlParams.get('author') || 'Community';
+    const productMockupUrlParam = urlParams.get('productMockupUrl') || '';
+    const productMockupBlankParam = urlParams.get('productMockupBlank') === 'true';
+    const backDesignUrlParam = urlParams.get('backDesignUrl') || '';
     setTimeout(() => {
       if (typeof window.loadCommunityDesign === 'function') {
-        window.loadCommunityDesign(designUrlParam, titleParam, 'abstract', '3D Showroom');
+        window.loadCommunityDesign(designUrlParam, titleParam, styleParam, authorParam, productMockupUrlParam, productMockupBlankParam, backDesignUrlParam);
       }
     }, 300);
   }
@@ -1374,6 +1380,7 @@ async function generateFromPrompt() {
   }
 
   const btn = document.getElementById('generatePromptBtn');
+  updateShareButton(false);
   setLoading(btn, true);
   const draftDesign = await showInstantDraftDesign(prompt, state.selectedStyle);
   if (draftDesign.designId?.startsWith('text-only-')) {
@@ -1407,6 +1414,7 @@ async function generateFromPrompt() {
       state.customTextSides = data.customTextSides || state.customTextSides || { front: '', back: '' };
       state.isGeneratingAi = false;
       await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      updateShareButton(true);
     }
   } catch (err) {
     state.isGeneratingAi = false;
@@ -1433,6 +1441,7 @@ async function generateFromImage() {
 
   const idea = document.getElementById('ideaInput')?.value?.trim() || '';
   const btn = document.getElementById('generateImageBtn');
+  updateShareButton(false);
   setLoading(btn, true);
 
   try {
@@ -1459,6 +1468,7 @@ async function generateFromImage() {
     if (data.success && data.designUrl) {
       state.currentDesign = data;
       showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      updateShareButton(true);
     }
   } catch (err) {
     if (err.message && err.message !== 'Failed to fetch') {
@@ -1471,6 +1481,7 @@ async function generateFromImage() {
     const mockDesign = generateMockDesign('abstract', 'Image remix');
     state.currentDesign = mockDesign;
     showDesignOnMockup(mockDesign.designUrl);
+    updateShareButton(false);
   }
 
   setLoading(btn, false);
@@ -1539,6 +1550,7 @@ async function showDesignOnMockup(designUrl, productMockupUrl = null, productMoc
 
   if (orderBtn) orderBtn.disabled = false;
   if (downloadBtn) downloadBtn.disabled = false;
+  updateShareButton();
 
   updateMockupColor();
 }
@@ -1873,6 +1885,69 @@ function generateMockDesign(style, prompt) {
 /* ============================================================
    ORDER FLOW
    ============================================================ */
+function canShareCurrentDesign() {
+  const designId = state.currentDesign?.designId;
+  return Boolean(
+    designId &&
+    !state.currentDesign?.isShared &&
+    !state.currentDesign?.isDraft &&
+    !designId.startsWith('community-') &&
+    !designId.startsWith('text-only-')
+  );
+}
+
+function updateShareButton(forceEnabled = null) {
+  const shareBtn = document.getElementById('shareDesignBtn');
+  if (!shareBtn) return;
+
+  const enabled = forceEnabled === null ? canShareCurrentDesign() : Boolean(forceEnabled && canShareCurrentDesign());
+  shareBtn.disabled = !enabled;
+  shareBtn.classList.toggle('is-shared', state.currentDesign?.isShared === true);
+  shareBtn.textContent = state.currentDesign?.isShared === true ? 'Đã chia sẻ' : 'Chia sẻ';
+}
+
+function initShareDesign() {
+  const shareBtn = document.getElementById('shareDesignBtn');
+  if (!shareBtn) return;
+
+  shareBtn.addEventListener('click', async () => {
+    if (!canShareCurrentDesign()) {
+      alert('Hãy tạo xong một thiết kế trước khi chia sẻ lên thư viện.');
+      return;
+    }
+
+    const designId = state.currentDesign.designId;
+    shareBtn.disabled = true;
+    shareBtn.textContent = 'Đang chia sẻ...';
+
+    try {
+      const response = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/share`, {
+        method: 'POST',
+        headers: auth.getAuthHeaders(),
+      });
+      const result = await response.json();
+      if (!response.ok || result.success === false) {
+        throw new Error(result.error || 'Không thể chia sẻ thiết kế lúc này.');
+      }
+
+      state.currentDesign = {
+        ...state.currentDesign,
+        ...(result.data || {}),
+        designId,
+        isShared: true,
+      };
+      updateShareButton();
+      loadCommunityDesigns();
+      alert('Thiết kế đã được chia sẻ lên thư viện cộng đồng.');
+    } catch (err) {
+      alert(err.message || 'Không thể chia sẻ thiết kế lúc này.');
+      updateShareButton();
+    }
+  });
+
+  updateShareButton();
+}
+
 function initOrderFlow() {
   const orderBtn = document.getElementById('orderBtn');
   const downloadBtn = document.getElementById('downloadBtn');

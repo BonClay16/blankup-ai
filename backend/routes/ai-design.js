@@ -912,6 +912,7 @@ function saveDesignRecord({
   prompt,
   style,
   author,
+  userId,
   designUrl,
   frontDesignUrl,
   backDesignUrl,
@@ -933,7 +934,10 @@ function saveDesignRecord({
     promptEn: prompt,
     style: style || DEFAULT_STYLE,
     author: author || 'Guest',
+    userId,
     likes: 0,
+    isShared: false,
+    sharedAt: null,
     createdAt: new Date().toISOString().split('T')[0],
     designUrl,
     frontDesignUrl,
@@ -1112,6 +1116,7 @@ router.post('/generate', authenticate, async (req, res) => {
       prompt,
       style: style || DEFAULT_STYLE,
       author: authorName,
+      userId: req.user.id,
       designUrl,
       frontDesignUrl,
       backDesignUrl,
@@ -1124,6 +1129,7 @@ router.post('/generate', authenticate, async (req, res) => {
       printSides,
       customText,
       customTextSides,
+      isShared: false,
     });
 
     res.json({
@@ -1145,6 +1151,7 @@ router.post('/generate', authenticate, async (req, res) => {
       printSides,
       customText,
       customTextSides,
+      isShared: false,
     });
   } catch (err) {
     console.error('[AI-Design] Error generating design:', err.message);
@@ -1226,10 +1233,12 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
       prompt: idea || 'Remix from image',
       style,
       author,
+      userId: req.user.id,
       designUrl,
       sourceImage: `/uploads/${file.filename}`,
       finalPrompt,
       customText,
+      isShared: false,
     });
 
     res.json({
@@ -1243,10 +1252,41 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
       provider,
       finalPrompt,
       customText,
+      isShared: false,
     });
   } catch (err) {
     console.error('[AI-Design] Error generating from image:', err.message);
     res.status(500).json({ success: false, error: 'Failed to generate design from image' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/ai-design/:id/share
+// Publish a generated design to the public community gallery
+// ---------------------------------------------------------------------------
+router.post('/:id/share', authenticate, (req, res) => {
+  try {
+    const designId = req.params.id;
+    const designs = readDesigns();
+    const design = designs.find((item) => item.id === designId);
+
+    if (!design) {
+      return res.status(404).json({ success: false, error: 'Design not found.' });
+    }
+
+    if (design.userId && design.userId !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'You can only share your own design.' });
+    }
+
+    design.isShared = true;
+    design.sharedAt = new Date().toISOString();
+    design.author = design.author || req.user.fullName || req.user.username || 'Guest';
+    writeDesigns(designs);
+
+    res.json({ success: true, data: design });
+  } catch (err) {
+    console.error('[AI-Design] Error sharing design:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to share design' });
   }
 });
 
@@ -1257,7 +1297,8 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
 router.get('/gallery', (_req, res) => {
   try {
     const designs = readDesigns();
-    const galleryWithImages = designs.map((d) => ({
+    const publicDesigns = designs.filter((d) => d.isShared !== false);
+    const galleryWithImages = publicDesigns.map((d) => ({
       ...d,
       designUrl: d.designUrl || (d.sourceImage ? getFromImageSvg() : getDesignSvg(d.style)),
       productMockupUrl: d.productMockupUrl || null,
