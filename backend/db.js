@@ -91,6 +91,7 @@ async function initDatabase() {
 
     // 4. Ensure required demo users exist
     await seedAdminUser();
+    await seedAiCommerce();
 
     return pool;
   } catch (err) {
@@ -162,6 +163,188 @@ async function createTables() {
     )
   `);
   console.log('[DB] Table "Designs" ready.');
+
+  await request.query(`
+    IF COL_LENGTH(N'Orders', N'voucherCode') IS NULL
+    ALTER TABLE Orders ADD voucherCode NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'Orders', N'discountAmount') IS NULL
+    ALTER TABLE Orders ADD discountAmount INT NOT NULL DEFAULT 0;
+    IF COL_LENGTH(N'Orders', N'finalPrice') IS NULL
+    ALTER TABLE Orders ADD finalPrice INT NULL;
+    IF COL_LENGTH(N'Designs', N'userId') IS NULL
+    ALTER TABLE Designs ADD userId NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'Designs', N'quality') IS NULL
+    ALTER TABLE Designs ADD quality NVARCHAR(20) NOT NULL DEFAULT N'low';
+    IF COL_LENGTH(N'Designs', N'hasWatermark') IS NULL
+    ALTER TABLE Designs ADD hasWatermark BIT NOT NULL DEFAULT 1;
+    IF COL_LENGTH(N'Designs', N'sourceCreditType') IS NULL
+    ALTER TABLE Designs ADD sourceCreditType NVARCHAR(30) NULL;
+  `);
+
+  await request.query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AiPlans' AND xtype='U')
+    CREATE TABLE AiPlans (
+      id                  NVARCHAR(50)   PRIMARY KEY,
+      code                NVARCHAR(50)   NOT NULL UNIQUE,
+      name                NVARCHAR(100)  NOT NULL,
+      description         NVARCHAR(500)  NULL,
+      priceVnd            INT            NOT NULL DEFAULT 0,
+      highCredits         INT            NOT NULL DEFAULT 0,
+      bonusLowCredits     INT            NOT NULL DEFAULT 0,
+      dailyFreeLowCredits INT            NOT NULL DEFAULT 0,
+      outputQuality       NVARCHAR(20)   NOT NULL DEFAULT N'low',
+      planRank            INT            NOT NULL DEFAULT 0,
+      isPaid              BIT            NOT NULL DEFAULT 0,
+      isComebackOffer     BIT            NOT NULL DEFAULT 0,
+      comebackWindowDays  INT            NULL,
+      isActive            BIT            NOT NULL DEFAULT 1,
+      createdAt           DATETIME       NOT NULL DEFAULT GETDATE(),
+      updatedAt           DATETIME       NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UserAiAccounts' AND xtype='U')
+    CREATE TABLE UserAiAccounts (
+      userId                  NVARCHAR(50)  NOT NULL PRIMARY KEY,
+      displayPlanId           NVARCHAR(50)  NOT NULL DEFAULT N'plan-free',
+      highestPlanRank         INT           NOT NULL DEFAULT 0,
+      highCredits             INT           NOT NULL DEFAULT 0,
+      bonusLowCredits         INT           NOT NULL DEFAULT 0,
+      dailyFreeLowCreditsUsed INT           NOT NULL DEFAULT 0,
+      dailyFreeResetDate      DATE          NOT NULL DEFAULT CONVERT(date, GETDATE()),
+      comebackOfferStartedAt  DATETIME      NULL,
+      comebackOfferExpiresAt  DATETIME      NULL,
+      comebackOfferUsed       BIT           NOT NULL DEFAULT 0,
+      firstDiscountUsed       BIT           NOT NULL DEFAULT 0,
+      createdAt               DATETIME      NOT NULL DEFAULT GETDATE(),
+      updatedAt               DATETIME      NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AiPlanPurchases' AND xtype='U')
+    CREATE TABLE AiPlanPurchases (
+      id                    NVARCHAR(50)   PRIMARY KEY,
+      userId                NVARCHAR(50)   NOT NULL,
+      planId                NVARCHAR(50)   NOT NULL,
+      priceVnd              INT            NOT NULL,
+      highCreditsAdded      INT            NOT NULL DEFAULT 0,
+      lowCreditsAdded       INT            NOT NULL DEFAULT 0,
+      voucherCode           NVARCHAR(50)   NULL,
+      discountAmount        INT            NOT NULL DEFAULT 0,
+      finalAmount           INT            NOT NULL,
+      paymentStatus         NVARCHAR(30)   NOT NULL DEFAULT N'pending',
+      paymentMethod         NVARCHAR(30)   NULL,
+      transferContent       NVARCHAR(100)  NULL,
+      paymentReceivedAmount INT            NOT NULL DEFAULT 0,
+      paymentTransactionId  NVARCHAR(100)  NULL,
+      paymentDescription    NVARCHAR(500)  NULL,
+      paymentCheckedAt      DATETIME       NULL,
+      createdAt             DATETIME       NOT NULL DEFAULT GETDATE(),
+      paidAt                DATETIME       NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AiCreditLedger' AND xtype='U')
+    CREATE TABLE AiCreditLedger (
+      id             NVARCHAR(50)   PRIMARY KEY,
+      userId         NVARCHAR(50)   NOT NULL,
+      creditType     NVARCHAR(20)   NOT NULL,
+      quality        NVARCHAR(20)   NOT NULL,
+      amount         INT            NOT NULL,
+      balanceAfter   INT            NULL,
+      reason         NVARCHAR(50)   NOT NULL,
+      referenceType  NVARCHAR(50)   NULL,
+      referenceId    NVARCHAR(50)   NULL,
+      note           NVARCHAR(500)  NULL,
+      createdAt      DATETIME       NOT NULL DEFAULT GETDATE()
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Vouchers' AND xtype='U')
+    CREATE TABLE Vouchers (
+      id                 NVARCHAR(50)   PRIMARY KEY,
+      code               NVARCHAR(50)   NOT NULL UNIQUE,
+      title              NVARCHAR(200)  NOT NULL,
+      description        NVARCHAR(500)  NULL,
+      discountType       NVARCHAR(30)   NOT NULL,
+      discountValue      INT            NOT NULL DEFAULT 0,
+      maxDiscountAmount  INT            NULL,
+      minOrderAmount     INT            NOT NULL DEFAULT 0,
+      appliesTo          NVARCHAR(30)   NOT NULL DEFAULT N'all',
+      eligiblePlanCodes  NVARCHAR(500)  NULL,
+      bonusHighCredits   INT            NOT NULL DEFAULT 0,
+      bonusLowCredits    INT            NOT NULL DEFAULT 0,
+      totalUsageLimit    INT            NULL,
+      perUserLimit       INT            NOT NULL DEFAULT 1,
+      usedCount          INT            NOT NULL DEFAULT 0,
+      startsAt           DATETIME       NULL,
+      expiresAt          DATETIME       NULL,
+      status             NVARCHAR(20)   NOT NULL DEFAULT N'active',
+      createdBy          NVARCHAR(50)   NULL,
+      internalNote       NVARCHAR(500)  NULL,
+      createdAt          DATETIME       NOT NULL DEFAULT GETDATE(),
+      updatedAt          DATETIME       NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='VoucherRedemptions' AND xtype='U')
+    CREATE TABLE VoucherRedemptions (
+      id                NVARCHAR(50)   PRIMARY KEY,
+      voucherId         NVARCHAR(50)   NOT NULL,
+      voucherCode       NVARCHAR(50)   NOT NULL,
+      userId            NVARCHAR(50)   NOT NULL,
+      orderId           NVARCHAR(50)   NULL,
+      purchaseId        NVARCHAR(50)   NULL,
+      appliesTo         NVARCHAR(30)   NOT NULL,
+      originalAmount    INT            NOT NULL DEFAULT 0,
+      discountAmount    INT            NOT NULL DEFAULT 0,
+      bonusHighCredits  INT            NOT NULL DEFAULT 0,
+      bonusLowCredits   INT            NOT NULL DEFAULT 0,
+      redeemedAt        DATETIME       NOT NULL DEFAULT GETDATE()
+    );
+  `);
+  console.log('[DB] AI plans and voucher tables ready.');
+
+  await seedAiCommerce();
+}
+
+async function seedAiCommerce() {
+  const plansCount = await pool.request().query('SELECT COUNT(*) as cnt FROM AiPlans');
+  if (plansCount.recordset[0].cnt === 0) {
+    await pool.request().query(`
+      INSERT INTO AiPlans (
+        id, code, name, description, priceVnd, highCredits, bonusLowCredits,
+        dailyFreeLowCredits, outputQuality, planRank, isPaid, isComebackOffer, comebackWindowDays
+      )
+      VALUES
+        (N'plan-free', N'free', N'Free', N'3 lượt Low miễn phí mỗi ngày, có watermark.', 0, 0, 0, 3, N'low', 0, 0, 0, NULL),
+        (N'plan-comeback', N'comeback', N'Comeback Offer', N'Ưu đãi 7 ngày sau khi dùng hết Premium: 10 lượt High.', 59000, 10, 0, 0, N'high', 1, 1, 1, 7),
+        (N'plan-premium', N'premium', N'Premium', N'10 lượt High, không watermark, sẵn sàng để in.', 79000, 10, 0, 0, N'high', 2, 1, 0, NULL),
+        (N'plan-pro', N'pro', N'Pro', N'18 lượt High và tặng 3 lượt Low.', 129000, 18, 3, 0, N'high', 3, 1, 0, NULL),
+        (N'plan-studio-plus', N'studio_plus', N'Studio Plus', N'30 lượt High và tặng 5 lượt Low cho người dùng nhiều.', 199000, 30, 5, 0, N'high', 4, 1, 0, NULL)
+    `);
+  }
+
+  const voucherResult = await pool.request()
+    .input('code', sql.NVarChar, 'BLANKUP50')
+    .query('SELECT id FROM Vouchers WHERE code = @code');
+  if (voucherResult.recordset.length === 0) {
+    await pool.request().query(`
+      INSERT INTO Vouchers (
+        id, code, title, description, discountType, discountValue, minOrderAmount,
+        appliesTo, eligiblePlanCodes, perUserLimit, startsAt, status, internalNote
+      )
+      VALUES (
+        N'voucher-blankup50', N'BLANKUP50',
+        N'Giảm 50,000đ cho giao dịch từ 100,000đ',
+        N'Mã hệ thống dùng 1 lần mỗi tài khoản cho đơn/gói đủ điều kiện.',
+        N'fixed', 50000, 100000, N'all', N'pro,studio_plus', 1, GETDATE(), N'active',
+        N'Seed mặc định theo chính sách voucher đầu tiên của Blankup.'
+      )
+    `);
+  }
+
+  await pool.request().query(`
+    INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank)
+    SELECT id, N'plan-free', 0
+    FROM Users u
+    WHERE NOT EXISTS (SELECT 1 FROM UserAiAccounts a WHERE a.userId = u.id)
+  `);
 }
 
 // ---------------------------------------------------------------------------

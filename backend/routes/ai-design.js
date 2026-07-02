@@ -4,6 +4,10 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('./auth');
+const {
+  getNextAvailableCredit,
+  consumeGenerationCredit,
+} = require('../services/ai-commerce-store');
 
 const router = express.Router();
 const designsFilePath = path.join(__dirname, '../data/designs.json');
@@ -926,6 +930,9 @@ function saveDesignRecord({
   printSides,
   customText,
   customTextSides,
+  quality,
+  hasWatermark,
+  sourceCreditType,
 }) {
   const designs = readDesigns();
   designs.push({
@@ -952,6 +959,9 @@ function saveDesignRecord({
     printSides,
     customText,
     customTextSides,
+    quality: quality || 'low',
+    hasWatermark: hasWatermark !== undefined ? Boolean(hasWatermark) : true,
+    sourceCreditType: sourceCreditType || null,
     aiProvider: designUrl?.startsWith('/uploads/') ? 'ai' : 'mock',
   });
   writeDesigns(designs);
@@ -983,6 +993,10 @@ router.post('/generate', authenticate, async (req, res) => {
     }
 
     const designId = 'design-' + Date.now();
+    const credit = getNextAvailableCredit(req.user.id);
+    if (!credit.available) {
+      return res.status(402).json({ success: false, error: credit.error, code: 'AI_CREDITS_EXHAUSTED' });
+    }
     const authorName = req.user.fullName || req.user.username;
     let designUrl;
     let frontDesignUrl;
@@ -1111,6 +1125,7 @@ router.post('/generate', authenticate, async (req, res) => {
     }
 
     console.log(`[AI-Design] Generated design ${designId} via ${provider} for prompt: "${prompt}" (style: ${style || DEFAULT_STYLE})`);
+    const consumedCredit = consumeGenerationCredit(req.user.id, designId);
     saveDesignRecord({
       designId,
       prompt,
@@ -1129,6 +1144,9 @@ router.post('/generate', authenticate, async (req, res) => {
       printSides,
       customText,
       customTextSides,
+      quality: consumedCredit.quality,
+      hasWatermark: consumedCredit.hasWatermark,
+      sourceCreditType: consumedCredit.sourceCreditType,
       isShared: false,
     });
 
@@ -1151,6 +1169,9 @@ router.post('/generate', authenticate, async (req, res) => {
       printSides,
       customText,
       customTextSides,
+      quality: consumedCredit.quality,
+      hasWatermark: consumedCredit.hasWatermark,
+      sourceCreditType: consumedCredit.sourceCreditType,
       isShared: false,
     });
   } catch (err) {
@@ -1176,6 +1197,10 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
     }
 
     const designId = 'design-' + Date.now();
+    const credit = getNextAvailableCredit(req.user.id);
+    if (!credit.available) {
+      return res.status(402).json({ success: false, error: credit.error, code: 'AI_CREDITS_EXHAUSTED' });
+    }
     let designUrl;
     let finalPrompt;
     let provider = 'mock';
@@ -1228,6 +1253,7 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
     }
 
     console.log(`[AI-Design] Generated design ${designId} via ${provider} from image: "${file.filename}" idea: "${idea}"`);
+    const consumedCredit = consumeGenerationCredit(req.user.id, designId);
     saveDesignRecord({
       designId,
       prompt: idea || 'Remix from image',
@@ -1238,6 +1264,9 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
       sourceImage: `/uploads/${file.filename}`,
       finalPrompt,
       customText,
+      quality: consumedCredit.quality,
+      hasWatermark: consumedCredit.hasWatermark,
+      sourceCreditType: consumedCredit.sourceCreditType,
       isShared: false,
     });
 
@@ -1252,6 +1281,9 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
       provider,
       finalPrompt,
       customText,
+      quality: consumedCredit.quality,
+      hasWatermark: consumedCredit.hasWatermark,
+      sourceCreditType: consumedCredit.sourceCreditType,
       isShared: false,
     });
   } catch (err) {

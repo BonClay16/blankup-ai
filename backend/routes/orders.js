@@ -3,6 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('./auth');
+const {
+  findPurchaseByPaymentDescription,
+  finalizePurchase,
+} = require('../services/ai-commerce-store');
 
 const router = express.Router();
 const ordersFilePath = path.join(__dirname, '../data/orders.json');
@@ -82,8 +86,9 @@ function extractBankTransferPayload(body = {}) {
   ]) || '');
 
   const orderId = (description.match(/BU-?[A-Z0-9-]+/i) || [])[0]?.toUpperCase() || '';
+  const purchaseId = (description.match(/AIP-?[A-Z0-9-]+/i) || [])[0]?.toUpperCase() || '';
 
-  return { amount, description, transactionId, orderId };
+  return { amount, description, transactionId, orderId, purchaseId };
 }
 
 function normalizePaymentCode(value) {
@@ -283,11 +288,39 @@ router.post('/payment-webhook', (req, res) => {
       });
     }
 
-    const { amount, description, transactionId, orderId } = extractBankTransferPayload(req.body);
-    if (!orderId || amount <= 0) {
+    const { amount, description, transactionId, orderId, purchaseId } = extractBankTransferPayload(req.body);
+    if ((!orderId && !purchaseId) || amount <= 0) {
       return res.status(400).json({
         success: false,
-        error: 'Webhook payload must include an order code and transfer amount.',
+        error: 'Webhook payload must include an order/purchase code and transfer amount.',
+      });
+    }
+
+    const aiPurchase = purchaseId ? findPurchaseByPaymentDescription(description) : null;
+    if (aiPurchase) {
+      const result = finalizePurchase({
+        purchaseId: aiPurchase.id,
+        amount,
+        transactionId,
+        description,
+      });
+
+      if (!result.success) {
+        return res.status(result.status || 400).json({
+          success: false,
+          error: result.error,
+          data: result.purchase,
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'AI plan payment confirmed.',
+        data: {
+          purchaseId: result.purchase.id,
+          paymentStatus: result.purchase.paymentStatus,
+          paidAt: result.purchase.paidAt,
+        },
       });
     }
 

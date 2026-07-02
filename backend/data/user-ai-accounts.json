@@ -1,0 +1,17 @@
+[
+  {
+    "userId": "u-1",
+    "displayPlanId": "plan-free",
+    "highestPlanRank": 0,
+    "highCredits": 0,
+    "bonusLowCredits": 0,
+    "dailyFreeLowCreditsUsed": 0,
+    "dailyFreeResetDate": "2026-07-02",
+    "comebackOfferStartedAt": null,
+    "comebackOfferExpiresAt": null,
+    "comebackOfferUsed": false,
+    "firstDiscountUsed": false,
+    "createdAt": "2026-07-02T04:05:10.019Z",
+    "updatedAt": null
+  }
+]
