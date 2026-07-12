@@ -15,6 +15,10 @@ const adminState = {
   orderFilter: 'all',
   paymentFilter: 'all',
   orderSearch: '',
+  designVisibilityFilter: 'all',
+  userSearch: '',
+  orderUserFilter: null,
+  orderUserFilterLabel: '',
   selectedPreviewOrder: null,
   previewSide: 'front',
   previewShirtColor: '#ffffff',
@@ -42,6 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initOrderFilters();
   initOrderTools();
+  initDesignFilters();
+  initUserTools();
   initColorDotPreview();
   initPreviewSideToggle();
   initPreviewModalClose();
@@ -56,7 +62,7 @@ async function loadDashboardData() {
     const [statsResponse, ordersResponse, designsResponse] = await Promise.all([
       fetch(`${API_ADMIN}/stats`, { headers: auth.getAuthHeaders() }),
       fetch(API_ORDERS, { headers: auth.getAuthHeaders() }),
-      fetch(`${window.location.origin}/api/ai-design/gallery`),
+      fetch(`${API_ADMIN}/designs`, { headers: auth.getAuthHeaders() }),
     ]);
 
     if (!statsResponse.ok) throw new Error('Không thể tải thống kê admin.');
@@ -140,6 +146,11 @@ function initOrderTools() {
     adminState.paymentFilter = paymentFilter.value;
     renderOrdersList();
   });
+
+  document.getElementById('orderUserFilterClear')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    clearUserOrderFilter();
+  });
 }
 
 function initRefreshActions() {
@@ -148,6 +159,44 @@ function initRefreshActions() {
 
 function initExportActions() {
   document.getElementById('adminExportBtn')?.addEventListener('click', exportOrdersCsv);
+}
+
+function initDesignFilters() {
+  document.querySelectorAll('.design-filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.design-filter-pill').forEach(item => item.classList.remove('active'));
+      pill.classList.add('active');
+      adminState.designVisibilityFilter = pill.dataset.designFilter || 'all';
+      renderDesignsGrid();
+    });
+  });
+}
+
+function initUserTools() {
+  const searchInput = document.getElementById('userSearchInput');
+  searchInput?.addEventListener('input', () => {
+    adminState.userSearch = searchInput.value.trim().toLowerCase();
+    renderUsersList();
+  });
+}
+
+function viewOrdersForUser(user) {
+  switchTab('orders');
+  adminState.orderUserFilter = user.id;
+  adminState.orderUserFilterLabel = user.fullName || user.username;
+  document.querySelectorAll('.filter-pill').forEach(item => item.classList.remove('active'));
+  document.querySelector('.filter-pill[data-filter="all"]')?.classList.add('active');
+  adminState.orderFilter = 'all';
+  const searchInput = document.getElementById('orderSearchInput');
+  if (searchInput) searchInput.value = '';
+  adminState.orderSearch = '';
+  renderOrdersList();
+}
+
+function clearUserOrderFilter() {
+  adminState.orderUserFilter = null;
+  adminState.orderUserFilterLabel = '';
+  renderOrdersList();
 }
 
 function renderOverview() {
@@ -224,6 +273,16 @@ function renderOrdersList() {
   const filteredOrders = getFilteredOrders();
   if (countEl) countEl.textContent = `${filteredOrders.length}/${adminState.orders.length} đơn`;
 
+  const filterChip = document.getElementById('orderUserFilterChip');
+  if (filterChip) {
+    if (adminState.orderUserFilter) {
+      filterChip.style.display = 'inline-flex';
+      filterChip.querySelector('.filter-chip-label').textContent = `Khách: ${adminState.orderUserFilterLabel}`;
+    } else {
+      filterChip.style.display = 'none';
+    }
+  }
+
   tbody.innerHTML = filteredOrders.length
     ? filteredOrders.map(order => renderOrderRow(order)).join('')
     : renderEmptyRow(8, 'Không có đơn hàng nào khớp bộ lọc.');
@@ -237,6 +296,7 @@ function getFilteredOrders() {
     const paymentMatch = adminState.paymentFilter === 'all'
       || order.payment === adminState.paymentFilter
       || paymentStatus === adminState.paymentFilter;
+    const userMatch = !adminState.orderUserFilter || order.userId === adminState.orderUserFilter;
     const haystack = [
       order.orderId,
       order.customer?.name,
@@ -248,7 +308,7 @@ function getFilteredOrders() {
       paymentStatus,
     ].join(' ').toLowerCase();
     const searchMatch = !adminState.orderSearch || haystack.includes(adminState.orderSearch);
-    return statusMatch && paymentMatch && searchMatch;
+    return statusMatch && paymentMatch && userMatch && searchMatch;
   });
 }
 
@@ -425,8 +485,19 @@ function renderUsersList() {
   const tbody = document.getElementById('usersTableBody');
   if (!tbody) return;
 
-  tbody.innerHTML = adminState.users.length
-    ? adminState.users.map(user => `
+  const search = adminState.userSearch;
+  const filtered = !search
+    ? adminState.users
+    : adminState.users.filter(u =>
+        (u.username || '').toLowerCase().includes(search) ||
+        (u.fullName || '').toLowerCase().includes(search)
+      );
+
+  const countEl = document.getElementById('usersResultCount');
+  if (countEl) countEl.textContent = `${filtered.length}/${adminState.users.length} người dùng`;
+
+  tbody.innerHTML = filtered.length
+    ? filtered.map(user => `
       <tr>
         <td><span class="table-primary">@${escapeHtml(user.username)}</span></td>
         <td><span class="table-primary">${escapeHtml(user.fullName)}</span></td>
@@ -434,27 +505,48 @@ function renderUsersList() {
         <td>${formatDate(user.createdAt, false)}</td>
         <td class="center-cell">${Number(user.ordersCount || 0)}</td>
         <td><span class="money-cell">${formatMoney(user.totalSpend || 0)}</span></td>
+        <td>
+          <button class="btn-icon btn-view-action" data-user-id="${escapeAttr(user.id)}" data-user-label="${escapeAttr(user.fullName || user.username)}" title="Xem đơn hàng của khách này">👁</button>
+        </td>
       </tr>
     `).join('')
-    : renderEmptyRow(6, 'Chưa có tài khoản người dùng.');
+    : renderEmptyRow(7, search ? 'Không tìm thấy người dùng khớp.' : 'Chưa có tài khoản người dùng.');
+
+  tbody.querySelectorAll('[data-user-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      viewOrdersForUser({ id: btn.dataset.userId, fullName: btn.dataset.userLabel });
+    });
+  });
 }
 
 function renderDesignsGrid() {
   const grid = document.getElementById('designsGrid');
   if (!grid) return;
 
-  if (!adminState.designs.length) {
-    grid.innerHTML = `<div class="empty-state">Chưa có thiết kế AI nào được tạo.</div>`;
+  const filter = adminState.designVisibilityFilter;
+  const filtered = adminState.designs.filter(d => {
+    if (filter === 'shared') return d.isShared !== false;
+    if (filter === 'hidden') return d.isShared === false;
+    return true;
+  });
+
+  const countEl = document.getElementById('designsResultCount');
+  if (countEl) countEl.textContent = `${filtered.length}/${adminState.designs.length} thiết kế`;
+
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state">${adminState.designs.length ? 'Không có thiết kế nào khớp bộ lọc.' : 'Chưa có thiết kế AI nào được tạo.'}</div>`;
     return;
   }
 
-  grid.innerHTML = adminState.designs.map(design => {
+  grid.innerHTML = filtered.map(design => {
     const prompt = design.prompt || design.promptEn || 'Không có prompt';
     const previewUrl = design.designUrl || design.frontDesignUrl || '';
+    const isHidden = design.isShared === false;
     return `
-      <article class="design-item-card">
+      <article class="design-item-card ${isHidden ? 'is-hidden' : ''}">
         <div class="design-card-preview">
           ${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr(prompt)}">` : '<span>Không có ảnh</span>'}
+          <span class="design-visibility-badge ${isHidden ? 'badge-muted' : 'badge-completed'}">${isHidden ? 'Đã ẩn' : 'Công khai'}</span>
         </div>
         <div class="design-card-details">
           <div class="design-card-prompt">"${escapeHtml(prompt)}"</div>
@@ -462,10 +554,37 @@ function renderDesignsGrid() {
             <span>${escapeHtml(design.author || 'Guest')}</span>
             <span>${formatDate(design.createdAt || design.updatedAt || Date.now(), false)}</span>
           </div>
+          <button class="btn btn-secondary btn-sm design-visibility-toggle" data-design-id="${escapeAttr(design.id)}" data-next-visible="${isHidden ? 'true' : 'false'}">
+            ${isHidden ? 'Hiện lại trên thư viện' : 'Ẩn khỏi thư viện'}
+          </button>
         </div>
       </article>
     `;
   }).join('');
+
+  grid.querySelectorAll('.design-visibility-toggle').forEach(btn => {
+    btn.addEventListener('click', () => toggleDesignVisibility(btn.dataset.designId, btn.dataset.nextVisible === 'true'));
+  });
+}
+
+async function toggleDesignVisibility(designId, nextIsShared) {
+  try {
+    const response = await fetch(`${API_ADMIN}/designs/${encodeURIComponent(designId)}/visibility`, {
+      method: 'PUT',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify({ isShared: nextIsShared }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.success === false) {
+      throw new Error(result.error || 'Không thể cập nhật trạng thái thiết kế.');
+    }
+    const index = adminState.designs.findIndex(d => d.id === designId);
+    if (index !== -1) adminState.designs[index] = result.data;
+    renderDesignsGrid();
+    showAdminToast(nextIsShared ? 'Đã hiện lại thiết kế trên thư viện.' : 'Đã ẩn thiết kế khỏi thư viện.');
+  } catch (err) {
+    showAdminToast(err.message || 'Không thể cập nhật trạng thái thiết kế.', 'error');
+  }
 }
 
 async function updateOrderStatus(orderId, newStatus) {

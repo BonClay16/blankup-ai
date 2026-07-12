@@ -25,29 +25,22 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/admin.css?v=admin-pro-2">
+  <link rel="stylesheet" href="css/admin.css?v=admin-pro-3">
 </head>
 <body class="admin-theme">
   <nav class="navbar scrolled" id="navbar">
     <div class="container">
       <a href="/" class="navbar-logo">
         <svg class="logo-icon" viewBox="0 0 38 38" fill="none">
-          <rect width="38" height="38" rx="10" fill="#ff6b00"/>
-          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.9"/>
+          <rect width="38" height="38" rx="4" fill="#b43e12"/>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.92"/>
           <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
-          <path d="M22 18 L28 12" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="29" cy="11" r="2" fill="white"/>
         </svg>
         <span>BLANK<span class="logo-highlight">UP</span></span>
       </a>
 
       <div class="navbar-actions">
-        <button class="theme-toggle" id="themeToggleBtn" aria-label="Toggle theme">
-          <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-          <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.79 6.79 0 0 0-5.4 12.4 8.78 8.78 0 0 0 11.6-11.6A6.79 6.79 0 0 0 12 3z"/></svg>
-        </button>
         <div class="lang-toggle" id="langToggle">
           <span class="lang-vi active" data-lang="vi">VI</span>
           <span class="lang-en" data-lang="en">EN</span>
@@ -269,6 +262,10 @@
             <option value="underpaid">Chuyển thiếu</option>
           </select>
           <input class="admin-search" id="orderSearchInput" type="search" placeholder="Tìm mã đơn, khách, SĐT, nội dung CK...">
+          <button type="button" class="filter-chip" id="orderUserFilterChip" style="display:none;">
+            <span class="filter-chip-label"></span>
+            <span class="filter-chip-clear" id="orderUserFilterClear">✕</span>
+          </button>
           <span class="orders-result-count" id="ordersResultCount">0 đơn</span>
         </div>
 
@@ -298,6 +295,10 @@
           <h2>Danh sách người dùng</h2>
           <span class="panel-subtitle">Người dùng đã đăng ký tài khoản trên hệ thống.</span>
         </div>
+        <div class="filter-bar admin-order-toolbar">
+          <input class="admin-search" id="userSearchInput" type="search" placeholder="Tìm theo tên đăng nhập hoặc họ tên...">
+          <span class="orders-result-count" id="usersResultCount">0 người dùng</span>
+        </div>
         <div class="dashboard-card">
           <div class="table-container">
             <table class="admin-table">
@@ -309,6 +310,7 @@
                   <th>Ngày đăng ký</th>
                   <th>Số đơn</th>
                   <th>Đã chi tiêu</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody id="usersTableBody"></tbody>
@@ -320,7 +322,15 @@
       <section class="tab-panel" id="panel-designs">
         <div class="panel-header">
           <h2>Thư viện thiết kế</h2>
-          <span class="panel-subtitle">Tất cả mẫu thiết kế được khách tạo bằng AI.</span>
+          <span class="panel-subtitle">Tất cả mẫu thiết kế được khách tạo bằng AI — kiểm duyệt trước khi hiện công khai.</span>
+        </div>
+        <div class="filter-bar admin-order-toolbar">
+          <div class="filter-group">
+            <button class="filter-pill design-filter-pill active" data-design-filter="all">Tất cả</button>
+            <button class="filter-pill design-filter-pill" data-design-filter="shared">Công khai</button>
+            <button class="filter-pill design-filter-pill" data-design-filter="hidden">Đã ẩn</button>
+          </div>
+          <span class="orders-result-count" id="designsResultCount">0 thiết kế</span>
         </div>
         <div class="designs-grid" id="designsGrid"></div>
       </section>
