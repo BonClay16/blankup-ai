@@ -139,7 +139,7 @@ async function loadGallery() {
       <img class="gallery-card-img" src="${escapeAttr(url)}" alt="${escapeAttr(prompt)}" loading="lazy">
       <div class="gallery-card-info">
         <div class="gallery-card-prompt">"${escapeHtml(prompt)}"</div>
-        <div class="gallery-card-meta"><span>👤 ${escapeHtml(author)}</span><span>❤️ ${d.likes || 0}</span></div>
+        <div class="gallery-card-meta"><span>${escapeHtml(author)}</span><span>${d.likes || 0} ❤️</span></div>
       </div>
     </div>`;
   }).join('');

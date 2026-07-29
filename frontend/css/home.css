@@ -414,6 +414,17 @@
   margin: 0;
 }
 
+.hero-title-sub {
+  display: block;
+  font-size: 0.55em;
+  font-weight: 700;
+  color: var(--hp-text-secondary);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 0;
+  line-height: 1.4;
+}
+
 .hero-title-gradient {
   background: var(--hp-gradient-text);
   background-size: 200% 200%;

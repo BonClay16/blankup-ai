@@ -28,12 +28,12 @@ const translations = {
     'nav.cta': 'Tạo thiết kế',
 
     // Hero
-    'hero.badge': 'Edition 001 · AI-Generated · 1-of-1',
-    'hero.title1': 'Not Just A',
-    'hero.titleHighlight': 'Shirt',
-    'hero.subtitle': 'Mô tả ý tưởng — AI dựng artwork, bạn xem trước trên áo 3D rồi mới đặt hàng. Một bản thiết kế, một chiếc áo, không ai mặc giống ai.',
-    'hero.cta': 'Bắt đầu thiết kế',
-    'hero.cta2': 'Xem bộ sưu tập',
+    'hero.badge': 'Ideas Made Wearable · AI Design Studio',
+    'hero.title1': 'NOT JUST A SHIRT.',
+    'hero.titleHighlight': 'Ideas Made Wearable.',
+    'hero.subtitle': 'Mô tả ý tưởng — AI tạo tác phẩm nghệ thuật độc nhất — Xem trước 3D — Nhận áo. Mỗi chiếc áo là một câu chuyện.',
+    'hero.cta': 'Tạo thiết kế miễn phí',
+    'hero.cta2': 'Xem cảm hứng',
     'hero.stats.designs': 'Thiết kế đã tạo',
     'hero.stats.customers': 'Khách hàng',
     'hero.stats.rating': 'Đánh giá trung bình',
@@ -97,7 +97,7 @@ const translations = {
     'contact.info.hours': 'T2 - T7: 8:00 - 18:00',
 
     // Footer
-    'footer.desc': 'Nền tảng thiết kế áo thun bằng AI. Mỗi chiếc áo là một tác phẩm nghệ thuật độc nhất.',
+    'footer.desc': 'NOT JUST A SHIRT. Ideas Made Wearable. Nền tảng thiết kế áo thun bằng AI.',
     'footer.product': 'Sản phẩm',
     'footer.product.tshirt': 'Áo thun',
     'footer.product.polo': 'Áo polo',
@@ -265,12 +265,12 @@ const translations = {
     'nav.cta': 'Design Now',
 
     // Hero
-    'hero.badge': 'Edition 001 · AI-Generated · 1-of-1',
-    'hero.title1': 'Not Just A',
-    'hero.titleHighlight': 'Shirt',
-    'hero.subtitle': 'Describe an idea — AI renders the artwork, you preview it on a 3D shirt before you order. One design, one shirt, never worn the same way twice.',
-    'hero.cta': 'Start Designing',
-    'hero.cta2': 'View Collection',
+    'hero.badge': 'Ideas Made Wearable · AI Design Studio',
+    'hero.title1': 'NOT JUST A SHIRT.',
+    'hero.titleHighlight': 'Ideas Made Wearable.',
+    'hero.subtitle': 'Describe an idea — AI creates unique artwork — Preview in 3D — Get your shirt. Every shirt tells a story.',
+    'hero.cta': 'Create Free Design',
+    'hero.cta2': 'Get Inspired',
     'hero.stats.designs': 'Designs Created',
     'hero.stats.customers': 'Customers',
     'hero.stats.rating': 'Average Rating',
@@ -334,7 +334,7 @@ const translations = {
     'contact.info.hours': 'Mon - Sat: 8:00 AM - 6:00 PM',
 
     // Footer
-    'footer.desc': 'AI-powered t-shirt design platform. Every shirt is a unique work of art.',
+    'footer.desc': 'NOT JUST A SHIRT. Ideas Made Wearable. AI-powered t-shirt design platform.',
     'footer.product': 'Products',
     'footer.product.tshirt': 'T-Shirt',
     'footer.product.polo': 'Polo',
