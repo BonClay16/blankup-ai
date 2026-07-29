@@ -1,3 +1,4 @@
+// frontend/js/studio.js
 /**
  * Blankup AI Design Studio - Application Logic
  * Handles AI design generation, mockup preview, ordering, and community gallery
@@ -5,32 +6,308 @@
 
 const API_BASE = window.location.origin + '/api';
 
+/* ============================================================
+   TOAST NOTIFICATIONS — lightweight, non-blocking feedback
+   (replaces alert() for routine success/warning/error messages)
+   ============================================================ */
+let toastContainerEl = null;
+function getToastContainer() {
+  if (toastContainerEl && document.body.contains(toastContainerEl)) return toastContainerEl;
+  toastContainerEl = document.createElement('div');
+  toastContainerEl.className = 'toast-container';
+  toastContainerEl.setAttribute('aria-live', 'polite');
+  document.body.appendChild(toastContainerEl);
+  return toastContainerEl;
+}
+
+function showToast(message, type = 'info', duration = 4200) {
+  if (!message) return;
+  const container = getToastContainer();
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span class="toast-msg"></span><button type="button" class="toast-close" aria-label="Close">✕</button>`;
+  toast.querySelector('.toast-msg').textContent = message;
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add('show'));
+
+  const remove = () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 220);
+  };
+  toast.querySelector('.toast-close').addEventListener('click', remove);
+  if (duration > 0) setTimeout(remove, duration);
+  return toast;
+}
+
+const BASIC_PRODUCT_COLORS = ['#ffffff', '#000000', '#1e293b', '#6b7280', '#dc2626', '#2563eb', '#059669'];
+const UNIFORM_PRODUCT_PRICE = 10000;
+const BANK_TRANSFER_INFO = {
+  bankId: '970422',
+  bankName: 'MB Bank',
+  accountName: 'LE LY HUY',
+  accountNumber: '0967145402',
+  template: 'compact2',
+};
+
+const PRODUCT_TYPES = {
+  tshirt: {
+    label: 'T-Shirt Custom AI',
+    price: UNIFORM_PRODUCT_PRICE,
+    colors: BASIC_PRODUCT_COLORS,
+    sizes: ['S', 'M', 'L', 'XL', '2XL'],
+  },
+  hoodie: {
+    label: 'Hoodie Custom AI',
+    price: UNIFORM_PRODUCT_PRICE,
+    colors: BASIC_PRODUCT_COLORS,
+    sizes: ['M', 'L', 'XL', '2XL'],
+  },
+  polo: {
+    label: 'Polo Custom AI',
+    price: UNIFORM_PRODUCT_PRICE,
+    colors: BASIC_PRODUCT_COLORS,
+    sizes: ['S', 'M', 'L', 'XL', '2XL'],
+  },
+};
+
 // State
 const state = {
   currentDesign: null,
+  selectedProductType: 'tshirt',
   selectedColor: '#ffffff',
   selectedSize: 'M',
   quantity: 1,
+  selectedPaymentMethod: 'COD',
+  paymentPollingTimer: null,
   currentView: 'front',
   selectedStyle: 'minimalist',
   uploadedFile: null,
   printDesignUrl: null,
+  preparedDesignUrls: { front: null, back: null },
+  customText: '',
+  printPlacement: { x: 0, y: -12, scale: 1 },
+  textPlacement: { x: 0, y: 18, scale: 1 },
+  compositeDesignUrls: { front: null, back: null },
+  compositeCacheKey: '',
+  interactionMode: 'position',
+  activePlacementLayer: 'image',
+  isGeneratingAi: false,
+  customTextSides: { front: '', back: '' },
+  designProcessVersion: 0,
   viewer3d: null,
 };
+
+function getFrontDesignUrl(design = state.currentDesign) {
+  return design?.frontDesignUrl || design?.designUrl || '';
+}
+
+function getBackDesignUrl(design = state.currentDesign) {
+  return design?.backDesignUrl || '';
+}
+
+function getActiveDesignUrl(design = state.currentDesign) {
+  const front = getFrontDesignUrl(design);
+  const back = getBackDesignUrl(design);
+  return state.currentView === 'back' ? (back || front) : front;
+}
+
+function getPreparedDesignUrl(side = state.currentView) {
+  const front = state.preparedDesignUrls.front || getFrontDesignUrl();
+  const back = state.preparedDesignUrls.back || getBackDesignUrl();
+  return side === 'back' ? (back || front) : front;
+}
+
+function getCompositeCacheKey(designs) {
+  return JSON.stringify({
+    designs,
+    customText: state.customText,
+    customTextSides: state.customTextSides,
+    printPlacement: state.printPlacement,
+    textPlacement: state.textPlacement,
+  });
+}
+
+function getSideCustomText(side = state.currentView) {
+  const key = side === 'back' ? 'back' : 'front';
+  return state.customTextSides?.[key] || state.currentDesign?.customTextSides?.[key] || state.customText || '';
+}
+
+async function getCompositeDesignsForViewer(designs) {
+  const cacheKey = getCompositeCacheKey(designs);
+  if (state.compositeCacheKey === cacheKey) return state.compositeDesignUrls;
+
+  const [front, back] = await Promise.all([
+    buildCompositePrintUrl(designs.front, 'front'),
+    designs.back ? buildCompositePrintUrl(designs.back, 'back') : Promise.resolve(null),
+  ]);
+  state.compositeCacheKey = cacheKey;
+  state.compositeDesignUrls = { front, back };
+  return state.compositeDesignUrls;
+}
+
+function loadImageForCanvas(url) {
+  return new Promise((resolve, reject) => {
+    if (!url) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function buildCompositePrintUrl(designUrl, side = state.currentView) {
+  const sideText = getSideCustomText(side);
+  if (!designUrl && !sideText) return '';
+  const size = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+
+  const imagePlacement = state.printPlacement || { x: 0, y: -12, scale: 1 };
+  const textPlacement = state.textPlacement || { x: 0, y: 18, scale: 1 };
+
+  if (designUrl) {
+    try {
+      const img = await loadImageForCanvas(designUrl);
+      if (img) {
+        const maxW = size * 0.58 * imagePlacement.scale;
+        const maxH = size * 0.58 * imagePlacement.scale;
+        const ratio = Math.min(maxW / img.width, maxH / img.height);
+        const w = img.width * ratio;
+        const h = img.height * ratio;
+        const x = size * (0.5 + imagePlacement.x / 100) - w / 2;
+        const y = size * (0.44 + imagePlacement.y / 100) - h / 2;
+        ctx.drawImage(img, x, y, w, h);
+      }
+    } catch (err) {
+      console.warn('Could not composite print image:', err);
+    }
+  }
+
+  if (sideText) {
+    const text = sideText.toUpperCase();
+    const fontSize = Math.max(34, 82 * textPlacement.scale);
+    const x = size * (0.5 + textPlacement.x / 100);
+    const y = size * (0.5 + textPlacement.y / 100);
+    ctx.font = `900 ${fontSize}px Outfit, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(6, fontSize * 0.12);
+    ctx.strokeStyle = 'rgba(255,255,255,0.94)';
+    ctx.fillStyle = '#111827';
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+async function applyCurrentDesignToViewer() {
+  const designs = {
+    front: state.preparedDesignUrls.front || getFrontDesignUrl(),
+    back: state.preparedDesignUrls.back || getBackDesignUrl(),
+  };
+  state.printDesignUrl = getPreparedDesignUrl();
+  updateOverlayPlacement();
+  const shouldBakeToViewer = state.interactionMode === 'rotate';
+
+  if (!shouldBakeToViewer) {
+    if (window.tshirt360Viewer?.setDesigns) {
+      window.tshirt360Viewer.setDesigns({ front: null, back: null });
+    } else if (window.tshirt360Viewer?.setDesign) {
+      window.tshirt360Viewer.setDesign(null);
+    }
+    updateThreeTexture();
+    return;
+  }
+
+  const viewerDesigns = await getCompositeDesignsForViewer(designs);
+
+  if (window.tshirt360Viewer?.setDesigns) {
+    window.tshirt360Viewer.setDesigns(viewerDesigns);
+    window.tshirt360Viewer.setPlacement?.(state.printPlacement);
+  } else if (window.tshirt360Viewer?.setDesign) {
+    window.tshirt360Viewer.setDesign(viewerDesigns.front || state.printDesignUrl);
+    window.tshirt360Viewer.setPlacement?.(state.printPlacement);
+  }
+  updateThreeTexture();
+}
+
+function setInteractionMode(mode = 'position') {
+  state.interactionMode = mode === 'rotate' ? 'rotate' : 'position';
+  const mockupContainer = document.getElementById('mockupContainer');
+  mockupContainer?.classList.toggle('interaction-position', state.interactionMode === 'position');
+  mockupContainer?.classList.toggle('interaction-rotate', state.interactionMode === 'rotate');
+  document.querySelectorAll('.placement-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.interactionMode === state.interactionMode);
+  });
+  window.tshirt360Viewer?.setInteractionMode?.(state.interactionMode);
+  if (state.currentDesign || state.printDesignUrl || getSideCustomText()) {
+    applyCurrentDesignToViewer();
+  }
+}
+
+function setActivePlacementLayer(layer = 'image') {
+  state.activePlacementLayer = layer === 'text' ? 'text' : 'image';
+  updateOverlayPlacement();
+}
+
+function updateDesignOverlayForSide() {
+  const designOverlay = document.getElementById('mockupDesign');
+  if (!designOverlay) return;
+
+  const activeUrl = getPreparedDesignUrl();
+  const activeText = getSideCustomText();
+  if (!activeUrl && !activeText) return;
+
+  state.printDesignUrl = activeUrl;
+  designOverlay.innerHTML = [
+    activeUrl ? `<img src="${escapeAttr(activeUrl)}" alt="AI Generated Design" class="mockup-print-design processed-print" draggable="false" style="animation: fadeIn 0.5s ease;">` : '',
+    activeText ? `<div class="mockup-print-text">${escapeHtml(activeText)}</div>` : '',
+    activeUrl ? '<button type="button" class="placement-resize-handle placement-resize-image" data-placement-target="image" aria-label="Resize design"></button>' : '',
+    activeText ? '<button type="button" class="placement-resize-handle placement-resize-text" data-placement-target="text" aria-label="Resize text"></button>' : '',
+  ].join('');
+  updateOverlayPlacement();
+  updateThreeTexture();
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   i18n.init();
   initTabs();
   initStyleSelector();
   initUpload();
+  initProductTypeSelector();
   initColorPicker();
   initSizeSelector();
   initQuantity();
   initGenerateButtons();
+  initPrintControls();
   initOrderFlow();
+  initShareDesign();
   initViewToggle();
   initThreeViewer();
   loadCommunityDesigns();
+
+  // Load design from query parameters (e.g. from 3D Showroom)
+  const urlParams = new URLSearchParams(window.location.search);
+  const designUrlParam = urlParams.get('designUrl');
+  if (designUrlParam) {
+    const titleParam = urlParams.get('prompt') || urlParams.get('title') || '3D Showroom Artwork';
+    const styleParam = urlParams.get('style') || 'abstract';
+    const authorParam = urlParams.get('author') || 'Community';
+    const productMockupUrlParam = urlParams.get('productMockupUrl') || '';
+    const productMockupBlankParam = urlParams.get('productMockupBlank') === 'true';
+    const backDesignUrlParam = urlParams.get('backDesignUrl') || '';
+    setTimeout(() => {
+      if (typeof window.loadCommunityDesign === 'function') {
+        window.loadCommunityDesign(designUrlParam, titleParam, styleParam, authorParam, productMockupUrlParam, productMockupBlankParam, backDesignUrlParam);
+      }
+    }, 300);
+  }
 });
 
 /* ============================================================
@@ -106,15 +383,24 @@ function initUpload() {
     e.preventDefault();
     dropzone.classList.remove('dragover');
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      handleFile(file);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast(i18n.t('studio.upload.invalidType'), 'warning');
+      return;
     }
+    handleFile(file);
   });
 
   // File input change
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
-    if (file) handleFile(file);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast(i18n.t('studio.upload.invalidType'), 'warning');
+      fileInput.value = '';
+      return;
+    }
+    handleFile(file);
   });
 
   // Remove upload
@@ -129,7 +415,7 @@ function initUpload() {
 
   function handleFile(file) {
     if (file.size > 5 * 1024 * 1024) {
-      alert('File too large! Max 5MB.');
+      showToast(i18n.t('studio.upload.tooLarge'), 'warning');
       return;
     }
 
@@ -152,12 +438,12 @@ function initColorPicker() {
   if (!options) return;
 
   options.querySelectorAll('.color-option').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.onclick = () => {
       options.querySelectorAll('.color-option').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedColor = btn.dataset.color;
       updateMockupColor();
-    });
+    };
   });
 }
 
@@ -191,6 +477,84 @@ function updateMockupColor() {
 }
 
 /* ============================================================
+   PRODUCT TYPE SELECTOR
+   ============================================================ */
+function initProductTypeSelector() {
+  const options = document.getElementById('productTypeOptions');
+  if (!options) return;
+
+  options.querySelectorAll('.product-type-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const productType = btn.dataset.productType;
+      if (!PRODUCT_TYPES[productType] || productType === state.selectedProductType) return;
+
+      state.selectedProductType = productType;
+      options.querySelectorAll('.product-type-option').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      syncProductOptions();
+      window.tshirt360Viewer?.setProductType(productType);
+      if (state.currentDesign?.designUrl) applyCurrentDesignToViewer();
+    });
+  });
+
+  syncProductOptions();
+}
+
+function syncProductOptions() {
+  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
+
+  if (!product.colors.includes(state.selectedColor)) {
+    state.selectedColor = product.colors[0];
+  }
+
+  if (!product.sizes.includes(state.selectedSize)) {
+    state.selectedSize = product.sizes[0];
+  }
+
+  renderColorOptions(product.colors);
+  renderSizeOptions(product.sizes);
+  updateMockupColor();
+}
+
+function renderColorOptions(colors) {
+  const options = document.getElementById('colorOptions');
+  if (!options) return;
+
+  const colorNames = {
+    '#ffffff': 'White',
+    '#000000': 'Black',
+    '#1e293b': 'Navy',
+    '#6b7280': 'Gray',
+    '#374151': 'Charcoal',
+    '#dc2626': 'Red',
+    '#2563eb': 'Blue',
+    '#1e3a5f': 'Deep navy',
+    '#8b0000': 'Maroon',
+    '#059669': 'Green',
+  };
+
+  options.innerHTML = colors.map(color => `
+    <button class="color-option${color === state.selectedColor ? ' active' : ''}"
+      data-color="${color}"
+      style="background:${color};"
+      title="${colorNames[color] || color}"></button>
+  `).join('');
+
+  initColorPicker();
+}
+
+function renderSizeOptions(sizes) {
+  const options = document.getElementById('sizeOptions');
+  if (!options) return;
+
+  options.innerHTML = sizes.map(size => `
+    <button class="size-option${size === state.selectedSize ? ' active' : ''}" data-size="${size}">${size}</button>
+  `).join('');
+
+  initSizeSelector();
+}
+
+/* ============================================================
    3D T-SHIRT VIEWER
    ============================================================ */
 function initThreeViewer() {
@@ -221,6 +585,7 @@ function initCss3DViewer() {
   };
 
   container.addEventListener('pointerdown', (event) => {
+    if (state.interactionMode === 'position') return;
     dragging = true;
     lastX = event.clientX;
     lastY = event.clientY;
@@ -228,6 +593,7 @@ function initCss3DViewer() {
   });
 
   container.addEventListener('pointermove', (event) => {
+    if (state.interactionMode === 'position') return;
     if (!dragging) return;
     const dx = event.clientX - lastX;
     const dy = event.clientY - lastY;
@@ -267,8 +633,8 @@ function initThreeViewerEnabled() {
 
   const frontGeometry = createCurvedShirtGeometry(1);
   const backGeometry = createCurvedShirtGeometry(-1);
-  const frontTexture = createThreeTexture(true);
-  const backTexture = createThreeTexture(false);
+  const frontTexture = createThreeTexture(true, true);
+  const backTexture = createThreeTexture(true, false);
 
   const frontMaterial = new THREE.MeshStandardMaterial({
     map: frontTexture,
@@ -401,16 +767,16 @@ function updateThreeTexture() {
   const viewer = state.viewer3d;
   if (!viewer) return;
 
-  viewer.frontTexture.image = createShirtTexture(true);
-  viewer.backTexture.image = createShirtTexture(false);
+  viewer.frontTexture.image = createShirtTexture(true, true);
+  viewer.backTexture.image = createShirtTexture(true, false);
   viewer.frontTexture.needsUpdate = true;
   viewer.backTexture.needsUpdate = true;
   viewer.shirtCore.material.color.set(state.selectedColor);
   viewer.collar.material.color.set(state.selectedColor);
 }
 
-function createThreeTexture(includeDesign) {
-  const texture = new THREE.CanvasTexture(createShirtTexture(includeDesign));
+function createThreeTexture(includeDesign, isFront = true) {
+  const texture = new THREE.CanvasTexture(createShirtTexture(includeDesign, isFront));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   return texture;
@@ -466,7 +832,7 @@ function createShirtCore() {
   );
 }
 
-function createShirtTexture(includeDesign = true) {
+function createShirtTexture(includeDesign = true, isFront = true) {
   const canvas = document.createElement('canvas');
   canvas.width = 900;
   canvas.height = 1080;
@@ -495,15 +861,17 @@ function createShirtTexture(includeDesign = true) {
   ctx.stroke();
   ctx.restore();
 
-  if (includeDesign) drawThreeDesign(ctx, canvas);
+  if (includeDesign) drawThreeDesign(ctx, canvas, isFront ? 'front' : 'back');
   return canvas;
 }
 
-function drawThreeDesign(ctx, canvas) {
-  if (!state.printDesignUrl) return;
+function drawThreeDesign(ctx, canvas, side = state.currentView) {
+  const sideText = getSideCustomText(side);
+  if (!state.printDesignUrl && !sideText) return;
+  const placement = state.printPlacement || { x: 0, y: -12, scale: 1 };
 
-  if (!drawThreeDesign.cache) drawThreeDesign.cache = {};
-  if (drawThreeDesign.cache.src !== state.printDesignUrl) {
+  if (state.printDesignUrl && !drawThreeDesign.cache) drawThreeDesign.cache = {};
+  if (state.printDesignUrl && drawThreeDesign.cache.src !== state.printDesignUrl) {
     const design = new Image();
     drawThreeDesign.cache = { src: state.printDesignUrl, image: design, loaded: false };
     design.onload = () => {
@@ -514,21 +882,35 @@ function drawThreeDesign(ctx, canvas) {
     return;
   }
 
-  const cached = drawThreeDesign.cache;
-  if (!cached.loaded) return;
-
-  const img = cached.image;
-  const maxW = 300;
-  const maxH = 270;
-  const ratio = Math.min(maxW / img.width, maxH / img.height);
-  const w = img.width * ratio;
-  const h = img.height * ratio;
-  const x = canvas.width / 2 - w / 2;
-  const y = canvas.height * 0.35 - h / 2;
+  const centerX = canvas.width * (0.5 + placement.x / 100);
+  const centerY = canvas.height * (0.38 + placement.y / 100);
+  const textPlacement = state.textPlacement || { x: 0, y: 18, scale: 1 };
 
   ctx.save();
   ctx.globalAlpha = 0.96;
-  ctx.drawImage(img, x, y, w, h);
+  const cached = drawThreeDesign.cache;
+  if (state.printDesignUrl && cached?.loaded) {
+    const img = cached.image;
+    const maxW = 300 * placement.scale;
+    const maxH = 270 * placement.scale;
+    const ratio = Math.min(maxW / img.width, maxH / img.height);
+    const w = img.width * ratio;
+    const h = img.height * ratio;
+    ctx.drawImage(img, centerX - w / 2, centerY - h / 2, w, h);
+  }
+  if (sideText) {
+    const fontSize = Math.max(26, 50 * textPlacement.scale);
+    const textX = canvas.width * (0.5 + textPlacement.x / 100);
+    const textY = canvas.height * (0.46 + textPlacement.y / 100);
+    ctx.font = `900 ${fontSize}px Outfit, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(4, fontSize * 0.12);
+    ctx.strokeStyle = isLightColor(state.selectedColor) ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = isLightColor(state.selectedColor) ? '#111827' : '#ffffff';
+    ctx.strokeText(sideText.toUpperCase(), textX, textY);
+    ctx.fillText(sideText.toUpperCase(), textX, textY);
+  }
   ctx.restore();
 }
 
@@ -540,11 +922,11 @@ function initSizeSelector() {
   if (!options) return;
 
   options.querySelectorAll('.size-option').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.onclick = () => {
       options.querySelectorAll('.size-option').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedSize = btn.dataset.size;
-    });
+    };
   });
 }
 
@@ -571,6 +953,259 @@ function initQuantity() {
       qtyInput.value = state.quantity;
     }
   });
+}
+
+/* ============================================================
+   PRINT TEXT + PLACEMENT
+   ============================================================ */
+function initPrintControls() {
+  const textInputs = [
+    document.getElementById('customTextInput'),
+    document.getElementById('customTextInputImage'),
+  ].filter(Boolean);
+  const xInput = document.getElementById('printPosX');
+  const yInput = document.getElementById('printPosY');
+  const scaleInput = document.getElementById('printScale');
+  const textXInput = document.getElementById('textPosX');
+  const textYInput = document.getElementById('textPosY');
+  const textScaleInput = document.getElementById('textScale');
+  const resetBtn = document.getElementById('placementReset');
+  const quickPlacementBtns = document.querySelectorAll('.quick-placement-btn');
+  const modeBtns = document.querySelectorAll('.placement-mode-btn');
+  const mockupContainer = document.getElementById('mockupContainer');
+  const designOverlay = document.getElementById('mockupDesign');
+
+  textInputs.forEach(input => {
+    input.addEventListener('input', () => {
+      state.customText = input.value.trim();
+      textInputs.forEach(other => {
+        if (other !== input) other.value = input.value;
+      });
+      state.compositeCacheKey = '';
+      updateDesignOverlayForSide();
+      applyCurrentDesignToViewer();
+    });
+  });
+
+  [xInput, yInput, scaleInput].forEach(input => {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      setActivePlacementLayer('image');
+      state.printPlacement = {
+        x: Number(xInput?.value || 0),
+        y: Number(yInput?.value || -12),
+        scale: Number(scaleInput?.value || 100) / 100,
+      };
+      state.compositeCacheKey = '';
+      updateOverlayPlacement();
+      applyCurrentDesignToViewer();
+    });
+  });
+
+  [textXInput, textYInput, textScaleInput].forEach(input => {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      setActivePlacementLayer('text');
+      state.textPlacement = {
+        x: Number(textXInput?.value || 0),
+        y: Number(textYInput?.value || 18),
+        scale: Number(textScaleInput?.value || 100) / 100,
+      };
+      state.compositeCacheKey = '';
+      updateOverlayPlacement();
+      applyCurrentDesignToViewer();
+    });
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      state.printPlacement = { x: 0, y: -12, scale: 1 };
+      state.textPlacement = { x: 0, y: 18, scale: 1 };
+      if (xInput) xInput.value = '0';
+      if (yInput) yInput.value = '-12';
+      if (scaleInput) scaleInput.value = '100';
+      if (textXInput) textXInput.value = '0';
+      if (textYInput) textYInput.value = '18';
+      if (textScaleInput) textScaleInput.value = '100';
+      state.compositeCacheKey = '';
+      updateOverlayPlacement();
+      applyCurrentDesignToViewer();
+    });
+  }
+
+  quickPlacementBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.placementTarget;
+      setActivePlacementLayer(target === 'text' ? 'text' : 'image');
+      const direction = btn.dataset.placementAction === 'larger' ? 1 : -1;
+      const step = target === 'text' ? 0.12 : 0.1;
+      if (target === 'text') {
+        const nextScale = Math.max(0.3, Math.min(2.6, state.textPlacement.scale + direction * step));
+        state.textPlacement = { ...state.textPlacement, scale: nextScale };
+        if (textScaleInput) textScaleInput.value = String(Math.round(nextScale * 100));
+      } else {
+        const nextScale = Math.max(0.2, Math.min(2.2, state.printPlacement.scale + direction * step));
+        state.printPlacement = { ...state.printPlacement, scale: nextScale };
+        if (scaleInput) scaleInput.value = String(Math.round(nextScale * 100));
+      }
+      state.compositeCacheKey = '';
+      updateOverlayPlacement();
+      applyCurrentDesignToViewer();
+    });
+  });
+
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setInteractionMode(btn.dataset.interactionMode);
+    });
+  });
+
+  if (designOverlay && mockupContainer) {
+    let dragging = false;
+    let resizing = false;
+    let startX = 0;
+    let startY = 0;
+    let startPlacement = { ...state.printPlacement };
+    let dragLayer = 'image';
+    let startDistance = 1;
+
+    designOverlay.addEventListener('pointerdown', (event) => {
+      if (state.interactionMode !== 'position') return;
+      const target = event.target;
+      const resizeHandle = target.closest?.('.placement-resize-handle');
+      const draggableLayer = target.closest?.('.mockup-print-design, .mockup-print-text');
+      if (!resizeHandle && !draggableLayer) return;
+
+      dragLayer = resizeHandle?.dataset.placementTarget || (target.closest('.mockup-print-text') ? 'text' : 'image');
+      setActivePlacementLayer(dragLayer);
+      dragging = true;
+      resizing = Boolean(resizeHandle);
+      mockupContainer.classList.add('is-positioning-print');
+      mockupContainer.classList.toggle('is-resizing-print', resizing);
+      startX = event.clientX;
+      startY = event.clientY;
+      startPlacement = dragLayer === 'text' ? { ...state.textPlacement } : { ...state.printPlacement };
+      const rect = mockupContainer.getBoundingClientRect();
+      const center = getPlacementPixelCenter(rect, dragLayer, startPlacement);
+      startDistance = Math.max(24, Math.hypot(event.clientX - center.x, event.clientY - center.y));
+      designOverlay.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    designOverlay.addEventListener('pointermove', (event) => {
+      if (!dragging) return;
+      const rect = mockupContainer.getBoundingClientRect();
+      if (resizing) {
+        const center = getPlacementPixelCenter(rect, dragLayer, startPlacement);
+        const distance = Math.max(24, Math.hypot(event.clientX - center.x, event.clientY - center.y));
+        const ratio = distance / startDistance;
+        const minScale = dragLayer === 'text' ? 0.3 : 0.2;
+        const maxScale = dragLayer === 'text' ? 2.6 : 2.2;
+        const nextScale = Math.max(minScale, Math.min(maxScale, startPlacement.scale * ratio));
+        if (dragLayer === 'text') {
+          state.textPlacement = { ...state.textPlacement, scale: nextScale };
+          if (textScaleInput) textScaleInput.value = String(Math.round(nextScale * 100));
+        } else {
+          state.printPlacement = { ...state.printPlacement, scale: nextScale };
+          if (scaleInput) scaleInput.value = String(Math.round(nextScale * 100));
+        }
+      } else {
+        const dx = ((event.clientX - startX) / rect.width) * 100;
+        const dy = ((event.clientY - startY) / rect.height) * 100;
+        const nextX = Math.max(-80, Math.min(80, startPlacement.x + dx));
+        const nextY = Math.max(-75, Math.min(45, startPlacement.y + dy));
+        if (dragLayer === 'text') {
+          state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
+          if (textXInput) textXInput.value = String(Math.round(nextX));
+          if (textYInput) textYInput.value = String(Math.round(nextY));
+        } else {
+          state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
+          if (xInput) xInput.value = String(Math.round(nextX));
+          if (yInput) yInput.value = String(Math.round(nextY));
+        }
+      }
+      state.compositeCacheKey = '';
+      updateOverlayPlacement();
+      applyCurrentDesignToViewer();
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    const stopDrag = (event) => {
+      dragging = false;
+      resizing = false;
+      mockupContainer.classList.remove('is-positioning-print');
+      mockupContainer.classList.remove('is-resizing-print');
+      event?.stopPropagation?.();
+    };
+    designOverlay.addEventListener('pointerup', stopDrag);
+    designOverlay.addEventListener('pointercancel', stopDrag);
+  }
+
+  document.addEventListener('keydown', (event) => {
+    const activeTag = document.activeElement?.tagName?.toLowerCase();
+    if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+    if (state.interactionMode !== 'position') return;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    const step = event.shiftKey ? 5 : 1;
+    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+    nudgePlacement(state.activePlacementLayer, dx, dy);
+    event.preventDefault();
+  });
+
+  setInteractionMode(state.interactionMode);
+  updateOverlayPlacement();
+}
+
+function getPlacementPixelCenter(rect, layer, placement) {
+  const baseY = layer === 'text' ? 0.46 : 0.4;
+  return {
+    x: rect.left + rect.width * (0.5 + placement.x / 100),
+    y: rect.top + rect.height * (baseY + placement.y / 100),
+  };
+}
+
+function nudgePlacement(layer, dx, dy) {
+  const xInput = document.getElementById(layer === 'text' ? 'textPosX' : 'printPosX');
+  const yInput = document.getElementById(layer === 'text' ? 'textPosY' : 'printPosY');
+  if (layer === 'text') {
+    const nextX = Math.max(-80, Math.min(80, state.textPlacement.x + dx));
+    const nextY = Math.max(-75, Math.min(45, state.textPlacement.y + dy));
+    state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
+    if (xInput) xInput.value = String(Math.round(nextX));
+    if (yInput) yInput.value = String(Math.round(nextY));
+  } else {
+    const nextX = Math.max(-80, Math.min(80, state.printPlacement.x + dx));
+    const nextY = Math.max(-75, Math.min(45, state.printPlacement.y + dy));
+    state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
+    if (xInput) xInput.value = String(Math.round(nextX));
+    if (yInput) yInput.value = String(Math.round(nextY));
+  }
+  state.compositeCacheKey = '';
+  updateOverlayPlacement();
+  applyCurrentDesignToViewer();
+}
+
+function updateOverlayPlacement() {
+  const designOverlay = document.getElementById('mockupDesign');
+  const mockupContainer = document.getElementById('mockupContainer');
+  if (!designOverlay) return;
+  const placement = state.printPlacement || { x: 0, y: -12, scale: 1 };
+  const textPlacement = state.textPlacement || { x: 0, y: 18, scale: 1 };
+  designOverlay.style.setProperty('--print-x', `${placement.x}%`);
+  designOverlay.style.setProperty('--print-y', `${placement.y}%`);
+  designOverlay.style.setProperty('--print-scale', String(placement.scale));
+  designOverlay.style.setProperty('--text-x', `${textPlacement.x}%`);
+  designOverlay.style.setProperty('--text-y', `${textPlacement.y}%`);
+  designOverlay.style.setProperty('--text-scale', String(textPlacement.scale));
+  designOverlay.classList.toggle('active-image', state.activePlacementLayer !== 'text');
+  designOverlay.classList.toggle('active-text', state.activePlacementLayer === 'text');
+  designOverlay.querySelector('.mockup-print-design')?.classList.toggle('is-selected', state.activePlacementLayer !== 'text');
+  designOverlay.querySelector('.mockup-print-text')?.classList.toggle('is-selected', state.activePlacementLayer === 'text');
+  mockupContainer?.classList.toggle('has-custom-text', Boolean(state.customText));
+  mockupContainer?.classList.toggle('is-ai-generating', Boolean(state.isGeneratingAi));
 }
 
 /* ============================================================
@@ -605,6 +1240,11 @@ function setViewerSide(side) {
     if (side === 'back') state.cssViewer.showBack();
     else state.cssViewer.showFront();
   }
+
+  if (state.currentDesign) {
+    updateDesignOverlayForSide();
+    applyCurrentDesignToViewer();
+  }
 }
 
 function syncViewerSideFromRotation() {
@@ -634,83 +1274,271 @@ function initGenerateButtons() {
   }
 }
 
+function normalizeSideSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .toLowerCase();
+}
+
+function cleanDraftSidePrompt(segment, side) {
+  const text = normalizeSideSearchText(segment);
+  const sidePattern = side === 'back'
+    ? /\b(?:mat\s*sau|phia\s*sau|sau\s*lung|lung\s*ao|sau\s*ao|sau|back)\b/g
+    : /\b(?:mat\s*truoc|phia\s*truoc|truoc\s*ao|truoc|tru c|tr c|front)\b/g;
+  const cleaned = text
+    .replace(sidePattern, ' ')
+    .replace(/\b(?:in|o|tren|vao|cho|phan|mau\s*ao|ao\s*thun|ao|thiet\s*ke|hinh|graphic|artwork|print)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+    .trim();
+  return normalizeDraftLandmarkIdea(cleaned);
+}
+
+function normalizeDraftLandmarkIdea(idea) {
+  const normalized = normalizeSideSearchText(idea);
+  const parts = [];
+  if (/\b(lang bac|l ng b c|lang chu tich ho chi minh|ho chi minh mausoleum)\b/.test(normalized)) {
+    parts.push('Ho Chi Minh Mausoleum landmark');
+  }
+  if (/\b(dinh doc lap|dinh c l p|dinh thong nhat|independence palace)\b/.test(normalized)) {
+    parts.push('Independence Palace Saigon landmark');
+  }
+  if (/\b(hoa sen|lotus|sen)\b/.test(normalized)) {
+    parts.push('Vietnamese lotus flower');
+  }
+  return parts.length ? `${parts.join(' with ')} illustration` : idea;
+}
+
+function cleanSideTextPrompt(segment, side) {
+  const text = normalizeSideSearchText(segment);
+  const sidePattern = side === 'back'
+    ? /\b(?:mat\s*sau|phia\s*sau|sau\s*lung|lung\s*ao|sau\s*ao|sau|back)\b/g
+    : /\b(?:mat\s*truoc|phia\s*truoc|truoc\s*ao|truoc|tru c|tr c|front)\b/g;
+  return text
+    .replace(/\b(?:in|them|viet|chu|text|lettering|slogan|cau chu|dong chu|o|tren|vao|cho|phan)\b/g, ' ')
+    .replace(sidePattern, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
+    .trim()
+    .slice(0, 80);
+}
+
+function extractPromptTextSides(prompt) {
+  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
+  const textSides = { front: '', back: '' };
+  segments.forEach((segment) => {
+    const searchable = normalizeSideSearchText(segment);
+    const wantsText = /\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable);
+    if (!wantsText) return;
+    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front|truoc|tru c|tr c)\b/.test(searchable);
+    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back|sau)\b/.test(searchable);
+    if (hasFront) textSides.front = cleanSideTextPrompt(segment, 'front') || textSides.front;
+    if (hasBack) textSides.back = cleanSideTextPrompt(segment, 'back') || textSides.back;
+  });
+  return textSides.front || textSides.back ? textSides : null;
+}
+
+function addDraftSideIdea(ideas, idea) {
+  const clean = String(idea || '').trim();
+  if (!clean) return;
+  const key = normalizeSideSearchText(clean);
+  if (!ideas.some((existing) => normalizeSideSearchText(existing) === key)) {
+    ideas.push(clean);
+  }
+}
+
+function extractDraftPrintSides(prompt) {
+  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
+  const sideIdeas = { front: [], back: [] };
+  segments.forEach((segment) => {
+    const searchable = normalizeSideSearchText(segment);
+    if (/\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable)) return;
+    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front)\b/.test(searchable)
+      || /\btruoc\b/.test(searchable)
+      || /\btru c\b/.test(searchable)
+      || /\btr c\b/.test(searchable);
+    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back)\b/.test(searchable)
+      || /\bsau\b/.test(searchable);
+    if (hasFront) addDraftSideIdea(sideIdeas.front, cleanDraftSidePrompt(segment, 'front'));
+    if (hasBack) addDraftSideIdea(sideIdeas.back, cleanDraftSidePrompt(segment, 'back'));
+  });
+  if (sideIdeas.back.length && !sideIdeas.front.length && segments.length > 1) {
+    const frontSegment = segments.find((segment) => {
+      const searchable = normalizeSideSearchText(segment);
+      return !(/\b(mat sau|phia sau|sau ao|sau lung|lung ao|back|sau)\b/.test(searchable));
+    });
+    if (frontSegment) addDraftSideIdea(sideIdeas.front, cleanDraftSidePrompt(frontSegment, 'front'));
+  }
+  const sides = {
+    front: sideIdeas.front.join(' and '),
+    back: sideIdeas.back.join(' and '),
+  };
+  return sides.front || sides.back ? sides : null;
+}
+
+async function showInstantDraftDesign(prompt, style = state.selectedStyle) {
+  const draftSides = extractDraftPrintSides(prompt);
+  const promptTextSides = extractPromptTextSides(prompt);
+  state.customTextSides = promptTextSides || { front: '', back: '' };
+  const textOnly = Boolean(promptTextSides && !draftSides);
+  const draftDesign = textOnly
+    ? {
+      success: true,
+      designId: 'text-only-' + Date.now(),
+      designUrl: '',
+      frontDesignUrl: '',
+      prompt,
+      style,
+      author: auth.user?.fullName || auth.user?.username || '',
+    }
+    : generateMockDesign(style, draftSides?.front || prompt);
+  draftDesign.provider = 'instant-draft';
+  draftDesign.isDraft = true;
+  draftDesign.frontDesignUrl = draftDesign.designUrl;
+  if (draftSides?.back) {
+    const backDraft = generateMockDesign(style, draftSides.back);
+    draftDesign.backDesignUrl = backDraft.designUrl;
+    draftDesign.printSides = {
+      front: draftSides.front || prompt,
+      back: draftSides.back,
+    };
+  }
+  if (promptTextSides) {
+    draftDesign.customTextSides = promptTextSides;
+  }
+  state.currentDesign = draftDesign;
+  state.isGeneratingAi = true;
+  setActivePlacementLayer('image');
+  await showDesignOnMockup(draftDesign.designUrl);
+  updateOverlayPlacement();
+  return draftDesign;
+}
+
 async function generateFromPrompt() {
   const prompt = document.getElementById('promptInput')?.value?.trim();
   if (!prompt) {
-    alert(i18n.currentLang === 'vi' ? 'Vui lòng nhập mô tả thiết kế!' : 'Please enter a design description!');
+    showToast(i18n.currentLang === 'vi' ? 'Vui lòng nhập mô tả thiết kế!' : 'Please enter a design description!', 'warning');
     return;
   }
 
   const btn = document.getElementById('generatePromptBtn');
+  updateShareButton(false);
   setLoading(btn, true);
-
-  const requestBody = { prompt, style: state.selectedStyle };
-  if (auth.isLoggedIn()) {
-    requestBody.author = auth.user.fullName || auth.user.username;
+  const draftDesign = await showInstantDraftDesign(prompt, state.selectedStyle);
+  if (draftDesign.designId?.startsWith('text-only-')) {
+    state.isGeneratingAi = false;
+    updateOverlayPlacement();
+    setLoading(btn, false);
+    return;
   }
+
+  const requestBody = {
+    prompt,
+    style: state.selectedStyle,
+    customText: state.customText,
+    author: auth.user?.fullName || auth.user?.username || '',
+  };
 
   try {
     const response = await fetch(`${API_BASE}/ai-design/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: auth.getAuthHeaders(),
       body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok) throw new Error('API error');
     const data = await response.json();
+    if (!response.ok || data.success === false) {
+      throw new Error(formatAiError(data));
+    }
 
     if (data.success && data.designUrl) {
       state.currentDesign = data;
-      showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      state.customTextSides = data.customTextSides || state.customTextSides || { front: '', back: '' };
+      state.isGeneratingAi = false;
+      await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      updateShareButton(true);
     }
   } catch (err) {
-    console.warn('API unavailable, using mock design');
-    const mockDesign = generateMockDesign(state.selectedStyle, prompt);
-    state.currentDesign = mockDesign;
-    showDesignOnMockup(mockDesign.designUrl);
+    state.isGeneratingAi = false;
+    updateOverlayPlacement();
+    if (err.message && err.message !== 'Failed to fetch') {
+      showToast(err.message, 'error', 7000);
+      console.warn('AI generation failed:', err.message);
+      setLoading(btn, false);
+      return;
+    }
+    console.warn('API unavailable, keeping instant draft design');
   }
 
+  state.isGeneratingAi = false;
+  updateOverlayPlacement();
   setLoading(btn, false);
 }
 
 async function generateFromImage() {
   if (!state.uploadedFile) {
-    alert(i18n.currentLang === 'vi' ? 'Vui lòng upload ảnh!' : 'Please upload an image!');
+    showToast(i18n.currentLang === 'vi' ? 'Vui lòng upload ảnh!' : 'Please upload an image!', 'warning');
     return;
   }
 
   const idea = document.getElementById('ideaInput')?.value?.trim() || '';
   const btn = document.getElementById('generateImageBtn');
+  updateShareButton(false);
   setLoading(btn, true);
 
   try {
     const formData = new FormData();
     formData.append('image', state.uploadedFile);
     formData.append('idea', idea);
-    if (auth.isLoggedIn()) {
-      formData.append('author', auth.user.fullName || auth.user.username);
-    }
+    formData.append('style', state.selectedStyle);
+    formData.append('customText', state.customText);
+    formData.append('author', auth.user?.fullName || auth.user?.username || '');
 
     const response = await fetch(`${API_BASE}/ai-design/generate-from-image`, {
       method: 'POST',
+      headers: {
+        Authorization: auth.token ? `Bearer ${auth.token}` : '',
+      },
       body: formData,
     });
 
-    if (!response.ok) throw new Error('API error');
     const data = await response.json();
+    if (!response.ok || data.success === false) {
+      throw new Error(formatAiError(data));
+    }
 
     if (data.success && data.designUrl) {
       state.currentDesign = data;
       showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      updateShareButton(true);
     }
   } catch (err) {
+    if (err.message && err.message !== 'Failed to fetch') {
+      showToast(err.message, 'error', 7000);
+      console.warn('AI generation from image failed:', err.message);
+      setLoading(btn, false);
+      return;
+    }
     console.warn('API unavailable, using mock design');
     const mockDesign = generateMockDesign('abstract', 'Image remix');
     state.currentDesign = mockDesign;
     showDesignOnMockup(mockDesign.designUrl);
+    updateShareButton(false);
   }
 
   setLoading(btn, false);
+}
+
+function formatAiError(data) {
+  const base = data?.error || (i18n.currentLang === 'vi'
+    ? 'AI tạo ảnh thất bại. Vui lòng kiểm tra API key hoặc billing.'
+    : 'AI image generation failed. Please check the API key or billing.');
+  const details = Array.isArray(data?.providerErrors) && data.providerErrors.length
+    ? `\n\n${data.providerErrors.join('\n')}`
+    : '';
+  return `${base}${details}`;
 }
 
 function setLoading(btn, loading) {
@@ -737,6 +1565,7 @@ async function showDesignOnMockup(designUrl, productMockupUrl = null, productMoc
     mockupContainer.style.display = 'flex';
     requestAnimationFrame(() => window.tshirt360Viewer?.resize());
   }
+  setInteractionMode('position');
 
   if (productRender && mockupContainer) {
     const hasGltfViewer = Boolean(document.getElementById('tshirt360Canvas'));
@@ -752,16 +1581,20 @@ async function showDesignOnMockup(designUrl, productMockupUrl = null, productMoc
     }
   }
 
+  const rawFrontUrl = getFrontDesignUrl(state.currentDesign) || designUrl;
+  const rawBackUrl = getBackDesignUrl(state.currentDesign);
+  state.preparedDesignUrls = { front: rawFrontUrl, back: rawBackUrl || null };
+  state.printDesignUrl = getPreparedDesignUrl();
+
   if (designOverlay) {
-    designOverlay.innerHTML = `<img src="${designUrl}" alt="AI Generated Design" class="mockup-print-design" style="animation: fadeIn 0.5s ease;">`;
-    state.printDesignUrl = designUrl;
-    updateThreeTexture();
-    window.tshirt360Viewer?.setDesign(designUrl);
-    renderPrintDesign(designUrl, designOverlay);
+    updateDesignOverlayForSide();
+    applyCurrentDesignToViewer();
+    preparePrintDesigns(designOverlay);
   }
 
   if (orderBtn) orderBtn.disabled = false;
   if (downloadBtn) downloadBtn.disabled = false;
+  updateShareButton();
 
   updateMockupColor();
 }
@@ -893,22 +1726,37 @@ function removeProductMockupBackground(imageUrl) {
   });
 }
 
-async function renderPrintDesign(designUrl, designOverlay) {
-  if (!designOverlay || designUrl.startsWith('data:image/svg+xml')) return;
-
+async function prepareDesignImage(url) {
+  if (!url || url.startsWith('data:image/svg+xml')) return url;
   try {
-    const processedUrl = await removeLightImageBackground(designUrl);
-    const img = designOverlay.querySelector('img');
-    if (img) {
-      img.src = processedUrl;
-      img.classList.add('processed-print');
-      state.printDesignUrl = processedUrl;
-      updateThreeTexture();
-      window.tshirt360Viewer?.setDesign(processedUrl);
-    }
+    return await removeLightImageBackground(url);
   } catch (err) {
     console.warn('Could not process design background:', err);
+    return url;
   }
+}
+
+async function preparePrintDesigns(designOverlay) {
+  if (!designOverlay) return;
+
+  const processVersion = ++state.designProcessVersion;
+  const rawFront = getFrontDesignUrl();
+  const rawBack = getBackDesignUrl();
+  const [front, back] = await Promise.all([
+    prepareDesignImage(rawFront),
+    rawBack ? prepareDesignImage(rawBack) : Promise.resolve(null),
+  ]);
+
+  if (processVersion !== state.designProcessVersion) return;
+
+  state.preparedDesignUrls = { front, back };
+  updateDesignOverlayForSide();
+  applyCurrentDesignToViewer();
+}
+
+async function renderPrintDesign(designUrl, designOverlay) {
+  state.preparedDesignUrls = { front: designUrl, back: null };
+  await preparePrintDesigns(designOverlay);
 }
 
 function removeLightImageBackground(imageUrl) {
@@ -1066,7 +1914,7 @@ function generateMockDesign(style, prompt) {
   const svgTemplate = designs[style] || designs.abstract;
   const designUrl = `data:image/svg+xml;charset=utf-8,${svgTemplate}`;
 
-  const authorName = auth.isLoggedIn() ? (auth.user.fullName || auth.user.username) : 'Guest';
+  const authorName = auth.user?.fullName || auth.user?.username || '';
 
   return {
     success: true,
@@ -1081,6 +1929,70 @@ function generateMockDesign(style, prompt) {
 /* ============================================================
    ORDER FLOW
    ============================================================ */
+function canShareCurrentDesign() {
+  const designId = state.currentDesign?.designId;
+  return Boolean(
+    designId &&
+    !state.currentDesign?.isShared &&
+    !state.currentDesign?.isDraft &&
+    !designId.startsWith('community-') &&
+    !designId.startsWith('text-only-')
+  );
+}
+
+function updateShareButton(forceEnabled = null) {
+  const shareBtn = document.getElementById('shareDesignBtn');
+  if (!shareBtn) return;
+
+  const enabled = forceEnabled === null ? canShareCurrentDesign() : Boolean(forceEnabled && canShareCurrentDesign());
+  shareBtn.disabled = !enabled;
+  const isShared = state.currentDesign?.isShared === true;
+  shareBtn.classList.toggle('is-shared', isShared);
+  shareBtn.textContent = isShared ? i18n.t('studio.share.shared') : i18n.t('studio.share');
+}
+
+function initShareDesign() {
+  const shareBtn = document.getElementById('shareDesignBtn');
+  if (!shareBtn) return;
+
+  shareBtn.addEventListener('click', async () => {
+    if (!canShareCurrentDesign()) {
+      showToast(i18n.t('studio.share.needDesign'), 'warning');
+      return;
+    }
+
+    const designId = state.currentDesign.designId;
+    shareBtn.disabled = true;
+    shareBtn.textContent = i18n.t('studio.share.sharing');
+
+    try {
+      const response = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/share`, {
+        method: 'POST',
+        headers: auth.getAuthHeaders(),
+      });
+      const result = await response.json();
+      if (!response.ok || result.success === false) {
+        throw new Error(result.error || i18n.t('studio.share.error'));
+      }
+
+      state.currentDesign = {
+        ...state.currentDesign,
+        ...(result.data || {}),
+        designId,
+        isShared: true,
+      };
+      updateShareButton();
+      loadCommunityDesigns();
+      showToast(i18n.t('studio.share.success'), 'success');
+    } catch (err) {
+      showToast(err.message || i18n.t('studio.share.error'), 'error');
+      updateShareButton();
+    }
+  });
+
+  updateShareButton();
+}
+
 function initOrderFlow() {
   const orderBtn = document.getElementById('orderBtn');
   const downloadBtn = document.getElementById('downloadBtn');
@@ -1088,12 +2000,23 @@ function initOrderFlow() {
   const modalClose = document.getElementById('modalClose');
   const orderForm = document.getElementById('orderForm');
   const orderCloseBtn = document.getElementById('orderCloseBtn');
+  const paymentMethodOptions = document.getElementById('paymentMethodOptions');
+
+  if (paymentMethodOptions) {
+    paymentMethodOptions.querySelectorAll('.payment-method-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.selectedPaymentMethod = btn.dataset.paymentMethod || 'COD';
+        updatePaymentMethodUI();
+      });
+    });
+  }
 
   // Open order modal
   if (orderBtn) {
     orderBtn.addEventListener('click', () => {
       if (!state.currentDesign) return;
       updateOrderSummary();
+      updatePaymentMethodUI();
       
       // Pre-fill user's name if logged in
       if (auth.isLoggedIn()) {
@@ -1136,28 +2059,63 @@ function initOrderFlow() {
   // Download design
   if (downloadBtn) {
     downloadBtn.addEventListener('click', () => {
-      if (state.currentDesign?.designUrl) {
-        downloadDesign(state.currentDesign.designUrl);
+      const url = getActiveDesignUrl();
+      if (url) {
+        downloadDesign(url);
       }
     });
   }
 }
 
+function updatePaymentMethodUI() {
+  const note = document.getElementById('paymentMethodNote');
+  document.querySelectorAll('.payment-method-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.paymentMethod === state.selectedPaymentMethod);
+  });
+  if (!note) return;
+  if (state.selectedPaymentMethod === 'BANK_TRANSFER') {
+    note.textContent = 'Sau khi tạo đơn, hệ thống sẽ hiển thị QR chuyển khoản và chờ xác nhận thanh toán.';
+  } else {
+    note.textContent = 'Thanh toán khi nhận hàng (COD).';
+  }
+}
+
+function getOrderTotalAmount() {
+  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
+  return product.price * state.quantity;
+}
+
+function buildVietQrUrl({ amount, transferContent }) {
+  const bankId = encodeURIComponent(BANK_TRANSFER_INFO.bankId);
+  const accountNumber = encodeURIComponent(BANK_TRANSFER_INFO.accountNumber);
+  const template = encodeURIComponent(BANK_TRANSFER_INFO.template || 'compact2');
+  const params = new URLSearchParams({
+    amount: String(amount || 0),
+    addInfo: transferContent || '',
+    accountName: BANK_TRANSFER_INFO.accountName || '',
+  });
+  return `https://img.vietqr.io/image/${bankId}-${accountNumber}-${template}.png?${params.toString()}`;
+}
+
 function updateOrderSummary() {
   const isVi = i18n.currentLang === 'vi';
-  const basePrice = 250000;
-  const total = basePrice * state.quantity;
+  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
+  const total = getOrderTotalAmount();
 
   const colorNames = {
     '#ffffff': isVi ? 'Trắng' : 'White',
     '#000000': isVi ? 'Đen' : 'Black',
     '#1e293b': 'Navy',
     '#6b7280': isVi ? 'Xám' : 'Gray',
+    '#374151': isVi ? 'Than chì' : 'Charcoal',
     '#dc2626': isVi ? 'Đỏ' : 'Red',
     '#2563eb': isVi ? 'Xanh dương' : 'Blue',
+    '#1e3a5f': isVi ? 'Xanh navy đậm' : 'Deep navy',
+    '#8b0000': isVi ? 'Đỏ rượu' : 'Maroon',
+    '#059669': isVi ? 'Xanh lá' : 'Green',
   };
 
-  document.getElementById('orderProduct').textContent = 'T-Shirt Custom AI';
+  document.getElementById('orderProduct').textContent = product.label;
   document.getElementById('orderColor').textContent = colorNames[state.selectedColor] || state.selectedColor;
   document.getElementById('orderSize').textContent = state.selectedSize;
   document.getElementById('orderQty').textContent = state.quantity;
@@ -1177,7 +2135,15 @@ async function submitOrder() {
   const note = document.getElementById('orderNote').value.trim();
 
   if (!name || !phone || !address) {
-    alert(i18n.currentLang === 'vi' ? 'Vui lòng điền đầy đủ thông tin!' : 'Please fill in all required fields!');
+    showToast(i18n.currentLang === 'vi' ? 'Vui lòng điền đầy đủ thông tin!' : 'Please fill in all required fields!', 'warning');
+    return;
+  }
+
+  const normalizedPhone = phone.replace(/[\s.-]/g, '');
+  const isValidVnPhone = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/.test(normalizedPhone);
+  if (!isValidVnPhone) {
+    showToast(i18n.t('order.phoneInvalid'), 'warning');
+    document.getElementById('orderPhone').focus();
     return;
   }
 
@@ -1186,14 +2152,20 @@ async function submitOrder() {
 
   const orderData = {
     designUrl: state.currentDesign?.designUrl || '',
-    productType: 'tshirt',
+    frontDesignUrl: getFrontDesignUrl(),
+    backDesignUrl: getBackDesignUrl(),
+    productType: state.selectedProductType,
     color: state.selectedColor,
     size: state.selectedSize,
     quantity: state.quantity,
+    customText: state.customText,
+    customTextSides: state.customTextSides,
+    printPlacement: state.printPlacement,
+    textPlacement: state.textPlacement,
     customer: { name, phone, address, note },
-    payment: 'COD',
-    userId: auth.isLoggedIn() ? auth.user.id : null,
-    authorName: auth.isLoggedIn() ? (auth.user.fullName || auth.user.username) : 'Guest',
+    payment: state.selectedPaymentMethod,
+    userId: auth.user?.id,
+    authorName: auth.user?.fullName || auth.user?.username || '',
   };
 
   try {
@@ -1204,24 +2176,131 @@ async function submitOrder() {
     });
 
     const data = await response.json();
-    showOrderSuccess(data.orderId || 'BU-' + Date.now());
+    if (!response.ok || data.success === false) {
+      throw new Error(data.error || (i18n.currentLang === 'vi' ? 'Đặt hàng thất bại. Vui lòng thử lại.' : 'Order failed. Please try again.'));
+    }
+    showOrderSuccess(data.orderId || 'BU-' + Date.now(), data.payment || state.selectedPaymentMethod, data.transferContent);
   } catch (err) {
-    // Show success for demo
-    showOrderSuccess('BU-' + Date.now().toString(36).toUpperCase());
+    showToast(err.message || (i18n.currentLang === 'vi' ? 'Đặt hàng thất bại. Vui lòng thử lại.' : 'Order failed. Please try again.'), 'error', 7000);
   }
 
   submitBtn.disabled = false;
   submitBtn.innerHTML = `<span data-i18n="order.submit">${i18n.t('order.submit')}</span>`;
 }
 
-function showOrderSuccess(orderId) {
+function showOrderSuccess(orderId, paymentMethod = state.selectedPaymentMethod, transferContent = '') {
   const formContent = document.getElementById('orderFormContent');
   const successContent = document.getElementById('orderSuccess');
   const orderIdEl = document.getElementById('orderSuccessId');
+  const titleEl = successContent?.querySelector('.order-success-title');
+  const noteEl = successContent?.querySelector('.order-success-note');
+  const iconEl = successContent?.querySelector('.order-success-icon');
+  const bankBox = document.getElementById('bankTransferBox');
+  const isBankTransfer = paymentMethod === 'BANK_TRANSFER';
 
   if (formContent) formContent.style.display = 'none';
   if (successContent) successContent.classList.add('show');
-  if (orderIdEl) orderIdEl.textContent = `${i18n.t('order.success.desc')}${orderId}`;
+  if (orderIdEl) {
+    orderIdEl.textContent = isBankTransfer
+      ? `Mã đơn: ${orderId}. Vui lòng chuyển khoản đúng số tiền và nội dung bên dưới.`
+      : `${i18n.t('order.success.desc')}${orderId}`;
+  }
+  if (titleEl) {
+    titleEl.textContent = isBankTransfer ? 'Đang chờ thanh toán' : 'Đặt hàng thành công!';
+  }
+  if (noteEl) {
+    noteEl.textContent = isBankTransfer
+      ? 'Đơn hàng sẽ chuyển sang trạng thái thành công sau khi hệ thống xác nhận giao dịch.'
+      : 'Chúng tôi sẽ liên hệ xác nhận trong vòng 24 giờ.';
+  }
+  if (iconEl) iconEl.textContent = isBankTransfer ? '⏳' : '🎉';
+  if (bankBox) {
+    bankBox.classList.toggle('show', isBankTransfer);
+    const transferText = transferContent || `BLANKUP ${orderId}`;
+    const qrImage = document.getElementById('successQrImage');
+    const statusEl = document.getElementById('bankTransferStatus');
+    document.getElementById('successBankName').textContent = BANK_TRANSFER_INFO.bankName;
+    document.getElementById('successAccountName').textContent = BANK_TRANSFER_INFO.accountName;
+    document.getElementById('successAccountNumber').textContent = BANK_TRANSFER_INFO.accountNumber;
+    document.getElementById('successTransferContent').textContent = transferText;
+    if (statusEl) {
+      statusEl.textContent = isBankTransfer
+        ? 'Đang chờ hệ thống xác nhận chuyển khoản...'
+        : '';
+      statusEl.classList.toggle('paid', false);
+    }
+    if (qrImage) {
+      qrImage.src = buildVietQrUrl({
+        amount: getOrderTotalAmount(),
+        transferContent: transferText,
+      });
+      qrImage.alt = `QR chuyển khoản ${orderId}`;
+    }
+  }
+
+  stopPaymentPolling();
+  if (isBankTransfer) {
+    startPaymentPolling(orderId);
+  }
+}
+
+function stopPaymentPolling() {
+  if (state.paymentPollingTimer) {
+    clearInterval(state.paymentPollingTimer);
+    state.paymentPollingTimer = null;
+  }
+}
+
+async function refreshPaymentStatus(orderId) {
+  const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`);
+  if (!response.ok) return;
+  const result = await response.json();
+  const order = result?.data;
+  if (order?.paymentStatus === 'paid') {
+    markBankTransferPaid(orderId);
+    stopPaymentPolling();
+  } else if (order?.paymentStatus === 'underpaid') {
+    const statusEl = document.getElementById('bankTransferStatus');
+    if (statusEl) {
+      const received = Number(order.paymentReceivedAmount || 0).toLocaleString('vi-VN') + 'đ';
+      statusEl.textContent = `Hệ thống đã nhận ${received}, nhưng số tiền chưa đủ. Vui lòng kiểm tra lại đơn hàng.`;
+    }
+  }
+}
+
+function startPaymentPolling(orderId) {
+  let checks = 0;
+  refreshPaymentStatus(orderId).catch(() => {});
+  state.paymentPollingTimer = setInterval(() => {
+    checks += 1;
+    if (checks > 120) {
+      stopPaymentPolling();
+      const statusEl = document.getElementById('bankTransferStatus');
+      if (statusEl) {
+        statusEl.textContent = 'Chưa thấy giao dịch. Bạn vẫn có thể đóng cửa sổ, shop sẽ kiểm tra lại theo mã đơn.';
+      }
+      return;
+    }
+    refreshPaymentStatus(orderId).catch(() => {});
+  }, 5000);
+}
+
+function markBankTransferPaid(orderId) {
+  const successContent = document.getElementById('orderSuccess');
+  const titleEl = successContent?.querySelector('.order-success-title');
+  const noteEl = successContent?.querySelector('.order-success-note');
+  const iconEl = successContent?.querySelector('.order-success-icon');
+  const orderIdEl = document.getElementById('orderSuccessId');
+  const statusEl = document.getElementById('bankTransferStatus');
+
+  if (titleEl) titleEl.textContent = 'Thanh toán thành công!';
+  if (noteEl) noteEl.textContent = 'Đơn hàng đã được xác nhận thanh toán. Chúng tôi sẽ xử lý và liên hệ bạn sớm.';
+  if (iconEl) iconEl.textContent = '✅';
+  if (orderIdEl) orderIdEl.textContent = `Mã đơn: ${orderId}`;
+  if (statusEl) {
+    statusEl.textContent = 'Đã nhận chuyển khoản. Cảm ơn bạn!';
+    statusEl.classList.add('paid');
+  }
 }
 
 function resetOrderModal() {
@@ -1231,6 +2310,9 @@ function resetOrderModal() {
 
   if (formContent) formContent.style.display = 'block';
   if (successContent) successContent.classList.remove('show');
+  stopPaymentPolling();
+  document.getElementById('bankTransferBox')?.classList.remove('show');
+  document.getElementById('successQrImage')?.removeAttribute('src');
   if (orderForm) orderForm.reset();
 }
 
@@ -1286,7 +2368,8 @@ async function loadCommunityDesigns() {
 
   grid.innerHTML = designs.map(design => {
     const prompt = isVi ? design.prompt : (design.promptEn || design.prompt);
-    const previewUrl = design.designUrl || generateMockDesign(design.style, prompt).designUrl;
+    const previewUrl = design.frontDesignUrl || design.designUrl || generateMockDesign(design.style, prompt).designUrl;
+    const backDesignUrl = design.backDesignUrl || '';
     const productMockupUrl = design.productMockupUrl || '';
     const productMockupBlank = Boolean(design.productMockupBlank);
     const author = design.author || 'Anonymous';
@@ -1294,6 +2377,7 @@ async function loadCommunityDesigns() {
     return `
       <div class="community-card" style="cursor: pointer;" title="${isVi ? 'Nhấp để thử thiết kế này' : 'Click to try this design'}"
         data-design-url="${escapeAttr(previewUrl)}"
+        data-back-design-url="${escapeAttr(backDesignUrl)}"
         data-product-mockup-url="${escapeAttr(productMockupUrl)}"
         data-product-mockup-blank="${productMockupBlank ? 'true' : 'false'}"
         data-prompt="${escapeAttr(prompt)}"
@@ -1316,17 +2400,19 @@ async function loadCommunityDesigns() {
 
   grid.querySelectorAll('.community-card').forEach(card => {
     card.addEventListener('click', () => {
-      loadCommunityDesign(card.dataset.designUrl, card.dataset.prompt, card.dataset.style, card.dataset.author, card.dataset.productMockupUrl, card.dataset.productMockupBlank === 'true');
+      loadCommunityDesign(card.dataset.designUrl, card.dataset.prompt, card.dataset.style, card.dataset.author, card.dataset.productMockupUrl, card.dataset.productMockupBlank === 'true', card.dataset.backDesignUrl);
     });
   });
 }
 
 // Function to load community design into workspace
-window.loadCommunityDesign = function(url, prompt, style, author, productMockupUrl = '', productMockupBlank = false) {
+window.loadCommunityDesign = function(url, prompt, style, author, productMockupUrl = '', productMockupBlank = false, backDesignUrl = '') {
   state.currentDesign = {
     success: true,
     designId: 'community-' + Date.now(),
     designUrl: url,
+    frontDesignUrl: url,
+    backDesignUrl,
     prompt: prompt,
     style: style,
     author: author,

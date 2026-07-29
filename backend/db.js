@@ -1,22 +1,59 @@
+// backend/db.js
 /**
  * Blankup Database Connection — SQL Server Express
  * Handles connection pooling and auto-initialization of tables.
  */
 
 const sql = require('mssql');
+const fs = require('fs');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+
+function hashSeedPassword(plain) {
+  return bcrypt.hashSync(plain, 10);
+}
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+
+  const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) return;
+
+    const index = trimmed.indexOf('=');
+    const key = trimmed.slice(0, index).trim();
+    const value = trimmed.slice(index + 1).trim().replace(/^["']|["']$/g, '');
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  });
+}
+
+loadEnvFile(path.join(__dirname, '.env'));
+loadEnvFile(path.join(__dirname, '../.env'));
 
 // ---------------------------------------------------------------------------
 // Connection Configuration
 // ---------------------------------------------------------------------------
+const SQL_SERVER = process.env.SQL_SERVER || 'localhost';
+const SQL_PORT = process.env.SQL_PORT;
+const SQL_USER = process.env.SQL_USER;
+const SQL_PASSWORD = process.env.SQL_PASSWORD;
+const isNamedInstance = SQL_SERVER.includes('\\');
+const useWindowsAuth = !SQL_USER && !SQL_PASSWORD;
+
 const DB_CONFIG = {
-  user: 'sa',
-  password: '123455',
-  server: 'localhost',
-  port: 1433,
+  server: SQL_SERVER,
+  ...(isNamedInstance
+    ? {}
+    : { port: Number(SQL_PORT || 1433) }),
+  ...(useWindowsAuth
+    ? { authentication: { type: 'ntlm', options: { domain: process.env.SQL_DOMAIN || '' } } }
+    : { user: SQL_USER, password: SQL_PASSWORD }),
   options: {
     encrypt: false,
     trustServerCertificate: true,
     enableArithAbort: true,
+    useLocalDB: true,
   },
   pool: {
     max: 10,
@@ -26,7 +63,7 @@ const DB_CONFIG = {
 };
 
 // The working database name
-const DB_NAME = 'BlankupDB';
+const DB_NAME = process.env.SQL_DATABASE || 'BlankupDB';
 
 let pool = null;
 
@@ -69,8 +106,9 @@ async function initDatabase() {
     // 3. Create tables
     await createTables();
 
-    // 4. Seed default admin user if Users table is empty
+    // 4. Ensure required demo users exist
     await seedAdminUser();
+    await seedAiCommerce();
 
     return pool;
   } catch (err) {
@@ -113,7 +151,7 @@ async function createTables() {
       color           NVARCHAR(20)   DEFAULT '#ffffff',
       size            NVARCHAR(10)   NOT NULL,
       quantity        INT            NOT NULL DEFAULT 1,
-      price           INT            NOT NULL DEFAULT 250000,
+      price           INT            NOT NULL DEFAULT 200000,
       customerName    NVARCHAR(200)  NOT NULL,
       customerPhone   NVARCHAR(50)   NOT NULL,
       customerAddress NVARCHAR(500)  NOT NULL,
@@ -142,6 +180,213 @@ async function createTables() {
     )
   `);
   console.log('[DB] Table "Designs" ready.');
+
+  await request.query(`
+    IF COL_LENGTH(N'Orders', N'voucherCode') IS NULL
+    ALTER TABLE Orders ADD voucherCode NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'Orders', N'discountAmount') IS NULL
+    ALTER TABLE Orders ADD discountAmount INT NOT NULL DEFAULT 0;
+    IF COL_LENGTH(N'Orders', N'finalPrice') IS NULL
+    ALTER TABLE Orders ADD finalPrice INT NULL;
+    IF COL_LENGTH(N'Designs', N'userId') IS NULL
+    ALTER TABLE Designs ADD userId NVARCHAR(50) NULL;
+    IF COL_LENGTH(N'Designs', N'quality') IS NULL
+    ALTER TABLE Designs ADD quality NVARCHAR(20) NOT NULL DEFAULT N'low';
+    IF COL_LENGTH(N'Designs', N'hasWatermark') IS NULL
+    ALTER TABLE Designs ADD hasWatermark BIT NOT NULL DEFAULT 1;
+    IF COL_LENGTH(N'Designs', N'sourceCreditType') IS NULL
+    ALTER TABLE Designs ADD sourceCreditType NVARCHAR(30) NULL;
+    IF COL_LENGTH(N'Users', N'resetTokenHash') IS NULL
+    ALTER TABLE Users ADD resetTokenHash NVARCHAR(255) NULL;
+    IF COL_LENGTH(N'Users', N'resetTokenExpiresAt') IS NULL
+    ALTER TABLE Users ADD resetTokenExpiresAt DATETIME NULL;
+    IF COL_LENGTH(N'Users', N'emailVerified') IS NULL
+    ALTER TABLE Users ADD emailVerified BIT NOT NULL DEFAULT 0;
+    IF COL_LENGTH(N'Users', N'phone') IS NULL
+    ALTER TABLE Users ADD phone NVARCHAR(20) NULL;
+    IF COL_LENGTH(N'Users', N'phoneVerified') IS NULL
+    ALTER TABLE Users ADD phoneVerified BIT NOT NULL DEFAULT 0;
+  `);
+
+  await request.query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AiPlans' AND xtype='U')
+    CREATE TABLE AiPlans (
+      id                  NVARCHAR(50)   PRIMARY KEY,
+      code                NVARCHAR(50)   NOT NULL UNIQUE,
+      name                NVARCHAR(100)  NOT NULL,
+      description         NVARCHAR(500)  NULL,
+      priceVnd            INT            NOT NULL DEFAULT 0,
+      highCredits         INT            NOT NULL DEFAULT 0,
+      bonusLowCredits     INT            NOT NULL DEFAULT 0,
+      dailyFreeLowCredits INT            NOT NULL DEFAULT 0,
+      outputQuality       NVARCHAR(20)   NOT NULL DEFAULT N'low',
+      planRank            INT            NOT NULL DEFAULT 0,
+      isPaid              BIT            NOT NULL DEFAULT 0,
+      isComebackOffer     BIT            NOT NULL DEFAULT 0,
+      comebackWindowDays  INT            NULL,
+      isActive            BIT            NOT NULL DEFAULT 1,
+      createdAt           DATETIME       NOT NULL DEFAULT GETDATE(),
+      updatedAt           DATETIME       NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UserAiAccounts' AND xtype='U')
+    CREATE TABLE UserAiAccounts (
+      userId                  NVARCHAR(50)  NOT NULL PRIMARY KEY,
+      displayPlanId           NVARCHAR(50)  NOT NULL DEFAULT N'plan-free',
+      highestPlanRank         INT           NOT NULL DEFAULT 0,
+      highCredits             INT           NOT NULL DEFAULT 0,
+      bonusLowCredits         INT           NOT NULL DEFAULT 0,
+      dailyFreeLowCreditsUsed INT           NOT NULL DEFAULT 0,
+      dailyFreeResetDate      DATE          NOT NULL DEFAULT CONVERT(date, GETDATE()),
+      comebackOfferStartedAt  DATETIME      NULL,
+      comebackOfferExpiresAt  DATETIME      NULL,
+      comebackOfferUsed       BIT           NOT NULL DEFAULT 0,
+      firstDiscountUsed       BIT           NOT NULL DEFAULT 0,
+      createdAt               DATETIME      NOT NULL DEFAULT GETDATE(),
+      updatedAt               DATETIME      NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AiPlanPurchases' AND xtype='U')
+    CREATE TABLE AiPlanPurchases (
+      id                    NVARCHAR(50)   PRIMARY KEY,
+      userId                NVARCHAR(50)   NOT NULL,
+      planId                NVARCHAR(50)   NOT NULL,
+      priceVnd              INT            NOT NULL,
+      highCreditsAdded      INT            NOT NULL DEFAULT 0,
+      lowCreditsAdded       INT            NOT NULL DEFAULT 0,
+      voucherCode           NVARCHAR(50)   NULL,
+      discountAmount        INT            NOT NULL DEFAULT 0,
+      finalAmount           INT            NOT NULL,
+      paymentStatus         NVARCHAR(30)   NOT NULL DEFAULT N'pending',
+      paymentMethod         NVARCHAR(30)   NULL,
+      transferContent       NVARCHAR(100)  NULL,
+      paymentReceivedAmount INT            NOT NULL DEFAULT 0,
+      paymentTransactionId  NVARCHAR(100)  NULL,
+      paymentDescription    NVARCHAR(500)  NULL,
+      paymentCheckedAt      DATETIME       NULL,
+      createdAt             DATETIME       NOT NULL DEFAULT GETDATE(),
+      paidAt                DATETIME       NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='AiCreditLedger' AND xtype='U')
+    CREATE TABLE AiCreditLedger (
+      id             NVARCHAR(50)   PRIMARY KEY,
+      userId         NVARCHAR(50)   NOT NULL,
+      creditType     NVARCHAR(20)   NOT NULL,
+      quality        NVARCHAR(20)   NOT NULL,
+      amount         INT            NOT NULL,
+      balanceAfter   INT            NULL,
+      reason         NVARCHAR(50)   NOT NULL,
+      referenceType  NVARCHAR(50)   NULL,
+      referenceId    NVARCHAR(50)   NULL,
+      note           NVARCHAR(500)  NULL,
+      createdAt      DATETIME       NOT NULL DEFAULT GETDATE()
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Vouchers' AND xtype='U')
+    CREATE TABLE Vouchers (
+      id                 NVARCHAR(50)   PRIMARY KEY,
+      code               NVARCHAR(50)   NOT NULL UNIQUE,
+      title              NVARCHAR(200)  NOT NULL,
+      description        NVARCHAR(500)  NULL,
+      discountType       NVARCHAR(30)   NOT NULL,
+      discountValue      INT            NOT NULL DEFAULT 0,
+      maxDiscountAmount  INT            NULL,
+      minOrderAmount     INT            NOT NULL DEFAULT 0,
+      appliesTo          NVARCHAR(30)   NOT NULL DEFAULT N'all',
+      eligiblePlanCodes  NVARCHAR(500)  NULL,
+      bonusHighCredits   INT            NOT NULL DEFAULT 0,
+      bonusLowCredits    INT            NOT NULL DEFAULT 0,
+      totalUsageLimit    INT            NULL,
+      perUserLimit       INT            NOT NULL DEFAULT 1,
+      usedCount          INT            NOT NULL DEFAULT 0,
+      startsAt           DATETIME       NULL,
+      expiresAt          DATETIME       NULL,
+      status             NVARCHAR(20)   NOT NULL DEFAULT N'active',
+      createdBy          NVARCHAR(50)   NULL,
+      internalNote       NVARCHAR(500)  NULL,
+      createdAt          DATETIME       NOT NULL DEFAULT GETDATE(),
+      updatedAt          DATETIME       NULL
+    );
+
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='VoucherRedemptions' AND xtype='U')
+    CREATE TABLE VoucherRedemptions (
+      id                NVARCHAR(50)   PRIMARY KEY,
+      voucherId         NVARCHAR(50)   NOT NULL,
+      voucherCode       NVARCHAR(50)   NOT NULL,
+      userId            NVARCHAR(50)   NOT NULL,
+      orderId           NVARCHAR(50)   NULL,
+      purchaseId        NVARCHAR(50)   NULL,
+      appliesTo         NVARCHAR(30)   NOT NULL,
+      originalAmount    INT            NOT NULL DEFAULT 0,
+      discountAmount    INT            NOT NULL DEFAULT 0,
+      bonusHighCredits  INT            NOT NULL DEFAULT 0,
+      bonusLowCredits   INT            NOT NULL DEFAULT 0,
+      redeemedAt        DATETIME       NOT NULL DEFAULT GETDATE()
+    );
+  `);
+  console.log('[DB] AI plans and voucher tables ready.');
+
+  // --- VerificationCodes Table (OTP for email/phone verification) ---
+  await request.query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='VerificationCodes' AND xtype='U')
+    CREATE TABLE VerificationCodes (
+      id          NVARCHAR(50)   PRIMARY KEY,
+      userId      NVARCHAR(50)   NOT NULL,
+      code        NVARCHAR(10)   NOT NULL,
+      type        NVARCHAR(20)   NOT NULL,
+      expiresAt   DATETIME       NOT NULL,
+      used        BIT            NOT NULL DEFAULT 0,
+      createdAt   DATETIME       NOT NULL DEFAULT GETDATE()
+    )
+  `);
+  console.log('[DB] Table "VerificationCodes" ready.');
+
+  await seedAiCommerce();
+}
+
+async function seedAiCommerce() {
+  const plansCount = await pool.request().query('SELECT COUNT(*) as cnt FROM AiPlans');
+  if (plansCount.recordset[0].cnt === 0) {
+    await pool.request().query(`
+      INSERT INTO AiPlans (
+        id, code, name, description, priceVnd, highCredits, bonusLowCredits,
+        dailyFreeLowCredits, outputQuality, planRank, isPaid, isComebackOffer, comebackWindowDays
+      )
+      VALUES
+        (N'plan-free', N'free', N'Free', N'3 lượt Low miễn phí mỗi ngày, có watermark.', 0, 0, 0, 3, N'low', 0, 0, 0, NULL),
+        (N'plan-comeback', N'comeback', N'Comeback Offer', N'Ưu đãi 7 ngày sau khi dùng hết Premium: 10 lượt High.', 59000, 10, 0, 0, N'high', 1, 1, 1, 7),
+        (N'plan-premium', N'premium', N'Premium', N'10 lượt High, không watermark, sẵn sàng để in.', 79000, 10, 0, 0, N'high', 2, 1, 0, NULL),
+        (N'plan-pro', N'pro', N'Pro', N'18 lượt High và tặng 3 lượt Low.', 129000, 18, 3, 0, N'high', 3, 1, 0, NULL),
+        (N'plan-studio-plus', N'studio_plus', N'Studio Plus', N'30 lượt High và tặng 5 lượt Low cho người dùng nhiều.', 199000, 30, 5, 0, N'high', 4, 1, 0, NULL)
+    `);
+  }
+
+  const voucherResult = await pool.request()
+    .input('code', sql.NVarChar, 'BLANKUP50')
+    .query('SELECT id FROM Vouchers WHERE code = @code');
+  if (voucherResult.recordset.length === 0) {
+    await pool.request().query(`
+      INSERT INTO Vouchers (
+        id, code, title, description, discountType, discountValue, minOrderAmount,
+        appliesTo, eligiblePlanCodes, perUserLimit, startsAt, status, internalNote
+      )
+      VALUES (
+        N'voucher-blankup50', N'BLANKUP50',
+        N'Giảm 50,000đ cho giao dịch từ 100,000đ',
+        N'Mã hệ thống dùng 1 lần mỗi tài khoản cho đơn/gói đủ điều kiện.',
+        N'fixed', 50000, 100000, N'all', N'pro,studio_plus', 1, GETDATE(), N'active',
+        N'Seed mặc định theo chính sách voucher đầu tiên của Blankup.'
+      )
+    `);
+  }
+
+  await pool.request().query(`
+    INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank)
+    SELECT id, N'plan-free', 0
+    FROM Users u
+    WHERE NOT EXISTS (SELECT 1 FROM UserAiAccounts a WHERE a.userId = u.id)
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,17 +394,43 @@ async function createTables() {
 // ---------------------------------------------------------------------------
 async function seedAdminUser() {
   const result = await pool.request().query(`SELECT COUNT(*) as cnt FROM Users`);
+  const adminResult = await pool.request()
+    .input('adminUsername', sql.NVarChar, 'admin')
+    .query('SELECT id, role, provider FROM Users WHERE username = @adminUsername');
+
+  if (adminResult.recordset.length === 0) {
+    console.log('[DB] Seeding default admin user...');
+    await pool.request()
+      .input('password', sql.NVarChar, hashSeedPassword('admin123'))
+      .query(`
+        INSERT INTO Users (id, username, password, fullName, role, provider, createdAt)
+        VALUES ('u-admin', 'admin', @password, 'System Admin', 'admin', 'local', '2026-06-01T12:00:00.000Z')
+      `);
+  } else {
+    // Only repair role/provider if they've drifted — this must NEVER touch
+    // the password column on an existing account, or every server restart
+    // would silently revert any password the admin has since changed.
+    const admin = adminResult.recordset[0];
+    if (admin.role !== 'admin' || admin.provider !== 'local') {
+      console.log('[DB] Repairing default admin role/provider...');
+      await pool.request()
+        .input('id', sql.NVarChar, admin.id)
+        .input('role', sql.NVarChar, 'admin')
+        .input('provider', sql.NVarChar, 'local')
+        .query('UPDATE Users SET role = @role, provider = @provider WHERE id = @id');
+    }
+  }
   if (result.recordset[0].cnt === 0) {
-    console.log('[DB] Seeding default admin and sample users...');
-    const request = pool.request();
-    await request.query(`
-      INSERT INTO Users (id, username, password, fullName, role, provider, createdAt)
-      VALUES
-        ('u-admin', 'admin', 'admin123', 'System Admin', 'admin', 'local', '2026-06-01T12:00:00.000Z'),
-        ('u-1', 'minht', 'password123', N'Minh T.', 'user', 'local', '2026-06-15T08:30:00.000Z'),
-        ('u-2', 'ann', 'password123', N'An N.', 'user', 'local', '2026-06-16T14:20:00.000Z'),
-        ('u-3', 'huongl', 'password123', N'Hương L.', 'user', 'local', '2026-06-17T09:15:00.000Z')
-    `);
+    console.log('[DB] Seeding default sample users...');
+    await pool.request()
+      .input('password', sql.NVarChar, hashSeedPassword('password123'))
+      .query(`
+        INSERT INTO Users (id, username, password, fullName, role, provider, createdAt)
+        VALUES
+          ('u-1', 'minht', @password, N'Minh T.', 'user', 'local', '2026-06-15T08:30:00.000Z'),
+          ('u-2', 'ann', @password, N'An N.', 'user', 'local', '2026-06-16T14:20:00.000Z'),
+          ('u-3', 'huongl', @password, N'Hương L.', 'user', 'local', '2026-06-17T09:15:00.000Z')
+      `);
     console.log('[DB] Default users seeded.');
   }
 }

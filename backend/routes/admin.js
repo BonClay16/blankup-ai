@@ -1,7 +1,9 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 const { authenticate, readUsers } = require('./auth');
+const { getPool, sql } = require('../db');
 
 const router = express.Router();
 const ordersFilePath = path.join(__dirname, '../data/orders.json');
@@ -64,14 +66,14 @@ function readDesigns() {
 // GET /api/admin/stats
 // Returns overview statistics, recent orders, and user list (Admin only)
 // ---------------------------------------------------------------------------
-router.get('/stats', authenticate, (req, res) => {
+router.get('/stats', authenticate, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
     }
 
     const orders = readOrders();
-    const users = readUsers();
+    const users = await readUsers();
     const designs = readDesigns();
 
     // 1. Order Status Counts
@@ -161,6 +163,284 @@ router.get('/stats', authenticate, (req, res) => {
   } catch (err) {
     console.error('[Admin] Error calculating statistics:', err.stack || err.message);
     res.status(500).json({ success: false, error: 'Failed to calculate stats' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users
+// Create a new user (admin only)
+// ---------------------------------------------------------------------------
+router.post('/users', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { username, password, fullName, email, role } = req.body;
+
+    if (!username || !password || !fullName) {
+      return res.status(400).json({ success: false, error: 'Tên đăng nhập, mật khẩu và họ tên là bắt buộc.' });
+    }
+
+    const allowedRoles = ['user', 'admin'];
+    const userRole = allowedRoles.includes(role) ? role : 'user';
+
+    const pool = getPool();
+
+    const existing = await pool.request()
+      .input('username', sql.NVarChar, username.trim().toLowerCase())
+      .query('SELECT id FROM Users WHERE username = @username');
+
+    if (existing.recordset.length > 0) {
+      return res.status(400).json({ success: false, error: 'Tên đăng nhập đã tồn tại.' });
+    }
+
+    const newId = 'u-' + Date.now();
+    const hashedPassword = bcrypt.hashSync(password, 10);
+
+    await pool.request()
+      .input('id', sql.NVarChar, newId)
+      .input('username', sql.NVarChar, username.trim().toLowerCase())
+      .input('password', sql.NVarChar, hashedPassword)
+      .input('fullName', sql.NVarChar, fullName.trim())
+      .input('email', sql.NVarChar, email || null)
+      .input('role', sql.NVarChar, userRole)
+      .input('provider', sql.NVarChar, 'local')
+      .query(`
+        INSERT INTO Users (id, username, password, fullName, email, role, provider)
+        VALUES (@id, @username, @password, @fullName, @email, @role, @provider)
+      `);
+
+    console.log(`[Admin] User ${username} created by ${req.user.username}`);
+    res.status(201).json({ success: true, message: `Đã tạo tài khoản ${username}.`, data: { id: newId, username: username.trim().toLowerCase(), fullName: fullName.trim(), role: userRole } });
+  } catch (err) {
+    console.error('[Admin] Error creating user:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to create user.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/admin/users/:id
+// Update user info (admin only)
+// ---------------------------------------------------------------------------
+router.put('/users/:id', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const { fullName, email, role } = req.body;
+    const allowedRoles = ['user', 'admin'];
+
+    const pool = getPool();
+
+    const userCheck = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('SELECT id, role FROM Users WHERE id = @id');
+
+    if (userCheck.recordset.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const updates = [];
+    const request = pool.request().input('id', sql.NVarChar, id);
+
+    if (fullName !== undefined) {
+      updates.push('fullName = @fullName');
+      request.input('fullName', sql.NVarChar, fullName.trim());
+    }
+    if (email !== undefined) {
+      updates.push('email = @email');
+      request.input('email', sql.NVarChar, email || null);
+    }
+    if (role !== undefined && allowedRoles.includes(role)) {
+      updates.push('role = @role');
+      request.input('role', sql.NVarChar, role);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'Không có dữ liệu cập nhật.' });
+    }
+
+    await request.query(`UPDATE Users SET ${updates.join(', ')} WHERE id = @id`);
+
+    console.log(`[Admin] User ${id} updated by ${req.user.username}`);
+    res.json({ success: true, message: 'Đã cập nhật thông tin người dùng.' });
+  } catch (err) {
+    console.error('[Admin] Error updating user:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to update user.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/admin/users/:id/role
+// Update a user's role (admin only)
+// ---------------------------------------------------------------------------
+router.put('/users/:id/role', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const { role } = req.body;
+    const allowedRoles = ['user', 'admin'];
+
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({ success: false, error: `Invalid role. Must be one of: ${allowedRoles.join(', ')}` });
+    }
+
+    const pool = getPool();
+    const result = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .input('role', sql.NVarChar, role)
+      .query('UPDATE Users SET role = @role WHERE id = @id');
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    console.log(`[Admin] User ${id} role updated to ${role} by ${req.user.username}`);
+    res.json({ success: true, message: `Đã cập nhật vai trò người dùng thành ${role}.` });
+  } catch (err) {
+    console.error('[Admin] Error updating user role:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to update user role.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/admin/users/:id
+// Delete a user (admin only, cannot delete self)
+// ---------------------------------------------------------------------------
+router.delete('/users/:id', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { id } = req.params;
+
+    if (req.user.id === id) {
+      return res.status(400).json({ success: false, error: 'Không thể xóa tài khoản của chính mình.' });
+    }
+
+    const pool = getPool();
+
+    const userCheck = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('SELECT id, username, role FROM Users WHERE id = @id');
+
+    if (userCheck.recordset.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const targetUser = userCheck.recordset[0];
+    if (targetUser.role === 'admin') {
+      return res.status(400).json({ success: false, error: 'Không thể xóa tài khoản admin khác.' });
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('DELETE FROM Users WHERE id = @id');
+
+    console.log(`[Admin] User ${targetUser.username} (${id}) deleted by ${req.user.username}`);
+    res.json({ success: true, message: `Đã xóa tài khoản ${targetUser.username}.` });
+  } catch (err) {
+    console.error('[Admin] Error deleting user:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to delete user.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/users/:id
+// Get single user details (admin only)
+// ---------------------------------------------------------------------------
+router.get('/users/:id', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const pool = getPool();
+
+    const result = await pool.request()
+      .input('id', sql.NVarChar, id)
+      .query('SELECT id, username, fullName, email, avatar, provider, role, createdAt FROM Users WHERE id = @id');
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const user = result.recordset[0];
+    const orders = readOrders();
+    const userOrders = orders.filter(o => o.userId === id);
+    const completedOrders = userOrders.filter(o => o.status === 'completed');
+    const totalSpend = completedOrders.reduce((sum, o) => sum + (o.price || 0) * (o.quantity || 1), 0);
+
+    res.json({
+      success: true,
+      data: {
+        ...user,
+        ordersCount: userOrders.length,
+        totalSpend,
+        recentOrders: userOrders
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 5),
+      },
+    });
+  } catch (err) {
+    console.error('[Admin] Error fetching user:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch user details.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/designs
+// Get all designs (admin only)
+// ---------------------------------------------------------------------------
+router.get('/designs', authenticate, (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const designs = readDesigns();
+    res.json({ success: true, data: designs });
+  } catch (err) {
+    console.error('[Admin] Error fetching designs:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch designs.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/admin/designs/:id/visibility
+// Toggle design visibility (admin only)
+// ---------------------------------------------------------------------------
+router.put('/designs/:id/visibility', authenticate, (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { id } = req.params;
+    const { isShared } = req.body;
+
+    const designs = readDesigns();
+    const index = designs.findIndex(d => d.id === id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, error: 'Design not found.' });
+    }
+
+    designs[index].isShared = Boolean(isShared);
+    fs.writeFileSync(designsFilePath, JSON.stringify(designs, null, 2), 'utf8');
+
+    console.log(`[Admin] Design ${id} visibility set to ${isShared} by ${req.user.username}`);
+    res.json({ success: true, data: designs[index] });
+  } catch (err) {
+    console.error('[Admin] Error updating design visibility:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to update design visibility.' });
   }
 });
 

@@ -1,0 +1,175 @@
+<!-- frontend/account.html -->
+<!DOCTYPE html>
+<html lang="vi" data-lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tài khoản của tôi — Blankup</title>
+
+  <script>
+    (function() {
+      var token = localStorage.getItem('blankup_token');
+      var userStr = localStorage.getItem('blankup_user');
+      if (!token || !userStr) {
+        window.location.href = '/login.html';
+      }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/account.css?v=1">
+</head>
+<body>
+
+  <!-- ====== NAVIGATION ====== -->
+  <nav class="navbar" id="navbar">
+    <div class="container">
+      <a href="/" class="navbar-logo" id="logo">
+        <svg class="logo-icon" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="38" height="38" rx="4" fill="#b43e12"/>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="#f6f3ec" opacity="0.92"/>
+          <path d="M16 10 L19 6 L22 10" stroke="#f6f3ec" stroke-width="1.5" fill="none"/>
+        </svg>
+        <span>BLANK<span class="logo-highlight">UP</span></span>
+      </a>
+      <div class="navbar-menu" id="navMenu">
+        <a href="/#hero" data-i18n="nav.home">Trang chủ</a>
+        <a href="/#products" data-i18n="nav.products">Bộ sưu tập</a>
+        <a href="studio.html" data-i18n="nav.studio">AI Studio</a>
+        <a href="showroom.html">3D Showroom</a>
+      </div>
+      <div class="navbar-actions">
+        <div class="lang-toggle" id="langToggle">
+          <span class="lang-vi active" data-lang="vi">VI</span>
+          <span class="lang-en" data-lang="en">EN</span>
+        </div>
+        <button class="navbar-toggle" id="navToggle" aria-label="Toggle menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ====== ACCOUNT PAGE ====== -->
+  <section class="account-page section">
+    <div class="container">
+      <div class="account-header">
+        <div class="tag tag-rust"><span>Tài khoản</span></div>
+        <h1 class="account-title">Xin chào, <span class="accent" id="accountGreetName">bạn</span></h1>
+        <p class="account-subtitle">Quản lý hồ sơ, mật khẩu và theo dõi đơn hàng của bạn.</p>
+      </div>
+
+      <div class="account-tabs">
+        <button class="account-tab active" data-tab="profile">Hồ sơ</button>
+        <button class="account-tab" data-tab="security">Bảo mật</button>
+        <button class="account-tab" data-tab="orders">Đơn hàng của tôi</button>
+      </div>
+
+      <!-- Profile tab -->
+      <div class="account-panel active" id="panel-profile">
+        <div class="account-card">
+          <div class="account-card-title">Thông tin cá nhân</div>
+          <div class="account-card-desc">Cập nhật họ tên, email hiển thị trên đơn hàng và liên hệ.</div>
+          <form class="account-form" id="profileForm">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Tên đăng nhập</label>
+                <input type="text" id="profileUsername" required>
+              </div>
+              <div class="form-group">
+                <label>Họ và tên</label>
+                <input type="text" id="profileFullName" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="profileEmail" placeholder="email@example.com">
+            </div>
+            <button type="submit" class="btn btn-primary" id="profileSaveBtn">Lưu thay đổi</button>
+          </form>
+
+          <hr class="account-divider">
+
+          <div class="account-meta-row">
+            <span class="account-meta-label">Vai trò</span>
+            <span class="account-meta-value" id="profileRole">—</span>
+          </div>
+          <div class="account-meta-row">
+            <span class="account-meta-label">Phương thức đăng nhập</span>
+            <span class="account-meta-value" id="profileProvider">—</span>
+          </div>
+          <div class="account-meta-row">
+            <span class="account-meta-label">Ngày tạo tài khoản</span>
+            <span class="account-meta-value" id="profileCreatedAt">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security tab -->
+      <div class="account-panel" id="panel-security">
+        <div class="account-card" id="passwordCard">
+          <div class="account-card-title">Đổi mật khẩu</div>
+          <div class="account-card-desc">Dùng mật khẩu đủ mạnh, ít nhất 6 ký tự.</div>
+          <form class="account-form" id="passwordForm">
+            <div class="form-group">
+              <label>Mật khẩu hiện tại</label>
+              <input type="password" id="currentPassword" required autocomplete="current-password">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mật khẩu mới</label>
+                <input type="password" id="newPassword" required minlength="6" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label>Xác nhận mật khẩu mới</label>
+                <input type="password" id="confirmPassword" required minlength="6" autocomplete="new-password">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="passwordSaveBtn">Đổi mật khẩu</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Orders tab -->
+      <div class="account-panel" id="panel-orders">
+        <div class="account-orders-summary" id="ordersSummary" style="display:none;">
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="summaryTotal">0</div>
+            <div class="account-summary-label">Tổng đơn</div>
+          </div>
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="summaryPending">0</div>
+            <div class="account-summary-label">Đang xử lý</div>
+          </div>
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="summaryCompleted">0</div>
+            <div class="account-summary-label">Hoàn thành</div>
+          </div>
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="summarySpend">0đ</div>
+            <div class="account-summary-label">Đã chi tiêu</div>
+          </div>
+        </div>
+        <div id="ordersListContainer">
+          <div class="account-loading">Đang tải đơn hàng...</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== FOOTER ====== -->
+  <footer class="footer" id="footer">
+    <div class="container">
+      <div class="footer-bottom" style="border-top:none; padding-top:0;">
+        <span data-i18n="footer.copyright">© 2024 Blankup. Mọi quyền được bảo lưu.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/i18n.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/account.js"></script>
+</body>
+</html>

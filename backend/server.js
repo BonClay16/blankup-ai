@@ -61,9 +61,9 @@ app.use('/admin.html', (req, res, next) => {
   next();
 });
 
-// Serve the frontend as static files
+// Serve the frontend as static files (no cache during development)
 const frontendDir = path.join(__dirname, '../frontend');
-app.use(express.static(frontendDir));
+app.use(express.static(frontendDir, { etag: false, lastModified: false, maxAge: 0 }));
 
 // ---------------------------------------------------------------------------
 // API Routes

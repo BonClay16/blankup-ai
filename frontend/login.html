@@ -1,3 +1,4 @@
+<!-- frontend/login.html -->
 <!DOCTYPE html>
 <html lang="vi" data-lang="vi">
 <head>
@@ -6,32 +7,28 @@
   <title data-i18n="auth.modal.title">Đăng nhập vào Blankup</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,400&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=editorial-1">
 </head>
 <body class="login-page-body">
-
-  <!-- Background decorative blurs -->
-  <div class="login-decor login-decor-1"></div>
-  <div class="login-decor login-decor-2"></div>
 
   <!-- ====== HEADER / LOGO ====== -->
   <header class="login-header">
     <div class="container">
       <a href="/" class="navbar-logo">
         <svg class="logo-icon" viewBox="0 0 38 38" fill="none">
-          <rect width="38" height="38" rx="10" fill="#ff6b00"/>
-          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.9"/>
-          <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
-          <path d="M22 18 L28 12" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="29" cy="11" r="2" fill="white"/>
+          <rect width="38" height="38" rx="4" fill="#b43e12"/>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="#f6f3ec" opacity="0.92"/>
+          <path d="M16 10 L19 6 L22 10" stroke="#f6f3ec" stroke-width="1.5" fill="none"/>
         </svg>
         <span>BLANK<span class="logo-highlight">UP</span></span>
       </a>
 
-      <div class="lang-toggle" id="langToggle">
-        <span class="lang-vi active" data-lang="vi">VI</span>
-        <span class="lang-en" data-lang="en">EN</span>
+      <div class="navbar-actions" style="display: flex; align-items: center; gap: 15px;">
+        <div class="lang-toggle" id="langToggle" style="margin: 0;">
+          <span class="lang-vi active" data-lang="vi">VI</span>
+          <span class="lang-en" data-lang="en">EN</span>
+        </div>
       </div>
     </div>
   </header>
@@ -40,8 +37,9 @@
   <main class="login-main">
     <div class="login-card animate-fade-in">
       <div class="login-card-header">
+        <div class="tag" style="margin-bottom: 18px;"><span>Blankup Studio</span></div>
         <h2 id="loginTitle" data-i18n="auth.modal.title">Đăng nhập vào Blankup</h2>
-        <p id="loginSubtitle" data-i18n="hero.badge">✨ Nền tảng thiết kế áo AI đầu tiên</p>
+        <p id="loginSubtitle" data-i18n="auth.modal.tagline">Nền tảng thiết kế áo bằng AI</p>
       </div>
 
       <form id="loginForm">
@@ -59,11 +57,27 @@
             data-i18n-placeholder="auth.modal.username" placeholder="Tên đăng nhập" required>
         </div>
 
+        <!-- Email (register mode only — enables password recovery later) -->
+        <div class="form-group" id="emailGroup" style="display: none;">
+          <label data-i18n="auth.modal.email">Email (khuyến nghị)</label>
+          <input type="email" class="form-input" id="loginEmail"
+            data-i18n-placeholder="auth.modal.emailPlaceholder" placeholder="email@example.com">
+        </div>
+
+        <!-- Phone (register mode only) -->
+        <div class="form-group" id="phoneGroup" style="display: none;">
+          <label>Số điện thoại</label>
+          <input type="tel" class="form-input" id="loginPhone" placeholder="0912345678">
+        </div>
+
         <!-- Password -->
         <div class="form-group">
           <label data-i18n="auth.modal.password">Mật khẩu</label>
           <input type="password" class="form-input" id="loginPassword" 
             data-i18n-placeholder="auth.modal.password" placeholder="Mật khẩu" required>
+          <div id="forgotPasswordLink" style="text-align:right; margin-top:8px;">
+            <a href="forgot-password.html" class="btn-back" data-i18n="auth.modal.forgotPassword">Quên mật khẩu?</a>
+          </div>
         </div>
 
         <!-- Error Msg -->
@@ -84,6 +98,55 @@
       <!-- Return Link -->
       <div class="return-home">
         <a href="/" class="btn-back">← <span data-i18n="nav.home">Quay lại Trang chủ</span></a>
+      </div>
+    </div>
+  </main>
+
+  <!-- ====== VERIFICATION CARD (hidden by default) ====== -->
+  <main class="login-main" id="verificationSection" style="display: none;">
+    <div class="login-card animate-fade-in">
+      <div class="login-card-header">
+        <div class="tag" style="margin-bottom: 18px;"><span>Xác thực tài khoản</span></div>
+        <h2>Xác thực email & SĐT</h2>
+        <p id="verifySubtitle">Nhập mã xác thực 6 số đã gửi đến email và SĐT của bạn.</p>
+      </div>
+
+      <form id="verifyForm">
+        <!-- Email OTP -->
+        <div class="form-group" id="verifyEmailGroup" style="display: none;">
+          <label>Mã xác thực email</label>
+          <input type="text" class="form-input" id="verifyEmailCode" maxlength="6" pattern="[0-9]{6}"
+            placeholder="123456" inputmode="numeric" autocomplete="one-time-code"
+            style="font-size:1.3rem; letter-spacing:6px; text-align:center;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span id="verifyEmailHint" style="font-size:0.78rem; color:var(--text-muted);"></span>
+            <button type="button" class="btn-back" id="resendEmailBtn" style="font-size:0.78rem;">Gửi lại mã</button>
+          </div>
+        </div>
+
+        <!-- Phone OTP -->
+        <div class="form-group" id="verifyPhoneGroup" style="display: none;">
+          <label>Mã xác thực SĐT</label>
+          <input type="text" class="form-input" id="verifyPhoneCode" maxlength="6" pattern="[0-9]{6}"
+            placeholder="123456" inputmode="numeric" autocomplete="one-time-code"
+            style="font-size:1.3rem; letter-spacing:6px; text-align:center;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span id="verifyPhoneHint" style="font-size:0.78rem; color:var(--text-muted);"></span>
+            <button type="button" class="btn-back" id="resendPhoneBtn" style="font-size:0.78rem;">Gửi lại mã</button>
+          </div>
+        </div>
+
+        <!-- Error / Success -->
+        <div class="auth-error" id="verifyErrorMsg" style="display: none;"></div>
+        <div id="verifySuccessMsg" style="display: none; font-size:0.86rem; color: var(--success); background: rgba(74,90,63,0.08); border: 1px solid rgba(74,90,63,0.25); border-radius: var(--radius-xs); padding: 12px 14px; margin-bottom: 18px;"></div>
+
+        <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 10px;" id="verifySubmitBtn">
+          <span>Xác nhận</span>
+        </button>
+      </form>
+
+      <div class="return-home">
+        <a href="/login.html" class="btn-back">← Quay lại Đăng nhập</a>
       </div>
     </div>
   </main>

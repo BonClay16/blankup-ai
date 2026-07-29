@@ -1,0 +1,386 @@
+/* frontend/css/account.css */
+/* ============================================================
+   ACCOUNT PAGE — profile, password, order history
+   Reuses design tokens from style.css (colors, type, radius).
+   ============================================================ */
+
+.account-page {
+  padding: 152px 0 96px;
+  min-height: 70vh;
+}
+
+.account-header {
+  margin-bottom: 40px;
+}
+
+.account-header .tag {
+  margin-bottom: 18px;
+}
+
+.account-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  color: var(--text-heading);
+}
+
+.account-title .accent {
+  color: var(--rust);
+  font-style: italic;
+}
+
+.account-subtitle {
+  color: var(--text-muted);
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+
+/* ---------- Tabs ---------- */
+.account-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 36px;
+  flex-wrap: wrap;
+}
+
+.account-tab {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 12px 4px;
+  margin-right: 28px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.account-tab:hover {
+  color: var(--text-heading);
+}
+
+.account-tab.active {
+  color: var(--rust);
+  border-bottom-color: var(--rust);
+}
+
+.account-panel {
+  display: none;
+}
+
+.account-panel.active {
+  display: block;
+  animation: accountFadeIn 0.25s ease;
+}
+
+@keyframes accountFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Cards ---------- */
+.account-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-cards, 12px);
+  padding: 32px;
+  max-width: 620px;
+}
+
+.account-card + .account-card {
+  margin-top: 20px;
+}
+
+.account-card-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-heading);
+  margin-bottom: 4px;
+}
+
+.account-card-desc {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 24px;
+}
+
+.account-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.account-form .form-group {
+  margin-bottom: 18px;
+}
+
+.account-form label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.account-form input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-inputs, 4px);
+  padding: 11px 13px;
+  font-size: 0.92rem;
+  color: var(--text-heading);
+  background: #fff;
+  transition: border-color var(--transition-fast);
+}
+
+.account-form input:focus {
+  border-color: var(--rust);
+}
+
+.account-form input:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.account-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: -10px;
+  margin-bottom: 18px;
+}
+
+.account-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+
+/* ---------- Meta row (readonly info) ---------- */
+.account-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.9rem;
+}
+
+.account-meta-row:last-child {
+  border-bottom: none;
+}
+
+.account-meta-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.account-meta-value {
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+/* ---------- Order history ---------- */
+.account-orders-summary {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-cards, 12px);
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+
+.account-summary-stat {
+  flex: 1;
+  padding: 18px 20px;
+  text-align: center;
+  border-right: 1px solid var(--border);
+}
+
+.account-summary-stat:last-child {
+  border-right: none;
+}
+
+.account-summary-value {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  color: var(--text-heading);
+}
+
+.account-summary-label {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.account-order-card {
+  display: flex;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-cards, 12px);
+  margin-bottom: 14px;
+}
+
+.account-order-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-images, 8px);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.account-order-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.account-order-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-order-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.account-order-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.account-order-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.account-order-price {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--text-heading);
+  white-space: nowrap;
+}
+
+.account-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 9px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.account-badge.status-pending { color: var(--warning); border-color: var(--warning); }
+.account-badge.status-completed { color: var(--success); border-color: var(--success); }
+.account-badge.status-cancelled { color: var(--error); border-color: var(--error); }
+
+.account-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-cards, 12px);
+}
+
+.account-empty a {
+  color: var(--rust);
+  font-weight: 600;
+}
+
+.account-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .account-form .form-row {
+    grid-template-columns: 1fr;
+  }
+  .account-card {
+    padding: 22px;
+  }
+  .account-orders-summary {
+    flex-direction: column;
+  }
+  .account-summary-stat {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .account-summary-stat:last-child {
+    border-bottom: none;
+  }
+}
+
+/* ---------- Toast (mirrors studio.css) ---------- */
+.toast-container {
+  position: fixed;
+  top: 92px;
+  right: 20px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-buttons, 8px);
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  color: var(--text-heading);
+  box-shadow: 0 6px 20px rgba(23, 20, 15, 0.12);
+  opacity: 0;
+  transform: translateX(16px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: auto;
+}
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast-success { border-left-color: var(--success); }
+.toast-error { border-left-color: var(--error); }
+.toast-warning { border-left-color: var(--warning); }
+.toast-msg { flex: 1; line-height: 1.45; white-space: pre-line; }
+.toast-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 0.8rem; line-height: 1; padding: 2px; flex-shrink: 0;
+}
+.toast-close:hover { color: var(--text-heading); }
+@media (max-width: 480px) {
+  .toast-container { left: 12px; right: 12px; max-width: none; top: 80px; }
+}
