@@ -818,6 +818,49 @@ router.post('/generate-from-image', upload.single('image'), async (req, res) => 
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/ai-design/:id/share  — Share design to community gallery
+// ---------------------------------------------------------------------------
+router.post('/:id/share', (req, res) => {
+  try {
+    const designId = decodeURIComponent(req.params.id);
+    const { designUrl, frontDesignUrl, backDesignUrl, prompt, style, author } = req.body;
+
+    if (!designUrl) {
+      return res.status(400).json({ success: false, error: 'designUrl is required' });
+    }
+
+    const designs = readDesigns();
+    const existing = designs.find(d => d.designId === designId);
+
+    if (existing) {
+      existing.isShared = true;
+      existing.sharedAt = new Date().toISOString();
+      writeDesigns(designs);
+    } else {
+      designs.push({
+        designId,
+        prompt: prompt || '',
+        style: style || 'abstract',
+        author: author || 'Community',
+        designUrl,
+        frontDesignUrl: frontDesignUrl || designUrl,
+        backDesignUrl: backDesignUrl || '',
+        isShared: true,
+        sharedAt: new Date().toISOString(),
+        likes: 0,
+      });
+      writeDesigns(designs);
+    }
+
+    console.log(`[AI-Design] Design ${designId} shared to gallery`);
+    res.json({ success: true, message: 'Design shared successfully' });
+  } catch (err) {
+    console.error('[AI-Design] Error sharing design:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to share design' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/ai-design/gallery
 // Return sample designs with their SVG thumbnails
 // ---------------------------------------------------------------------------

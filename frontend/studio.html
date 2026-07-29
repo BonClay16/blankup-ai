@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/studio.css?v=checkout-qr-3">
+  <link rel="stylesheet" href="css/studio.css?v=v2">
 </head>
 <body>
 
@@ -27,7 +27,6 @@
         </svg>
         <span>BLANK<span class="logo-highlight">UP</span></span>
       </a>
-
       <div class="navbar-actions">
         <button class="theme-toggle" id="themeToggleBtn" aria-label="Toggle theme">
           <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
@@ -42,263 +41,343 @@
     </div>
   </nav>
 
-  <main class="studio-page">
-    <div class="container">
-      <!-- Studio Header -->
-      <div class="studio-header">
-        <h1 data-i18n="studio.title">🎨 AI Design Studio</h1>
-        <p data-i18n="studio.subtitle">Tạo thiết kế áo thun độc nhất với AI</p>
+  <!-- ====== MAIN STUDIO ====== -->
+  <main class="studio-main">
+
+    <!-- TOOLBAR TABS -->
+    <div class="studio-toolbar">
+      <div class="studio-toolbar-inner">
+        <button class="toolbar-tab active" data-tab="prompt" id="tabPrompt">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span data-i18n="studio.tab.prompt">Viết Prompt</span>
+        </button>
+        <button class="toolbar-tab" data-tab="image" id="tabImage">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span data-i18n="studio.tab.image">Ảnh + Ý tưởng</span>
+        </button>
+        <button class="toolbar-tab" data-tab="templates" id="tabTemplates">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span data-i18n="studio.tab.templates">Mẫu có sẵn</span>
+        </button>
       </div>
+    </div>
 
-      <!-- Main Studio Grid -->
-      <div class="studio-grid">
+    <!-- 3-COLUMN LAYOUT -->
+    <div class="studio-layout">
 
-        <!-- ===== LEFT: Control Panel ===== -->
-        <div class="studio-controls">
-          <!-- Tabs -->
-          <div class="studio-tabs">
-            <button class="studio-tab active" data-tab="prompt" id="tabPrompt">
-              <span class="studio-tab-icon">✍️</span>
-              <span data-i18n="studio.tab.prompt">Viết Prompt</span>
-            </button>
-            <button class="studio-tab" data-tab="image" id="tabImage">
-              <span class="studio-tab-icon">📸</span>
-              <span data-i18n="studio.tab.image">Ảnh + Ý tưởng</span>
-            </button>
+      <!-- ===== LEFT PANEL: AI Controls ===== -->
+      <aside class="studio-left" id="studioLeft">
+
+        <!-- TAB: PROMPT -->
+        <div class="panel-section tab-panel active" data-panel="prompt">
+          <div class="panel-section-header">
+            <h3>Mô tả thiết kế</h3>
           </div>
-
-          <!-- Tab 1: Text Prompt -->
-          <div class="tab-content active" id="tabContentPrompt">
-            <div class="form-group">
-              <label class="control-label" data-i18n="studio.prompt.label">Mô tả thiết kế của bạn</label>
-              <textarea class="prompt-textarea" id="promptInput" 
-                data-i18n-placeholder="studio.prompt.placeholder"
+          <div class="panel-section-body">
+            <div class="prompt-area">
+              <textarea class="prompt-input" id="promptInput" rows="4"
                 placeholder='VD: "Một con rồng Việt Nam phong cách cyberpunk với hiệu ứng neon xanh, trên nền đen"'></textarea>
+              <button class="prompt-enhance-btn" id="promptEnhanceBtn" title="AI tối ưu prompt">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Enhance</span>
+              </button>
             </div>
 
-            <div class="form-group">
-              <label class="control-label" data-i18n="studio.style.label">Phong cách</label>
-              <div class="style-grid" id="styleGrid">
-                <button class="style-option active" data-style="minimalist" data-i18n="style.minimalist">Tối giản</button>
-                <button class="style-option" data-style="streetwear" data-i18n="style.streetwear">Streetwear</button>
-                <button class="style-option" data-style="vintage" data-i18n="style.vintage">Vintage</button>
-                <button class="style-option" data-style="abstract" data-i18n="style.abstract">Trừu tượng</button>
-                <button class="style-option" data-style="anime" data-i18n="style.anime">Anime</button>
-                <button class="style-option" data-style="watercolor" data-i18n="style.watercolor">Màu nước</button>
-                <button class="style-option" data-style="geometric" data-i18n="style.geometric">Hình học</button>
-                <button class="style-option" data-style="typography" data-i18n="style.typography">Typography</button>
-              </div>
+            <div class="panel-label">Phong cách</div>
+            <div class="style-grid" id="styleGrid">
+              <button class="style-chip active" data-style="minimalist">
+                <span class="style-chip-icon">◇</span>
+                <span data-i18n="style.minimalist">Tối giản</span>
+              </button>
+              <button class="style-chip" data-style="streetwear">
+                <span class="style-chip-icon">⚡</span>
+                <span data-i18n="style.streetwear">Streetwear</span>
+              </button>
+              <button class="style-chip" data-style="vintage">
+                <span class="style-chip-icon">📻</span>
+                <span data-i18n="style.vintage">Vintage</span>
+              </button>
+              <button class="style-chip" data-style="abstract">
+                <span class="style-chip-icon">🎨</span>
+                <span data-i18n="style.abstract">Trừu tượng</span>
+              </button>
+              <button class="style-chip" data-style="anime">
+                <span class="style-chip-icon">🐉</span>
+                <span data-i18n="style.anime">Anime</span>
+              </button>
+              <button class="style-chip" data-style="watercolor">
+                <span class="style-chip-icon">💧</span>
+                <span data-i18n="style.watercolor">Màu nước</span>
+              </button>
+              <button class="style-chip" data-style="geometric">
+                <span class="style-chip-icon">⬡</span>
+                <span data-i18n="style.geometric">Hình học</span>
+              </button>
+              <button class="style-chip" data-style="typography">
+                <span class="style-chip-icon">Aa</span>
+                <span data-i18n="style.typography">Typography</span>
+              </button>
             </div>
 
-            <div class="form-group">
-              <label class="control-label" data-i18n="studio.text.label">Chữ / slogan tùy chọn</label>
-              <input type="text" class="form-input print-text-input" id="customTextInput"
-                data-i18n-placeholder="studio.text.placeholder"
-                placeholder="VD: BLANKUP, tên riêng, câu slogan...">
-            </div>
+            <div class="panel-label">Chữ / slogan (tùy chọn)</div>
+            <input type="text" class="text-input" id="customTextInput"
+              placeholder="VD: BLANKUP, tên riêng, câu slogan...">
 
             <button class="generate-btn" id="generatePromptBtn">
-              <span class="spinner"></span>
-              <span class="btn-text" data-i18n="studio.generate">🎨 Tạo Design</span>
-              <span class="btn-loading-text" data-i18n="studio.generating">AI đang sáng tạo...</span>
+              <span class="generate-btn-spinner"></span>
+              <svg class="generate-btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span class="generate-btn-text" data-i18n="studio.generate">Tạo Design</span>
+              <span class="generate-btn-loading" data-i18n="studio.generating">AI đang sáng tạo...</span>
             </button>
           </div>
+        </div>
 
-          <!-- Tab 2: Image + Idea -->
-          <div class="tab-content" id="tabContentImage">
-            <div class="form-group">
-              <label class="control-label">Upload ảnh tham khảo</label>
-              <div class="upload-dropzone" id="uploadDropzone">
-                <input type="file" id="imageUpload" accept="image/*" hidden>
-                <span class="upload-icon">🖼️</span>
-                <div class="upload-text" data-i18n="studio.upload.text">Kéo thả ảnh vào đây</div>
-                <div class="upload-or" data-i18n="studio.upload.or">hoặc</div>
-                <span class="upload-browse" data-i18n="studio.upload.browse">Chọn file</span>
-                <div class="upload-formats" data-i18n="studio.upload.formats">PNG, JPG, WEBP (tối đa 5MB)</div>
-              </div>
-              <div class="upload-preview" id="uploadPreview">
-                <img id="uploadPreviewImg" src="" alt="Preview">
-                <button class="remove-upload" id="removeUpload" title="Remove">✕</button>
-              </div>
+        <!-- TAB: IMAGE -->
+        <div class="panel-section tab-panel" data-panel="image">
+          <div class="panel-section-header">
+            <h3>Upload ảnh tham khảo</h3>
+          </div>
+          <div class="panel-section-body">
+            <div class="upload-zone" id="uploadDropzone">
+              <input type="file" id="imageUpload" accept="image/*" hidden>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <div class="upload-zone-text">Kéo thả ảnh vào đây</div>
+              <div class="upload-zone-or">hoặc</div>
+              <span class="upload-zone-browse">Chọn file</span>
+              <div class="upload-zone-formats">PNG, JPG, WEBP (tối đa 5MB)</div>
+            </div>
+            <div class="upload-preview" id="uploadPreview" style="display:none;">
+              <img id="uploadPreviewImg" src="" alt="Preview">
+              <button class="upload-preview-remove" id="removeUpload" title="Xoá">✕</button>
             </div>
 
-            <div class="form-group">
-              <label class="control-label" data-i18n="studio.idea.label">Mô tả ý tưởng</label>
-              <textarea class="prompt-textarea" id="ideaInput" 
-                data-i18n-placeholder="studio.idea.placeholder"
-                placeholder="Mô tả ý tưởng chỉnh sửa dựa trên ảnh này..." style="min-height:90px;"></textarea>
-            </div>
+            <div class="panel-label">Mô tả ý tưởng</div>
+            <textarea class="prompt-input" id="ideaInput" rows="3"
+              placeholder="Mô tả ý tưởng chỉnh sửa dựa trên ảnh này..."></textarea>
 
-            <div class="form-group">
-              <label class="control-label" data-i18n="studio.text.label">Chữ / slogan tùy chọn</label>
-              <input type="text" class="form-input print-text-input" id="customTextInputImage"
-                data-i18n-placeholder="studio.text.placeholder"
-                placeholder="VD: BLANKUP, tên riêng, câu slogan...">
-            </div>
+            <div class="panel-label">Chữ / slogan (tùy chọn)</div>
+            <input type="text" class="text-input" id="customTextInputImage"
+              placeholder="VD: BLANKUP, tên riêng, câu slogan...">
 
             <button class="generate-btn" id="generateImageBtn">
-              <span class="spinner"></span>
-              <span class="btn-text" data-i18n="studio.generate">🎨 Tạo Design</span>
-              <span class="btn-loading-text" data-i18n="studio.generating">AI đang sáng tạo...</span>
+              <span class="generate-btn-spinner"></span>
+              <svg class="generate-btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span class="generate-btn-text" data-i18n="studio.generate">Tạo Design</span>
+              <span class="generate-btn-loading" data-i18n="studio.generating">AI đang sáng tạo...</span>
             </button>
           </div>
         </div>
 
-        <!-- ===== RIGHT: Preview Panel ===== -->
-        <div class="studio-preview">
-          <div class="preview-header">
-            <span class="preview-title" data-i18n="studio.preview.title">👕 Xem trước</span>
-            <div class="preview-view-toggle">
-              <button class="view-toggle-btn active" data-view="front" data-i18n="studio.front">Trước</button>
-              <button class="view-toggle-btn" data-view="back" data-i18n="studio.back">Sau</button>
-            </div>
+        <!-- TAB: TEMPLATES -->
+        <div class="panel-section tab-panel" data-panel="templates">
+          <div class="panel-section-header">
+            <h3>Mẫu thiết kế có sẵn</h3>
           </div>
-
-          <div class="preview-mockup-area">
-            <!-- Empty state -->
-            <div class="preview-empty" id="previewEmpty">
-              <div class="preview-empty-icon">👕</div>
-              <div class="preview-empty-text" data-i18n="studio.preview.empty">Tạo một design để xem trước tại đây</div>
-            </div>
-
-            <!-- Mockup with design -->
-            <div class="mockup-container" id="mockupContainer" style="display:none;">
-              <canvas class="tshirt-360-canvas" id="tshirt360Canvas" aria-label="3D t-shirt viewer"></canvas>
-              <img class="product-render-3d" id="productRender3d" src="" alt="3D product preview">
-              <canvas class="mockup-3d-canvas" id="mockup3dCanvas" aria-label="3D t-shirt preview"></canvas>
-              <img class="mockup-tshirt" id="mockupTshirt" 
-                src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 360'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f8f8f8'/%3E%3Cstop offset='100%25' stop-color='%23e8e8e8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z' fill='url(%23g)' stroke='%23ddd' stroke-width='1'/%3E%3Cellipse cx='150' cy='52' rx='30' ry='15' fill='none' stroke='%23ddd' stroke-width='1'/%3E%3C/svg%3E" 
-                alt="T-shirt mockup">
-              <div class="mockup-design-overlay" id="mockupDesign"></div>
-            </div>
-          </div>
-
-          <div class="preview-controls">
-            <div class="print-placement-panel">
-              <div class="placement-header">
-                <span data-i18n="studio.placement.title">Vị trí in</span>
-                <button type="button" class="placement-reset" id="placementReset" data-i18n="studio.placement.reset">Reset</button>
-              </div>
-              <div class="placement-help">
-                <span data-i18n="studio.placement.dragHelp">Kéo trực tiếp ảnh hoặc chữ trên áo để đặt vị trí.</span>
-              </div>
-              <div class="placement-mode-toggle" id="placementModeToggle">
-                <button type="button" class="placement-mode-btn active" data-interaction-mode="position" data-i18n="studio.mode.position">Chỉnh vị trí</button>
-                <button type="button" class="placement-mode-btn" data-interaction-mode="rotate" data-i18n="studio.mode.rotate">Xoay áo</button>
-              </div>
-              <div class="quick-placement-actions">
-                <div class="quick-placement-group">
-                  <span data-i18n="studio.placement.image">Anh</span>
-                  <button type="button" class="quick-placement-btn" data-placement-target="image" data-placement-action="smaller">-</button>
-                  <button type="button" class="quick-placement-btn" data-placement-target="image" data-placement-action="larger">+</button>
-                </div>
-                <div class="quick-placement-group">
-                  <span data-i18n="studio.placement.text">Chu</span>
-                  <button type="button" class="quick-placement-btn" data-placement-target="text" data-placement-action="smaller">-</button>
-                  <button type="button" class="quick-placement-btn" data-placement-target="text" data-placement-action="larger">+</button>
-                </div>
-              </div>
-              <div class="placement-grid">
-                <label>
-                  <span data-i18n="studio.placement.x">Ngang</span>
-                  <input type="range" id="printPosX" min="-80" max="80" value="0">
-                </label>
-                <label>
-                  <span data-i18n="studio.placement.y">Dọc</span>
-                  <input type="range" id="printPosY" min="-75" max="45" value="-12">
-                </label>
-                <label>
-                  <span data-i18n="studio.placement.scale">Kích thước</span>
-                  <input type="range" id="printScale" min="20" max="220" value="100">
-                </label>
-              </div>
-              <div class="placement-header placement-subheader">
-                <span data-i18n="studio.text.placement.title">Vị trí chữ</span>
-              </div>
-              <div class="placement-grid">
-                <label>
-                  <span data-i18n="studio.placement.x">Ngang</span>
-                  <input type="range" id="textPosX" min="-80" max="80" value="0">
-                </label>
-                <label>
-                  <span data-i18n="studio.placement.y">Dọc</span>
-                  <input type="range" id="textPosY" min="-75" max="45" value="18">
-                </label>
-                <label>
-                  <span data-i18n="studio.placement.scale">Kích thước</span>
-                  <input type="range" id="textScale" min="30" max="260" value="100">
-                </label>
-              </div>
-            </div>
-
-            <div class="preview-options">
-              <div class="preview-option product-preview-option">
-                <label>Product</label>
-                <div class="product-type-options" id="productTypeOptions">
-                  <button class="product-type-option active" data-product-type="tshirt">T-shirt</button>
-                  <button class="product-type-option" data-product-type="hoodie">Hoodie</button>
-                  <button class="product-type-option" data-product-type="polo">Polo</button>
-                </div>
-              </div>
-              <div class="preview-option">
-                <label data-i18n="studio.color.label">Màu áo</label>
-                <div class="color-options" id="colorOptions">
-                  <button class="color-option active" data-color="#ffffff" style="background:#ffffff;" title="White"></button>
-                  <button class="color-option" data-color="#000000" style="background:#000000;" title="Black"></button>
-                  <button class="color-option" data-color="#1e293b" style="background:#1e293b;" title="Navy"></button>
-                  <button class="color-option" data-color="#6b7280" style="background:#6b7280;" title="Gray"></button>
-                  <button class="color-option" data-color="#dc2626" style="background:#dc2626;" title="Red"></button>
-                  <button class="color-option" data-color="#2563eb" style="background:#2563eb;" title="Blue"></button>
-                  <button class="color-option" data-color="#059669" style="background:#059669;" title="Green"></button>
-                </div>
-              </div>
-
-              <div class="preview-option">
-                <label data-i18n="studio.size.label">Kích cỡ</label>
-                <div class="size-options" id="sizeOptions">
-                  <button class="size-option" data-size="S">S</button>
-                  <button class="size-option active" data-size="M">M</button>
-                  <button class="size-option" data-size="L">L</button>
-                  <button class="size-option" data-size="XL">XL</button>
-                  <button class="size-option" data-size="2XL">2XL</button>
-                </div>
-              </div>
-
-              <div class="preview-option">
-                <label data-i18n="studio.quantity.label">Số lượng</label>
-                <div class="quantity-control">
-                  <button class="qty-btn" id="qtyMinus">−</button>
-                  <input type="number" class="qty-value" id="qtyValue" value="1" min="1" max="100" readonly>
-                  <button class="qty-btn" id="qtyPlus">+</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="preview-actions">
-              <button class="btn btn-primary" id="orderBtn" data-i18n="studio.order" disabled>
-                💵 Đặt hàng (COD)
-              </button>
-              <button class="btn btn-secondary" id="shareDesignBtn" disabled>
-                <span data-i18n="studio.share">Chia sẻ</span>
-              </button>
-              <button class="btn btn-secondary" id="downloadBtn" data-i18n="studio.download" disabled>
-                ⬇️ Tải design
-              </button>
+          <div class="panel-section-body">
+            <div class="templates-grid" id="templatesGrid">
+              <!-- Loaded dynamically -->
             </div>
           </div>
         </div>
+
+        <!-- HISTORY -->
+        <div class="panel-history" id="panelHistory">
+          <div class="panel-history-header" id="historyToggle">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Lịch sử thiết kế</span>
+            <svg class="history-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="panel-history-list" id="historyList">
+            <!-- Loaded from localStorage -->
+          </div>
+        </div>
+      </aside>
+
+      <!-- ===== CENTER: Canvas ===== -->
+      <section class="studio-canvas">
+        <div class="canvas-wrapper" id="canvasWrapper">
+          <!-- Empty state -->
+          <div class="canvas-empty" id="canvasEmpty">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><path d="M20.38 3.46 16 2 12 3.46 8 2 3.62 3.46a2 2 0 0 0-1.34 1.89v13.3a2 2 0 0 0 2.66 1.89L8 19l4-1.46L16 19l4.38-1.46a2 2 0 0 0 1.34-1.89V5.35a2 2 0 0 0-1.34-1.89z"/><line x1="12" y1="2" x2="12" y2="17.54"/></svg>
+            <p>Tạo một design để xem trước tại đây</p>
+          </div>
+
+          <!-- 3D Viewer -->
+          <div class="canvas-viewer" id="canvasViewer" style="display:none;">
+            <canvas class="viewer-canvas" id="tshirt360Canvas" aria-label="3D t-shirt viewer"></canvas>
+            <img class="viewer-fallback-img" id="productRender3d" src="" alt="">
+            <canvas class="viewer-css-fallback" id="mockup3dCanvas"></canvas>
+            <img class="viewer-svg-fallback" id="mockupTshirt"
+              src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 360'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f8f8f8'/%3E%3Cstop offset='100%25' stop-color='%23e8e8e8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z' fill='url(%23g)' stroke='%23ddd' stroke-width='1'/%3E%3Cellipse cx='150' cy='52' rx='30' ry='15' fill='none' stroke='%23ddd' stroke-width='1'/%3E%3C/svg%3E"
+              alt="T-shirt mockup">
+            <div class="viewer-design-overlay" id="mockupDesign"></div>
+          </div>
+        </div>
+
+        <!-- Canvas Controls -->
+        <div class="canvas-controls">
+          <div class="canvas-controls-left">
+            <div class="view-toggle" id="viewToggle">
+              <button class="view-toggle-btn active" data-view="front">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                <span data-i18n="studio.front">Trước</span>
+              </button>
+              <button class="view-toggle-btn" data-view="back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="12" x2="21" y2="12"/></svg>
+                <span data-i18n="studio.back">Sau</span>
+              </button>
+            </div>
+          </div>
+          <div class="canvas-controls-center">
+            <button class="canvas-ctrl-btn" id="placementModeBtn" title="Chế độ kéo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+              <span>Vị trí</span>
+            </button>
+            <button class="canvas-ctrl-btn" id="rotateModeBtn" title="Xoay áo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <span>Xoay</span>
+            </button>
+          </div>
+          <div class="canvas-controls-right">
+            <button class="canvas-ctrl-btn" id="resetViewBtn" title="Reset vị trí">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Placement Controls (visible when design exists) -->
+        <div class="placement-panel" id="placementPanel" style="display:none;">
+          <div class="placement-panel-header">
+            <span>Vị trí in</span>
+            <button class="placement-reset-btn" id="placementReset">Reset</button>
+          </div>
+          <div class="placement-sliders">
+            <div class="placement-slider-group">
+              <label>Ngang (X)</label>
+              <input type="range" id="printPosX" min="-80" max="80" value="0">
+            </div>
+            <div class="placement-slider-group">
+              <label>Dọc (Y)</label>
+              <input type="range" id="printPosY" min="-75" max="45" value="-12">
+            </div>
+            <div class="placement-slider-group">
+              <label>Kích thước</label>
+              <input type="range" id="printScale" min="20" max="220" value="100">
+            </div>
+          </div>
+          <div class="placement-panel-header" style="margin-top:8px;">
+            <span>Vị trí chữ</span>
+          </div>
+          <div class="placement-sliders">
+            <div class="placement-slider-group">
+              <label>Ngang (X)</label>
+              <input type="range" id="textPosX" min="-80" max="80" value="0">
+            </div>
+            <div class="placement-slider-group">
+              <label>Dọc (Y)</label>
+              <input type="range" id="textPosY" min="-75" max="45" value="18">
+            </div>
+            <div class="placement-slider-group">
+              <label>Kích thước</label>
+              <input type="range" id="textScale" min="30" max="260" value="100">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== RIGHT PANEL: Product & Actions ===== -->
+      <aside class="studio-right">
+        <!-- Product Options -->
+        <div class="right-section">
+          <div class="right-section-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2 12 3.46 8 2 3.62 3.46a2 2 0 0 0-1.34 1.89v13.3a2 2 0 0 0 2.66 1.89L8 19l4-1.46L16 19l4.38-1.46a2 2 0 0 0 1.34-1.89V5.35a2 2 0 0 0-1.34-1.89z"/></svg>
+            <span>Sản phẩm</span>
+          </div>
+          <div class="product-type-row" id="productTypeOptions">
+            <button class="product-type-btn active" data-product-type="tshirt">T-Shirt</button>
+            <button class="product-type-btn" data-product-type="hoodie">Hoodie</button>
+            <button class="product-type-btn" data-product-type="polo">Polo</button>
+          </div>
+        </div>
+
+        <!-- Color -->
+        <div class="right-section">
+          <div class="right-section-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+            <span>Màu áo</span>
+          </div>
+          <div class="color-row" id="colorOptions">
+            <button class="color-dot active" data-color="#ffffff" style="background:#ffffff;" title="Trắng"></button>
+            <button class="color-dot" data-color="#000000" style="background:#000000;" title="Đen"></button>
+            <button class="color-dot" data-color="#1e293b" style="background:#1e293b;" title="Navy"></button>
+            <button class="color-dot" data-color="#6b7280" style="background:#6b7280;" title="Xám"></button>
+            <button class="color-dot" data-color="#dc2626" style="background:#dc2626;" title="Đỏ"></button>
+            <button class="color-dot" data-color="#2563eb" style="background:#2563eb;" title="Xanh"></button>
+            <button class="color-dot" data-color="#059669" style="background:#059669;" title="Xanh lá"></button>
+          </div>
+        </div>
+
+        <!-- Size -->
+        <div class="right-section">
+          <div class="right-section-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+            <span>Kích cỡ</span>
+          </div>
+          <div class="size-row" id="sizeOptions">
+            <button class="size-btn" data-size="S">S</button>
+            <button class="size-btn active" data-size="M">M</button>
+            <button class="size-btn" data-size="L">L</button>
+            <button class="size-btn" data-size="XL">XL</button>
+            <button class="size-btn" data-size="2XL">2XL</button>
+          </div>
+        </div>
+
+        <!-- Quantity -->
+        <div class="right-section">
+          <div class="right-section-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Số lượng</span>
+          </div>
+          <div class="qty-row">
+            <button class="qty-btn" id="qtyMinus">−</button>
+            <span class="qty-value" id="qtyValue">1</span>
+            <button class="qty-btn" id="qtyPlus">+</button>
+          </div>
+        </div>
+
+        <!-- Price -->
+        <div class="right-section price-section">
+          <div class="price-row">
+            <span class="price-label">Tổng cộng</span>
+            <span class="price-value" id="totalPrice">250,000₫</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="right-section actions-section">
+          <button class="action-btn action-btn-primary" id="orderBtn" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            <span>Đặt hàng</span>
+          </button>
+          <button class="action-btn" id="downloadBtn" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Tải design</span>
+          </button>
+          <button class="action-btn" id="shareDesignBtn" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            <span>Chia sẻ</span>
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Community Gallery -->
+    <div class="community-section">
+      <div class="community-header">
+        <h2 data-i18n="studio.recent.title">Thiết kế cộng đồng</h2>
+        <p data-i18n="studio.recent.subtitle">Lấy cảm hứng từ các thiết kế của cộng đồng Blankup</p>
       </div>
-
-      <!-- ===== Community Gallery ===== -->
-      <div class="community-section">
-        <div class="community-header">
-          <h2 data-i18n="studio.recent.title">🌟 Thiết kế cộng đồng</h2>
-          <p data-i18n="studio.recent.subtitle">Lấy cảm hứng từ các thiết kế của cộng đồng Blankup</p>
-        </div>
-        <div class="community-grid" id="communityGrid">
-          <!-- Loaded dynamically -->
-        </div>
-      </div>
+      <div class="community-grid" id="communityGrid"></div>
     </div>
   </main>
 
@@ -306,11 +385,10 @@
   <div class="modal-overlay" id="orderModal">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title" data-i18n="order.title">📦 Xác nhận đơn hàng</h3>
+        <h3 class="modal-title" data-i18n="order.title">Xác nhận đơn hàng</h3>
         <button class="modal-close" id="modalClose">✕</button>
       </div>
       <div class="modal-body">
-        <!-- Order Form -->
         <div id="orderFormContent">
           <div class="order-summary" id="orderSummary">
             <div class="order-summary-row">
@@ -331,16 +409,9 @@
             </div>
             <div class="order-summary-row total">
               <span class="label" data-i18n="order.total">Tổng tiền</span>
-              <span class="value" id="orderTotal">200,000đ</span>
+              <span class="value" id="orderTotal">250,000đ</span>
             </div>
           </div>
-
-          <div class="cod-badge">
-            <span class="cod-icon">💵</span>
-            <span class="cod-text" data-i18n="order.payment">Thanh toán khi nhận hàng (COD)</span>
-          </div>
-
-          <div class="order-divider" data-i18n="order.info">Thông tin giao hàng</div>
 
           <div class="payment-method-panel">
             <div class="payment-method-title">Phương thức thanh toán</div>
@@ -356,11 +427,10 @@
                 <span class="payment-method-icon">QR</span>
                 <span>
                   <strong>QR chuyển khoản</strong>
-                  <small>Quét QR từ app ngân hàng, tự điền số tiền và nội dung.</small>
+                  <small>Quét QR từ app ngân hàng.</small>
                 </span>
               </button>
             </div>
-            <div class="payment-method-note" id="paymentMethodNote">Thanh toán khi nhận hàng (COD).</div>
           </div>
 
           <form id="orderForm">
@@ -381,18 +451,17 @@
               <input type="text" class="form-input" id="orderNote">
             </div>
             <button type="submit" class="btn btn-primary btn-lg" style="width:100%;" id="orderSubmitBtn">
-              <span data-i18n="order.submit">✅ Xác nhận đặt hàng</span>
+              <span data-i18n="order.submit">Xác nhận đặt hàng</span>
             </button>
           </form>
         </div>
 
-        <!-- Order Success -->
-        <div class="order-success-content" id="orderSuccess">
+        <div class="order-success-content" id="orderSuccess" style="display:none;">
           <div class="order-success-icon">🎉</div>
           <h3 class="order-success-title" data-i18n="order.success.title">Đặt hàng thành công!</h3>
           <p class="order-success-id" id="orderSuccessId"></p>
           <p class="order-success-note" data-i18n="order.success.note">Chúng tôi sẽ liên hệ xác nhận trong vòng 24 giờ.</p>
-          <div class="bank-transfer-box" id="bankTransferBox">
+          <div class="bank-transfer-box" id="bankTransferBox" style="display:none;">
             <div class="bank-transfer-title">Quét QR chuyển khoản</div>
             <div class="bank-transfer-qr">
               <img id="successQrImage" src="" alt="QR chuyển khoản">
@@ -410,32 +479,27 @@
   </div>
 
   <!-- Auth Required Modal -->
-  <div id="authRequiredModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;">
-    <div style="background:var(--card-bg,#fff);border-radius:20px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,0.25);animation:modalSlideIn 0.35s ease;text-align:center;">
-      <div style="padding:40px 32px 0;">
-        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#ff6b00,#ff8c38);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 24px rgba(255,107,0,0.3);">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-            <polyline points="10 17 15 12 10 7"/>
-            <line x1="15" y1="12" x2="3" y2="12"/>
-          </svg>
-        </div>
-        <h3 style="font-size:1.35rem;font-weight:800;margin:0 0 10px;color:var(--text-primary,#1a1a2e);">Yêu cầu đăng nhập</h3>
-        <p style="font-size:0.95rem;color:var(--text-secondary,#64748b);margin:0 0 8px;line-height:1.6;">Bạn cần đăng nhập hoặc đăng ký tài khoản để sử dụng <strong>AI Studio</strong> và trải nghiệm đầy đủ tính năng.</p>
+  <div id="authRequiredModal" class="auth-modal-overlay" style="display:none;">
+    <div class="auth-modal">
+      <div class="auth-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
       </div>
-      <div style="padding:24px 32px 32px;display:flex;flex-direction:column;gap:12px;">
-        <a href="/login.html?redirect=studio.html" style="display:block;padding:14px 24px;border-radius:12px;background:linear-gradient(135deg,#ff6b00,#e65c00);color:#fff;font-weight:700;font-size:1rem;text-decoration:none;text-align:center;transition:all 0.2s;box-shadow:0 4px 16px rgba(255,107,0,0.3);" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(255,107,0,0.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(255,107,0,0.3)'">
-          Đăng nhập
-        </a>
-        <a href="/register.html?redirect=studio.html" style="display:block;padding:14px 24px;border-radius:12px;border:2px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1a1a2e);font-weight:600;font-size:0.95rem;text-decoration:none;text-align:center;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent,#ff6b00)';this.style.color='var(--accent,#ff6b00)'" onmouseout="this.style.borderColor='var(--border,#e2e8f0)';this.style.color='var(--text-primary,#1a1a2e)'">
-          Đăng ký tài khoản mới
-        </a>
-        <a href="/" style="display:block;padding:10px;text-align:center;color:var(--text-muted,#94a3b8);font-size:0.85rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--text-secondary,#64748b)'" onmouseout="this.style.color='var(--text-muted,#94a3b8)'">
-          Quay lại trang chủ
-        </a>
+      <h3>Yêu cầu đăng nhập</h3>
+      <p>Bạn cần đăng nhập để sử dụng <strong>AI Studio</strong> và trải nghiệm đầy đủ tính năng.</p>
+      <div class="auth-modal-actions">
+        <a href="/login.html?redirect=studio.html" class="auth-modal-btn-primary">Đăng nhập</a>
+        <a href="/login.html?redirect=studio.html&tab=register" class="auth-modal-btn-secondary">Đăng ký tài khoản mới</a>
+        <a href="/" class="auth-modal-link">Quay lại trang chủ</a>
       </div>
     </div>
   </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
 
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
@@ -443,8 +507,7 @@
   <script>
     (function() {
       if (!auth.isLoggedIn()) {
-        var modal = document.getElementById('authRequiredModal');
-        modal.style.display = 'flex';
+        document.getElementById('authRequiredModal').style.display = 'flex';
         document.body.style.overflow = 'hidden';
       }
     })();
@@ -453,6 +516,6 @@
     {"imports":{"three":"/vendor/three/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}
   </script>
   <script type="module" src="js/tshirt-360.js?v=15"></script>
-  <script src="js/studio.js?v=checkout-qr-3"></script>
+  <script src="js/studio.js?v=v2"></script>
 </body>
 </html>

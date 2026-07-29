@@ -1,77 +1,32 @@
-// frontend/js/studio.js
-/**
- * Blankup AI Design Studio - Application Logic
- * Handles AI design generation, mockup preview, ordering, and community gallery
- */
-
+// frontend/js/studio.js — v2 Redesign
 const API_BASE = window.location.origin + '/api';
 
 /* ============================================================
-   TOAST NOTIFICATIONS — lightweight, non-blocking feedback
-   (replaces alert() for routine success/warning/error messages)
+   TOAST NOTIFICATIONS
    ============================================================ */
-let toastContainerEl = null;
-function getToastContainer() {
-  if (toastContainerEl && document.body.contains(toastContainerEl)) return toastContainerEl;
-  toastContainerEl = document.createElement('div');
-  toastContainerEl.className = 'toast-container';
-  toastContainerEl.setAttribute('aria-live', 'polite');
-  document.body.appendChild(toastContainerEl);
-  return toastContainerEl;
-}
-
 function showToast(message, type = 'info', duration = 4200) {
   if (!message) return;
-  const container = getToastContainer();
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<span class="toast-msg"></span><button type="button" class="toast-close" aria-label="Close">✕</button>`;
-  toast.querySelector('.toast-msg').textContent = message;
+  toast.innerHTML = `<span>${message}</span><button type="button" class="toast-close" aria-label="Close">✕</button>`;
   container.appendChild(toast);
-
-  requestAnimationFrame(() => toast.classList.add('show'));
-
-  const remove = () => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 220);
-  };
+  const remove = () => { toast.style.opacity = '0'; toast.style.transform = 'translateX(24px)'; setTimeout(() => toast.remove(), 250); };
   toast.querySelector('.toast-close').addEventListener('click', remove);
   if (duration > 0) setTimeout(remove, duration);
-  return toast;
 }
 
-const BASIC_PRODUCT_COLORS = ['#ffffff', '#000000', '#1e293b', '#6b7280', '#dc2626', '#2563eb', '#059669'];
-const UNIFORM_PRODUCT_PRICE = 10000;
-const BANK_TRANSFER_INFO = {
-  bankId: '970422',
-  bankName: 'MB Bank',
-  accountName: 'LE LY HUY',
-  accountNumber: '0967145402',
-  template: 'compact2',
-};
+/* ============================================================
+   CONSTANTS
+   ============================================================ */
+const PRODUCT_PRICES = { tshirt: 250000, hoodie: 450000, polo: 350000 };
+const PRODUCT_LABELS = { tshirt: 'T-Shirt Custom AI', hoodie: 'Hoodie Custom AI', polo: 'Polo Custom AI' };
+const BANK_TRANSFER_INFO = { bankId: '970422', bankName: 'MB Bank', accountName: 'LE LY HUY', accountNumber: '0967145402', template: 'compact2' };
 
-const PRODUCT_TYPES = {
-  tshirt: {
-    label: 'T-Shirt Custom AI',
-    price: UNIFORM_PRODUCT_PRICE,
-    colors: BASIC_PRODUCT_COLORS,
-    sizes: ['S', 'M', 'L', 'XL', '2XL'],
-  },
-  hoodie: {
-    label: 'Hoodie Custom AI',
-    price: UNIFORM_PRODUCT_PRICE,
-    colors: BASIC_PRODUCT_COLORS,
-    sizes: ['M', 'L', 'XL', '2XL'],
-  },
-  polo: {
-    label: 'Polo Custom AI',
-    price: UNIFORM_PRODUCT_PRICE,
-    colors: BASIC_PRODUCT_COLORS,
-    sizes: ['S', 'M', 'L', 'XL', '2XL'],
-  },
-};
-
-// State
+/* ============================================================
+   STATE
+   ============================================================ */
 const state = {
   currentDesign: null,
   selectedProductType: 'tshirt',
@@ -96,64 +51,48 @@ const state = {
   customTextSides: { front: '', back: '' },
   designProcessVersion: 0,
   viewer3d: null,
+  cssViewer: null,
 };
 
-function getFrontDesignUrl(design = state.currentDesign) {
-  return design?.frontDesignUrl || design?.designUrl || '';
+function getFrontDesignUrl(d = state.currentDesign) { return d?.frontDesignUrl || d?.designUrl || ''; }
+function getBackDesignUrl(d = state.currentDesign) { return d?.backDesignUrl || ''; }
+function getActiveDesignUrl(d = state.currentDesign) {
+  const f = getFrontDesignUrl(d), b = getBackDesignUrl(d);
+  return state.currentView === 'back' ? (b || f) : f;
 }
-
-function getBackDesignUrl(design = state.currentDesign) {
-  return design?.backDesignUrl || '';
-}
-
-function getActiveDesignUrl(design = state.currentDesign) {
-  const front = getFrontDesignUrl(design);
-  const back = getBackDesignUrl(design);
-  return state.currentView === 'back' ? (back || front) : front;
-}
-
 function getPreparedDesignUrl(side = state.currentView) {
-  const front = state.preparedDesignUrls.front || getFrontDesignUrl();
-  const back = state.preparedDesignUrls.back || getBackDesignUrl();
-  return side === 'back' ? (back || front) : front;
+  const f = state.preparedDesignUrls.front || getFrontDesignUrl();
+  const b = state.preparedDesignUrls.back || getBackDesignUrl();
+  return side === 'back' ? (b || f) : f;
 }
-
-function getCompositeCacheKey(designs) {
-  return JSON.stringify({
-    designs,
-    customText: state.customText,
-    customTextSides: state.customTextSides,
-    printPlacement: state.printPlacement,
-    textPlacement: state.textPlacement,
-  });
-}
-
 function getSideCustomText(side = state.currentView) {
   const key = side === 'back' ? 'back' : 'front';
   return state.customTextSides?.[key] || state.currentDesign?.customTextSides?.[key] || state.customText || '';
 }
-
-async function getCompositeDesignsForViewer(designs) {
-  const cacheKey = getCompositeCacheKey(designs);
-  if (state.compositeCacheKey === cacheKey) return state.compositeDesignUrls;
-
-  const [front, back] = await Promise.all([
-    buildCompositePrintUrl(designs.front, 'front'),
-    designs.back ? buildCompositePrintUrl(designs.back, 'back') : Promise.resolve(null),
-  ]);
-  state.compositeCacheKey = cacheKey;
-  state.compositeDesignUrls = { front, back };
-  return state.compositeDesignUrls;
+function getCompositeCacheKey(designs) {
+  return JSON.stringify({ designs, customText: state.customText, customTextSides: state.customTextSides, printPlacement: state.printPlacement, textPlacement: state.textPlacement });
 }
 
+/* ============================================================
+   UTILITY
+   ============================================================ */
+function escapeHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function escapeAttr(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function formatPrice(v) { return v.toLocaleString('vi-VN') + '₫'; }
+function isLightColor(hex) { const c = hex.replace('#', ''); const r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16); return (r * 299 + g * 587 + b * 114) / 1000 > 128; }
+function lightenColor(hex, pct) { const c = hex.replace('#', ''); let r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16); r = Math.min(255, r + Math.round((255 - r) * pct / 100)); g = Math.min(255, g + Math.round((255 - g) * pct / 100)); b = Math.min(255, b + Math.round((255 - b) * pct / 100)); return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`; }
+function darkenColor(hex, pct) { const c = hex.replace('#', ''); let r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16); r = Math.max(0, r - Math.round(r * pct / 100)); g = Math.max(0, g - Math.round(g * pct / 100)); b = Math.max(0, b - Math.round(b * pct / 100)); return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`; }
+function setLoading(btn, loading) { if (!btn) return; btn.classList.toggle('loading', loading); btn.disabled = loading; }
+function formatAiError(data) { if (data?.error) return data.error; if (data?.message) return data.message; return 'AI generation failed. Please try again.'; }
+
+/* ============================================================
+   COMPOSITE DESIGN (canvas overlay for text + image)
+   ============================================================ */
 function loadImageForCanvas(url) {
   return new Promise((resolve, reject) => {
     if (!url) return resolve(null);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img); img.onerror = reject; img.src = url;
   });
 }
 
@@ -161,193 +100,179 @@ async function buildCompositePrintUrl(designUrl, side = state.currentView) {
   const sideText = getSideCustomText(side);
   if (!designUrl && !sideText) return '';
   const size = 1024;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, size, size);
-
-  const imagePlacement = state.printPlacement || { x: 0, y: -12, scale: 1 };
-  const textPlacement = state.textPlacement || { x: 0, y: 18, scale: 1 };
+  const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, size, size);
+  const ip = state.printPlacement || { x: 0, y: -12, scale: 1 };
+  const tp = state.textPlacement || { x: 0, y: 18, scale: 1 };
 
   if (designUrl) {
     try {
       const img = await loadImageForCanvas(designUrl);
       if (img) {
-        const maxW = size * 0.58 * imagePlacement.scale;
-        const maxH = size * 0.58 * imagePlacement.scale;
+        const maxW = size * 0.58 * ip.scale, maxH = size * 0.58 * ip.scale;
         const ratio = Math.min(maxW / img.width, maxH / img.height);
-        const w = img.width * ratio;
-        const h = img.height * ratio;
-        const x = size * (0.5 + imagePlacement.x / 100) - w / 2;
-        const y = size * (0.44 + imagePlacement.y / 100) - h / 2;
+        const w = img.width * ratio, h = img.height * ratio;
+        const x = size * (0.5 + ip.x / 100) - w / 2, y = size * (0.44 + ip.y / 100) - h / 2;
         ctx.drawImage(img, x, y, w, h);
       }
-    } catch (err) {
-      console.warn('Could not composite print image:', err);
-    }
+    } catch (e) { console.warn('Composite print error:', e); }
   }
-
   if (sideText) {
     const text = sideText.toUpperCase();
-    const fontSize = Math.max(34, 82 * textPlacement.scale);
-    const x = size * (0.5 + textPlacement.x / 100);
-    const y = size * (0.5 + textPlacement.y / 100);
-    ctx.font = `900 ${fontSize}px Outfit, Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = Math.max(6, fontSize * 0.12);
-    ctx.strokeStyle = 'rgba(255,255,255,0.94)';
-    ctx.fillStyle = '#111827';
-    ctx.strokeText(text, x, y);
-    ctx.fillText(text, x, y);
+    const fs = Math.max(34, 82 * tp.scale);
+    const x = size * (0.5 + tp.x / 100), y = size * (0.5 + tp.y / 100);
+    ctx.font = `900 ${fs}px Outfit, Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(6, fs * 0.12);
+    ctx.strokeStyle = 'rgba(255,255,255,0.94)'; ctx.fillStyle = '#111827';
+    ctx.strokeText(text, x, y); ctx.fillText(text, x, y);
   }
-
   return canvas.toDataURL('image/png');
 }
 
-async function applyCurrentDesignToViewer() {
-  const designs = {
-    front: state.preparedDesignUrls.front || getFrontDesignUrl(),
-    back: state.preparedDesignUrls.back || getBackDesignUrl(),
-  };
-  state.printDesignUrl = getPreparedDesignUrl();
-  updateOverlayPlacement();
-  const shouldBakeToViewer = state.interactionMode === 'rotate';
-
-  if (!shouldBakeToViewer) {
-    if (window.tshirt360Viewer?.setDesigns) {
-      window.tshirt360Viewer.setDesigns({ front: null, back: null });
-    } else if (window.tshirt360Viewer?.setDesign) {
-      window.tshirt360Viewer.setDesign(null);
-    }
-    updateThreeTexture();
-    return;
-  }
-
-  const viewerDesigns = await getCompositeDesignsForViewer(designs);
-
-  if (window.tshirt360Viewer?.setDesigns) {
-    window.tshirt360Viewer.setDesigns(viewerDesigns);
-    window.tshirt360Viewer.setPlacement?.(state.printPlacement);
-  } else if (window.tshirt360Viewer?.setDesign) {
-    window.tshirt360Viewer.setDesign(viewerDesigns.front || state.printDesignUrl);
-    window.tshirt360Viewer.setPlacement?.(state.printPlacement);
-  }
-  updateThreeTexture();
+async function getCompositeDesignsForViewer(designs) {
+  const key = getCompositeCacheKey(designs);
+  if (state.compositeCacheKey === key) return state.compositeDesignUrls;
+  const [front, back] = await Promise.all([
+    buildCompositePrintUrl(designs.front, 'front'),
+    designs.back ? buildCompositePrintUrl(designs.back, 'back') : Promise.resolve(null),
+  ]);
+  state.compositeCacheKey = key; state.compositeDesignUrls = { front, back };
+  return state.compositeDesignUrls;
 }
 
-function setInteractionMode(mode = 'position') {
-  state.interactionMode = mode === 'rotate' ? 'rotate' : 'position';
-  const mockupContainer = document.getElementById('mockupContainer');
-  mockupContainer?.classList.toggle('interaction-position', state.interactionMode === 'position');
-  mockupContainer?.classList.toggle('interaction-rotate', state.interactionMode === 'rotate');
-  document.querySelectorAll('.placement-mode-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.interactionMode === state.interactionMode);
-  });
-  window.tshirt360Viewer?.setInteractionMode?.(state.interactionMode);
-  if (state.currentDesign || state.printDesignUrl || getSideCustomText()) {
-    applyCurrentDesignToViewer();
-  }
-}
-
-function setActivePlacementLayer(layer = 'image') {
-  state.activePlacementLayer = layer === 'text' ? 'text' : 'image';
-  updateOverlayPlacement();
-}
-
+/* ============================================================
+   DESIGN OVERLAY
+   ============================================================ */
 function updateDesignOverlayForSide() {
-  const designOverlay = document.getElementById('mockupDesign');
-  if (!designOverlay) return;
-
+  const overlay = document.getElementById('mockupDesign');
+  if (!overlay) return;
   const activeUrl = getPreparedDesignUrl();
   const activeText = getSideCustomText();
   if (!activeUrl && !activeText) return;
-
   state.printDesignUrl = activeUrl;
-  designOverlay.innerHTML = [
-    activeUrl ? `<img src="${escapeAttr(activeUrl)}" alt="AI Generated Design" class="mockup-print-design processed-print" draggable="false" style="animation: fadeIn 0.5s ease;">` : '',
+  overlay.innerHTML = [
+    activeUrl ? `<img src="${escapeAttr(activeUrl)}" alt="Design" class="mockup-print-design" draggable="false">` : '',
     activeText ? `<div class="mockup-print-text">${escapeHtml(activeText)}</div>` : '',
-    activeUrl ? '<button type="button" class="placement-resize-handle placement-resize-image" data-placement-target="image" aria-label="Resize design"></button>' : '',
-    activeText ? '<button type="button" class="placement-resize-handle placement-resize-text" data-placement-target="text" aria-label="Resize text"></button>' : '',
   ].join('');
   updateOverlayPlacement();
   updateThreeTexture();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  i18n.init();
-  initTabs();
-  initStyleSelector();
-  initUpload();
-  initProductTypeSelector();
-  initColorPicker();
-  initSizeSelector();
-  initQuantity();
-  initGenerateButtons();
-  initPrintControls();
-  initOrderFlow();
-  initShareDesign();
-  initViewToggle();
-  initThreeViewer();
-  loadCommunityDesigns();
+function updateOverlayPlacement() {
+  const overlay = document.getElementById('mockupDesign');
+  if (!overlay) return;
+  const ip = state.printPlacement || { x: 0, y: -12, scale: 1 };
+  const tp = state.textPlacement || { x: 0, y: 18, scale: 1 };
+  overlay.style.setProperty('--print-x', `${ip.x}%`);
+  overlay.style.setProperty('--print-y', `${ip.y}%`);
+  overlay.style.setProperty('--print-scale', String(ip.scale));
+  overlay.style.setProperty('--text-x', `${tp.x}%`);
+  overlay.style.setProperty('--text-y', `${tp.y}%`);
+  overlay.style.setProperty('--text-scale', String(tp.scale));
+}
 
-  // Load design from query parameters (e.g. from 3D Showroom)
-  const urlParams = new URLSearchParams(window.location.search);
-  const designUrlParam = urlParams.get('designUrl');
-  if (designUrlParam) {
-    const titleParam = urlParams.get('prompt') || urlParams.get('title') || '3D Showroom Artwork';
-    const styleParam = urlParams.get('style') || 'abstract';
-    const authorParam = urlParams.get('author') || 'Community';
-    const productMockupUrlParam = urlParams.get('productMockupUrl') || '';
-    const productMockupBlankParam = urlParams.get('productMockupBlank') === 'true';
-    const backDesignUrlParam = urlParams.get('backDesignUrl') || '';
-    setTimeout(() => {
-      if (typeof window.loadCommunityDesign === 'function') {
-        window.loadCommunityDesign(designUrlParam, titleParam, styleParam, authorParam, productMockupUrlParam, productMockupBlankParam, backDesignUrlParam);
-      }
-    }, 300);
+function updateThreeTexture() {
+  try { window.tshirt360Viewer?.setDesign?.(state.printDesignUrl || null); } catch (e) { /* ignore */ }
+}
+
+async function applyCurrentDesignToViewer() {
+  const designs = { front: state.preparedDesignUrls.front || getFrontDesignUrl(), back: state.preparedDesignUrls.back || getBackDesignUrl() };
+  state.printDesignUrl = getPreparedDesignUrl();
+  updateOverlayPlacement();
+  if (state.interactionMode !== 'rotate') {
+    try { window.tshirt360Viewer?.setDesign?.(null); } catch (e) { /* */ }
+    updateThreeTexture(); return;
   }
-});
+  const vd = await getCompositeDesignsForViewer(designs);
+  try { window.tshirt360Viewer?.setDesign?.(vd.front || state.printDesignUrl); } catch (e) { /* */ }
+  updateThreeTexture();
+}
+
+function setInteractionMode(mode = 'position') {
+  state.interactionMode = mode === 'rotate' ? 'rotate' : 'position';
+  document.getElementById('placementModeBtn')?.classList.toggle('active', state.interactionMode === 'position');
+  document.getElementById('rotateModeBtn')?.classList.toggle('active', state.interactionMode === 'rotate');
+  const viewer = document.getElementById('canvasViewer');
+  viewer?.classList.toggle('interaction-position', state.interactionMode === 'position');
+  viewer?.classList.toggle('interaction-rotate', state.interactionMode === 'rotate');
+  try { window.tshirt360Viewer?.setInteractionMode?.(state.interactionMode); } catch (e) { /* */ }
+  if (state.currentDesign || state.printDesignUrl || getSideCustomText()) applyCurrentDesignToViewer();
+}
+
+function setActivePlacementLayer(layer = 'image') { state.activePlacementLayer = layer === 'text' ? 'text' : 'image'; updateOverlayPlacement(); }
+
+/* ============================================================
+   MOCKUP SVG & COLOR
+   ============================================================ */
+function updateMockupColor() {
+  const mockup = document.getElementById('mockupTshirt');
+  if (!mockup) return;
+  const c = state.selectedColor, light = isLightColor(c);
+  const sc = light ? '#ddd' : 'rgba(255,255,255,0.2)';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${lightenColor(c, 10)}"/><stop offset="100%" stop-color="${darkenColor(c, 10)}"/></linearGradient></defs><path d="M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z" fill="url(#g)" stroke="${sc}" stroke-width="1"/><ellipse cx="150" cy="52" rx="30" ry="15" fill="none" stroke="${sc}" stroke-width="1"/></svg>`;
+  mockup.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  updateThreeTexture();
+  try { window.tshirt360Viewer?.setColor?.(c); } catch (e) { /* */ }
+}
+
+/* ============================================================
+   MOCK DESIGN (SVG fallback)
+   ============================================================ */
+function generateMockDesign(style, prompt) {
+  const colors = ['#ff6b00', '#e65c00', '#ff8c38', '#cc5200', '#ff4500', '#ff7f50', '#ffa500', '#ff6347'];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const words = String(prompt || 'DESIGN').split(/\s+/).slice(0, 4);
+  const lines = [];
+  for (let i = 0; i < words.length && i < 3; i++) {
+    lines.push(`<text x="512" y="${420 + i * 60}" text-anchor="middle" font-family="Outfit,Arial,sans-serif" font-size="42" font-weight="800" fill="${color}" opacity="0.9">${escapeHtml(words[i])}</text>`);
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#111827" rx="24"/><circle cx="512" cy="380" r="120" fill="${color}" opacity="0.15"/><circle cx="512" cy="380" r="80" fill="${color}" opacity="0.25"/><circle cx="512" cy="380" r="40" fill="${color}" opacity="0.4"/>${lines.join('')}</svg>`;
+  return { success: true, designId: 'draft-' + Date.now(), designUrl: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), prompt, style, author: 'AI Draft', isDraft: true };
+}
+
+/* ============================================================
+   SHOW DESIGN ON MOCKUP
+   ============================================================ */
+async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlank) {
+  const viewer = document.getElementById('canvasViewer');
+  const empty = document.getElementById('canvasEmpty');
+  if (viewer) viewer.style.display = 'flex';
+  if (empty) empty.style.display = 'none';
+
+  state.preparedDesignUrls = { front: null, back: null };
+  if (designUrl) state.preparedDesignUrls.front = designUrl;
+  if (state.currentDesign?.backDesignUrl) state.preparedDesignUrls.back = state.currentDesign.backDesignUrl;
+
+  updateDesignOverlayForSide();
+  applyCurrentDesignToViewer();
+  document.getElementById('placementPanel')?.style && (document.getElementById('placementPanel').style.display = 'block');
+  updatePrice();
+  updateActionButtons(true);
+}
 
 /* ============================================================
    TAB SWITCHING
    ============================================================ */
 function initTabs() {
-  const tabs = document.querySelectorAll('.studio-tab');
-  const contents = document.querySelectorAll('.tab-content');
-
-  tabs.forEach(tab => {
+  document.querySelectorAll('.toolbar-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-      const targetTab = tab.dataset.tab;
-
-      tabs.forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.toolbar-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       tab.classList.add('active');
-
-      contents.forEach(c => {
-        c.classList.remove('active');
-        if (c.id === `tabContent${capitalize(targetTab)}`) {
-          c.classList.add('active');
-        }
-      });
+      const panel = document.querySelector(`.tab-panel[data-panel="${tab.dataset.tab}"]`);
+      if (panel) panel.classList.add('active');
     });
   });
-}
-
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 /* ============================================================
    STYLE SELECTOR
    ============================================================ */
 function initStyleSelector() {
-  const styleGrid = document.getElementById('styleGrid');
-  if (!styleGrid) return;
-
-  styleGrid.querySelectorAll('.style-option').forEach(btn => {
+  document.querySelectorAll('.style-chip').forEach(btn => {
     btn.addEventListener('click', () => {
-      styleGrid.querySelectorAll('.style-option').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.style-chip').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedStyle = btn.dataset.style;
     });
@@ -363,69 +288,21 @@ function initUpload() {
   const preview = document.getElementById('uploadPreview');
   const previewImg = document.getElementById('uploadPreviewImg');
   const removeBtn = document.getElementById('removeUpload');
-
   if (!dropzone || !fileInput) return;
 
-  // Click to upload
   dropzone.addEventListener('click', () => fileInput.click());
-
-  // Drag & drop
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.classList.add('dragover');
-  });
-
-  dropzone.addEventListener('dragleave', () => {
-    dropzone.classList.remove('dragover');
-  });
-
-  dropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      showToast(i18n.t('studio.upload.invalidType'), 'warning');
-      return;
-    }
-    handleFile(file);
-  });
-
-  // File input change
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      showToast(i18n.t('studio.upload.invalidType'), 'warning');
-      fileInput.value = '';
-      return;
-    }
-    handleFile(file);
-  });
-
-  // Remove upload
-  if (removeBtn) {
-    removeBtn.addEventListener('click', () => {
-      state.uploadedFile = null;
-      preview.classList.remove('show');
-      dropzone.style.display = 'block';
-      fileInput.value = '';
-    });
-  }
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+  if (removeBtn) removeBtn.addEventListener('click', () => { state.uploadedFile = null; preview.style.display = 'none'; dropzone.style.display = 'flex'; fileInput.value = ''; });
 
   function handleFile(file) {
-    if (file.size > 5 * 1024 * 1024) {
-      showToast(i18n.t('studio.upload.tooLarge'), 'warning');
-      return;
-    }
-
+    if (!file.type.startsWith('image/')) { showToast('Chỉ chấp nhận file ảnh!', 'warning'); return; }
+    if (file.size > 5 * 1024 * 1024) { showToast('File quá lớn (tối đa 5MB)!', 'warning'); return; }
     state.uploadedFile = file;
     const reader = new FileReader();
-    reader.onload = (e) => {
-      previewImg.src = e.target.result;
-      preview.classList.add('show');
-      dropzone.style.display = 'none';
-    };
+    reader.onload = e => { previewImg.src = e.target.result; preview.style.display = 'block'; dropzone.style.display = 'none'; };
     reader.readAsDataURL(file);
   }
 }
@@ -436,44 +313,14 @@ function initUpload() {
 function initColorPicker() {
   const options = document.getElementById('colorOptions');
   if (!options) return;
-
-  options.querySelectorAll('.color-option').forEach(btn => {
-    btn.onclick = () => {
-      options.querySelectorAll('.color-option').forEach(b => b.classList.remove('active'));
+  options.querySelectorAll('.color-dot').forEach(btn => {
+    btn.addEventListener('click', () => {
+      options.querySelectorAll('.color-dot').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedColor = btn.dataset.color;
       updateMockupColor();
-    };
+    });
   });
-}
-
-function updateMockupColor() {
-  const mockup = document.getElementById('mockupTshirt');
-  if (!mockup) return;
-
-  // Generate SVG with selected color
-  const color = state.selectedColor;
-  const isLight = isLightColor(color);
-  const strokeColor = isLight ? '#ddd' : 'rgba(255,255,255,0.2)';
-  const gradientLight = lightenColor(color, 10);
-  const gradientDark = darkenColor(color, 10);
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 360">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${gradientLight}"/>
-          <stop offset="100%" stop-color="${gradientDark}"/>
-        </linearGradient>
-      </defs>
-      <path d="M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z" fill="url(#g)" stroke="${strokeColor}" stroke-width="1"/>
-      <ellipse cx="150" cy="52" rx="30" ry="15" fill="none" stroke="${strokeColor}" stroke-width="1"/>
-    </svg>
-  `;
-
-  mockup.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-  updateThreeTexture();
-  window.tshirt360Viewer?.setColor(color);
 }
 
 /* ============================================================
@@ -482,436 +329,18 @@ function updateMockupColor() {
 function initProductTypeSelector() {
   const options = document.getElementById('productTypeOptions');
   if (!options) return;
-
-  options.querySelectorAll('.product-type-option').forEach(btn => {
+  options.querySelectorAll('.product-type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const productType = btn.dataset.productType;
-      if (!PRODUCT_TYPES[productType] || productType === state.selectedProductType) return;
-
-      state.selectedProductType = productType;
-      options.querySelectorAll('.product-type-option').forEach(b => b.classList.remove('active'));
+      const pt = btn.dataset.productType;
+      if (!PRODUCT_PRICES[pt] || pt === state.selectedProductType) return;
+      state.selectedProductType = pt;
+      options.querySelectorAll('.product-type-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      syncProductOptions();
-      window.tshirt360Viewer?.setProductType(productType);
+      updatePrice();
+      updateMockupColor();
       if (state.currentDesign?.designUrl) applyCurrentDesignToViewer();
     });
   });
-
-  syncProductOptions();
-}
-
-function syncProductOptions() {
-  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
-
-  if (!product.colors.includes(state.selectedColor)) {
-    state.selectedColor = product.colors[0];
-  }
-
-  if (!product.sizes.includes(state.selectedSize)) {
-    state.selectedSize = product.sizes[0];
-  }
-
-  renderColorOptions(product.colors);
-  renderSizeOptions(product.sizes);
-  updateMockupColor();
-}
-
-function renderColorOptions(colors) {
-  const options = document.getElementById('colorOptions');
-  if (!options) return;
-
-  const colorNames = {
-    '#ffffff': 'White',
-    '#000000': 'Black',
-    '#1e293b': 'Navy',
-    '#6b7280': 'Gray',
-    '#374151': 'Charcoal',
-    '#dc2626': 'Red',
-    '#2563eb': 'Blue',
-    '#1e3a5f': 'Deep navy',
-    '#8b0000': 'Maroon',
-    '#059669': 'Green',
-  };
-
-  options.innerHTML = colors.map(color => `
-    <button class="color-option${color === state.selectedColor ? ' active' : ''}"
-      data-color="${color}"
-      style="background:${color};"
-      title="${colorNames[color] || color}"></button>
-  `).join('');
-
-  initColorPicker();
-}
-
-function renderSizeOptions(sizes) {
-  const options = document.getElementById('sizeOptions');
-  if (!options) return;
-
-  options.innerHTML = sizes.map(size => `
-    <button class="size-option${size === state.selectedSize ? ' active' : ''}" data-size="${size}">${size}</button>
-  `).join('');
-
-  initSizeSelector();
-}
-
-/* ============================================================
-   3D T-SHIRT VIEWER
-   ============================================================ */
-function initThreeViewer() {
-  initCss3DViewer();
-}
-
-function initCss3DViewer() {
-  const canvas = document.getElementById('mockup3dCanvas');
-  const container = document.getElementById('mockupContainer');
-  if (!container) return;
-
-  let dragging = false;
-  let lastX = 0;
-  let lastY = 0;
-  let tiltX = 0;
-  let tiltY = 0;
-
-  function setTilt(x, y) {
-    tiltX = Math.max(-18, Math.min(18, x));
-    tiltY = Math.max(-38, Math.min(38, y));
-    container.style.setProperty('--tilt-x', `${tiltX}deg`);
-    container.style.setProperty('--tilt-y', `${tiltY}deg`);
-  }
-
-  state.cssViewer = {
-    showFront: () => setTilt(-3, 4),
-    showBack: () => setTilt(-3, -38),
-  };
-
-  container.addEventListener('pointerdown', (event) => {
-    if (state.interactionMode === 'position') return;
-    dragging = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    container.setPointerCapture(event.pointerId);
-  });
-
-  container.addEventListener('pointermove', (event) => {
-    if (state.interactionMode === 'position') return;
-    if (!dragging) return;
-    const dx = event.clientX - lastX;
-    const dy = event.clientY - lastY;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    setTilt(tiltX - dy * 0.18, tiltY + dx * 0.18);
-  });
-
-  container.addEventListener('pointerup', () => {
-    dragging = false;
-  });
-
-  container.addEventListener('pointercancel', () => {
-    dragging = false;
-  });
-
-  container.addEventListener('dblclick', () => setTilt(0, 0));
-  setTilt(-3, 4);
-
-  if (canvas) canvas.style.display = 'none';
-}
-
-function initThreeViewerEnabled() {
-  const canvas = document.getElementById('mockup3dCanvas');
-  const container = document.getElementById('mockupContainer');
-  if (!canvas || !container || !window.THREE) return;
-
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-  camera.position.set(0, 0.15, 8);
-
-  const group = new THREE.Group();
-  scene.add(group);
-
-  const frontGeometry = createCurvedShirtGeometry(1);
-  const backGeometry = createCurvedShirtGeometry(-1);
-  const frontTexture = createThreeTexture(true, true);
-  const backTexture = createThreeTexture(true, false);
-
-  const frontMaterial = new THREE.MeshStandardMaterial({
-    map: frontTexture,
-    transparent: true,
-    alphaTest: 0.02,
-    roughness: 0.72,
-    metalness: 0.02,
-    side: THREE.FrontSide,
-  });
-
-  const backMaterial = frontMaterial.clone();
-  backMaterial.map = backTexture;
-  backMaterial.side = THREE.BackSide;
-
-  const frontMesh = new THREE.Mesh(frontGeometry, frontMaterial);
-  const backMesh = new THREE.Mesh(backGeometry, backMaterial);
-  frontMesh.rotation.x = -0.02;
-  backMesh.rotation.x = -0.02;
-  const shirtCore = createShirtCore();
-  group.add(shirtCore, frontMesh, backMesh);
-
-  const collar = new THREE.Mesh(
-    new THREE.TorusGeometry(0.43, 0.055, 12, 48, Math.PI),
-    new THREE.MeshStandardMaterial({ color: state.selectedColor, roughness: 0.78 })
-  );
-  collar.position.set(0, 1.82, 0.13);
-  collar.rotation.z = Math.PI;
-  group.add(collar);
-
-  const shadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.4, 0.45),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.08 })
-  );
-  shadow.position.set(0, -2.32, -0.45);
-  shadow.scale.x = 0.9;
-  group.add(shadow);
-
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xd7dee8, 2.2));
-  const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
-  keyLight.position.set(2.5, 4, 5);
-  scene.add(keyLight);
-  const rimLight = new THREE.DirectionalLight(0xfff1dc, 1.2);
-  rimLight.position.set(-3, 2, 3);
-  scene.add(rimLight);
-
-  state.viewer3d = {
-    renderer,
-    scene,
-    camera,
-    group,
-    frontTexture,
-    backTexture,
-    frontMesh,
-    backMesh,
-    shirtCore,
-    collar,
-    targetRotationY: 0,
-    targetRotationX: 0,
-    isDragging: false,
-    lastX: 0,
-    lastY: 0,
-  };
-
-  container.classList.add('has-3d');
-  bindThreeViewerControls(canvas);
-  resizeThreeViewer();
-  updateThreeTexture();
-  animateThreeViewer();
-
-  window.addEventListener('resize', resizeThreeViewer);
-}
-
-function bindThreeViewerControls(canvas) {
-  const viewer = state.viewer3d;
-  if (!viewer) return;
-
-  canvas.addEventListener('pointerdown', (event) => {
-    viewer.isDragging = true;
-    viewer.lastX = event.clientX;
-    viewer.lastY = event.clientY;
-    canvas.setPointerCapture(event.pointerId);
-  });
-
-  canvas.addEventListener('pointermove', (event) => {
-    if (!viewer.isDragging) return;
-    const dx = event.clientX - viewer.lastX;
-    const dy = event.clientY - viewer.lastY;
-    viewer.lastX = event.clientX;
-    viewer.lastY = event.clientY;
-    viewer.targetRotationY += dx * 0.01;
-    viewer.targetRotationX = Math.max(-0.35, Math.min(0.35, viewer.targetRotationX + dy * 0.006));
-  });
-
-  const finishDrag = () => {
-    viewer.isDragging = false;
-    syncViewerSideFromRotation();
-  };
-
-  canvas.addEventListener('pointerup', finishDrag);
-  canvas.addEventListener('pointercancel', finishDrag);
-
-  canvas.addEventListener('dblclick', () => setViewerSide('front'));
-}
-
-function resizeThreeViewer() {
-  const canvas = document.getElementById('mockup3dCanvas');
-  const viewer = state.viewer3d;
-  if (!canvas || !viewer) return;
-
-  const rect = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.floor(rect.width));
-  const height = Math.max(1, Math.floor(rect.height));
-  viewer.renderer.setSize(width, height, false);
-  viewer.camera.aspect = width / height;
-  viewer.camera.updateProjectionMatrix();
-}
-
-function animateThreeViewer() {
-  const viewer = state.viewer3d;
-  if (!viewer) return;
-
-  viewer.group.rotation.y += (viewer.targetRotationY - viewer.group.rotation.y) * 0.08;
-  viewer.group.rotation.x += (viewer.targetRotationX - viewer.group.rotation.x) * 0.08;
-  viewer.group.rotation.z = Math.sin(Date.now() * 0.0012) * 0.01;
-  viewer.renderer.render(viewer.scene, viewer.camera);
-  requestAnimationFrame(animateThreeViewer);
-}
-
-function updateThreeTexture() {
-  const viewer = state.viewer3d;
-  if (!viewer) return;
-
-  viewer.frontTexture.image = createShirtTexture(true, true);
-  viewer.backTexture.image = createShirtTexture(true, false);
-  viewer.frontTexture.needsUpdate = true;
-  viewer.backTexture.needsUpdate = true;
-  viewer.shirtCore.material.color.set(state.selectedColor);
-  viewer.collar.material.color.set(state.selectedColor);
-}
-
-function createThreeTexture(includeDesign, isFront = true) {
-  const texture = new THREE.CanvasTexture(createShirtTexture(includeDesign, isFront));
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
-}
-
-function createCurvedShirtGeometry(side) {
-  const geometry = new THREE.PlaneGeometry(4.3, 5.15, 52, 64);
-  const position = geometry.attributes.position;
-  for (let i = 0; i < position.count; i++) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-    const curve = side * (0.16 - 0.075 * x * x + 0.018 * Math.cos(y * 2.4));
-    position.setZ(i, curve);
-  }
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-function createShirtCore() {
-  const shape = new THREE.Shape();
-  shape.moveTo(-0.65, 1.78);
-  shape.lineTo(-1.08, 1.62);
-  shape.lineTo(-1.78, 1.18);
-  shape.lineTo(-2.06, 0.28);
-  shape.lineTo(-1.34, 0.08);
-  shape.lineTo(-1.18, 0.88);
-  shape.lineTo(-1.18, -2.18);
-  shape.lineTo(1.18, -2.18);
-  shape.lineTo(1.18, 0.88);
-  shape.lineTo(1.34, 0.08);
-  shape.lineTo(2.06, 0.28);
-  shape.lineTo(1.78, 1.18);
-  shape.lineTo(1.08, 1.62);
-  shape.lineTo(0.65, 1.78);
-  shape.quadraticCurveTo(0, 1.38, -0.65, 1.78);
-
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: 0.28,
-    bevelEnabled: true,
-    bevelSize: 0.055,
-    bevelThickness: 0.045,
-    bevelSegments: 3,
-  });
-  geometry.translate(0, 0, -0.14);
-
-  return new THREE.Mesh(
-    geometry,
-    new THREE.MeshStandardMaterial({
-      color: state.selectedColor,
-      roughness: 0.82,
-      metalness: 0,
-    })
-  );
-}
-
-function createShirtTexture(includeDesign = true, isFront = true) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 900;
-  canvas.height = 1080;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  ctx.save();
-  const scaleX = canvas.width / 300;
-  const scaleY = canvas.height / 360;
-  ctx.scale(scaleX, scaleY);
-
-  const shirtPath = new Path2D('M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z');
-  const color = state.selectedColor;
-  const gradient = ctx.createLinearGradient(0, 40, 0, 330);
-  gradient.addColorStop(0, lightenColor(color, 12));
-  gradient.addColorStop(1, darkenColor(color, 9));
-  ctx.fillStyle = gradient;
-  ctx.fill(shirtPath);
-  ctx.strokeStyle = isLightColor(color) ? '#d9dee7' : 'rgba(255,255,255,0.22)';
-  ctx.lineWidth = 1.2;
-  ctx.stroke(shirtPath);
-
-  ctx.beginPath();
-  ctx.ellipse(150, 52, 30, 15, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = isLightColor(color) ? '#d9dee7' : 'rgba(255,255,255,0.25)';
-  ctx.stroke();
-  ctx.restore();
-
-  if (includeDesign) drawThreeDesign(ctx, canvas, isFront ? 'front' : 'back');
-  return canvas;
-}
-
-function drawThreeDesign(ctx, canvas, side = state.currentView) {
-  const sideText = getSideCustomText(side);
-  if (!state.printDesignUrl && !sideText) return;
-  const placement = state.printPlacement || { x: 0, y: -12, scale: 1 };
-
-  if (state.printDesignUrl && !drawThreeDesign.cache) drawThreeDesign.cache = {};
-  if (state.printDesignUrl && drawThreeDesign.cache.src !== state.printDesignUrl) {
-    const design = new Image();
-    drawThreeDesign.cache = { src: state.printDesignUrl, image: design, loaded: false };
-    design.onload = () => {
-      drawThreeDesign.cache.loaded = true;
-      updateThreeTexture();
-    };
-    design.src = state.printDesignUrl;
-    return;
-  }
-
-  const centerX = canvas.width * (0.5 + placement.x / 100);
-  const centerY = canvas.height * (0.38 + placement.y / 100);
-  const textPlacement = state.textPlacement || { x: 0, y: 18, scale: 1 };
-
-  ctx.save();
-  ctx.globalAlpha = 0.96;
-  const cached = drawThreeDesign.cache;
-  if (state.printDesignUrl && cached?.loaded) {
-    const img = cached.image;
-    const maxW = 300 * placement.scale;
-    const maxH = 270 * placement.scale;
-    const ratio = Math.min(maxW / img.width, maxH / img.height);
-    const w = img.width * ratio;
-    const h = img.height * ratio;
-    ctx.drawImage(img, centerX - w / 2, centerY - h / 2, w, h);
-  }
-  if (sideText) {
-    const fontSize = Math.max(26, 50 * textPlacement.scale);
-    const textX = canvas.width * (0.5 + textPlacement.x / 100);
-    const textY = canvas.height * (0.46 + textPlacement.y / 100);
-    ctx.font = `900 ${fontSize}px Outfit, Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = Math.max(4, fontSize * 0.12);
-    ctx.strokeStyle = isLightColor(state.selectedColor) ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.55)';
-    ctx.fillStyle = isLightColor(state.selectedColor) ? '#111827' : '#ffffff';
-    ctx.strokeText(sideText.toUpperCase(), textX, textY);
-    ctx.fillText(sideText.toUpperCase(), textX, textY);
-  }
-  ctx.restore();
 }
 
 /* ============================================================
@@ -920,572 +349,226 @@ function drawThreeDesign(ctx, canvas, side = state.currentView) {
 function initSizeSelector() {
   const options = document.getElementById('sizeOptions');
   if (!options) return;
-
-  options.querySelectorAll('.size-option').forEach(btn => {
-    btn.onclick = () => {
-      options.querySelectorAll('.size-option').forEach(b => b.classList.remove('active'));
+  options.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      options.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.selectedSize = btn.dataset.size;
-    };
+    });
   });
 }
 
 /* ============================================================
-   QUANTITY CONTROL
+   QUANTITY
    ============================================================ */
 function initQuantity() {
-  const minusBtn = document.getElementById('qtyMinus');
-  const plusBtn = document.getElementById('qtyPlus');
-  const qtyInput = document.getElementById('qtyValue');
-
-  if (!minusBtn || !plusBtn || !qtyInput) return;
-
-  minusBtn.addEventListener('click', () => {
-    if (state.quantity > 1) {
-      state.quantity--;
-      qtyInput.value = state.quantity;
-    }
-  });
-
-  plusBtn.addEventListener('click', () => {
-    if (state.quantity < 100) {
-      state.quantity++;
-      qtyInput.value = state.quantity;
-    }
-  });
+  const minus = document.getElementById('qtyMinus');
+  const plus = document.getElementById('qtyPlus');
+  const display = document.getElementById('qtyValue');
+  if (!minus || !plus || !display) return;
+  minus.addEventListener('click', () => { if (state.quantity > 1) { state.quantity--; display.textContent = state.quantity; updatePrice(); } });
+  plus.addEventListener('click', () => { if (state.quantity < 100) { state.quantity++; display.textContent = state.quantity; updatePrice(); } });
 }
 
 /* ============================================================
-   PRINT TEXT + PLACEMENT
+   PRICE
    ============================================================ */
-function initPrintControls() {
-  const textInputs = [
-    document.getElementById('customTextInput'),
-    document.getElementById('customTextInputImage'),
-  ].filter(Boolean);
-  const xInput = document.getElementById('printPosX');
-  const yInput = document.getElementById('printPosY');
-  const scaleInput = document.getElementById('printScale');
-  const textXInput = document.getElementById('textPosX');
-  const textYInput = document.getElementById('textPosY');
-  const textScaleInput = document.getElementById('textScale');
-  const resetBtn = document.getElementById('placementReset');
-  const quickPlacementBtns = document.querySelectorAll('.quick-placement-btn');
-  const modeBtns = document.querySelectorAll('.placement-mode-btn');
-  const mockupContainer = document.getElementById('mockupContainer');
-  const designOverlay = document.getElementById('mockupDesign');
-
-  textInputs.forEach(input => {
-    input.addEventListener('input', () => {
-      state.customText = input.value.trim();
-      textInputs.forEach(other => {
-        if (other !== input) other.value = input.value;
-      });
-      state.compositeCacheKey = '';
-      updateDesignOverlayForSide();
-      applyCurrentDesignToViewer();
-    });
-  });
-
-  [xInput, yInput, scaleInput].forEach(input => {
-    if (!input) return;
-    input.addEventListener('input', () => {
-      setActivePlacementLayer('image');
-      state.printPlacement = {
-        x: Number(xInput?.value || 0),
-        y: Number(yInput?.value || -12),
-        scale: Number(scaleInput?.value || 100) / 100,
-      };
-      state.compositeCacheKey = '';
-      updateOverlayPlacement();
-      applyCurrentDesignToViewer();
-    });
-  });
-
-  [textXInput, textYInput, textScaleInput].forEach(input => {
-    if (!input) return;
-    input.addEventListener('input', () => {
-      setActivePlacementLayer('text');
-      state.textPlacement = {
-        x: Number(textXInput?.value || 0),
-        y: Number(textYInput?.value || 18),
-        scale: Number(textScaleInput?.value || 100) / 100,
-      };
-      state.compositeCacheKey = '';
-      updateOverlayPlacement();
-      applyCurrentDesignToViewer();
-    });
-  });
-
-  if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-      state.printPlacement = { x: 0, y: -12, scale: 1 };
-      state.textPlacement = { x: 0, y: 18, scale: 1 };
-      if (xInput) xInput.value = '0';
-      if (yInput) yInput.value = '-12';
-      if (scaleInput) scaleInput.value = '100';
-      if (textXInput) textXInput.value = '0';
-      if (textYInput) textYInput.value = '18';
-      if (textScaleInput) textScaleInput.value = '100';
-      state.compositeCacheKey = '';
-      updateOverlayPlacement();
-      applyCurrentDesignToViewer();
-    });
-  }
-
-  quickPlacementBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.placementTarget;
-      setActivePlacementLayer(target === 'text' ? 'text' : 'image');
-      const direction = btn.dataset.placementAction === 'larger' ? 1 : -1;
-      const step = target === 'text' ? 0.12 : 0.1;
-      if (target === 'text') {
-        const nextScale = Math.max(0.3, Math.min(2.6, state.textPlacement.scale + direction * step));
-        state.textPlacement = { ...state.textPlacement, scale: nextScale };
-        if (textScaleInput) textScaleInput.value = String(Math.round(nextScale * 100));
-      } else {
-        const nextScale = Math.max(0.2, Math.min(2.2, state.printPlacement.scale + direction * step));
-        state.printPlacement = { ...state.printPlacement, scale: nextScale };
-        if (scaleInput) scaleInput.value = String(Math.round(nextScale * 100));
-      }
-      state.compositeCacheKey = '';
-      updateOverlayPlacement();
-      applyCurrentDesignToViewer();
-    });
-  });
-
-  modeBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      setInteractionMode(btn.dataset.interactionMode);
-    });
-  });
-
-  if (designOverlay && mockupContainer) {
-    let dragging = false;
-    let resizing = false;
-    let startX = 0;
-    let startY = 0;
-    let startPlacement = { ...state.printPlacement };
-    let dragLayer = 'image';
-    let startDistance = 1;
-
-    designOverlay.addEventListener('pointerdown', (event) => {
-      if (state.interactionMode !== 'position') return;
-      const target = event.target;
-      const resizeHandle = target.closest?.('.placement-resize-handle');
-      const draggableLayer = target.closest?.('.mockup-print-design, .mockup-print-text');
-      if (!resizeHandle && !draggableLayer) return;
-
-      dragLayer = resizeHandle?.dataset.placementTarget || (target.closest('.mockup-print-text') ? 'text' : 'image');
-      setActivePlacementLayer(dragLayer);
-      dragging = true;
-      resizing = Boolean(resizeHandle);
-      mockupContainer.classList.add('is-positioning-print');
-      mockupContainer.classList.toggle('is-resizing-print', resizing);
-      startX = event.clientX;
-      startY = event.clientY;
-      startPlacement = dragLayer === 'text' ? { ...state.textPlacement } : { ...state.printPlacement };
-      const rect = mockupContainer.getBoundingClientRect();
-      const center = getPlacementPixelCenter(rect, dragLayer, startPlacement);
-      startDistance = Math.max(24, Math.hypot(event.clientX - center.x, event.clientY - center.y));
-      designOverlay.setPointerCapture(event.pointerId);
-      event.preventDefault();
-      event.stopPropagation();
-    });
-
-    designOverlay.addEventListener('pointermove', (event) => {
-      if (!dragging) return;
-      const rect = mockupContainer.getBoundingClientRect();
-      if (resizing) {
-        const center = getPlacementPixelCenter(rect, dragLayer, startPlacement);
-        const distance = Math.max(24, Math.hypot(event.clientX - center.x, event.clientY - center.y));
-        const ratio = distance / startDistance;
-        const minScale = dragLayer === 'text' ? 0.3 : 0.2;
-        const maxScale = dragLayer === 'text' ? 2.6 : 2.2;
-        const nextScale = Math.max(minScale, Math.min(maxScale, startPlacement.scale * ratio));
-        if (dragLayer === 'text') {
-          state.textPlacement = { ...state.textPlacement, scale: nextScale };
-          if (textScaleInput) textScaleInput.value = String(Math.round(nextScale * 100));
-        } else {
-          state.printPlacement = { ...state.printPlacement, scale: nextScale };
-          if (scaleInput) scaleInput.value = String(Math.round(nextScale * 100));
-        }
-      } else {
-        const dx = ((event.clientX - startX) / rect.width) * 100;
-        const dy = ((event.clientY - startY) / rect.height) * 100;
-        const nextX = Math.max(-80, Math.min(80, startPlacement.x + dx));
-        const nextY = Math.max(-75, Math.min(45, startPlacement.y + dy));
-        if (dragLayer === 'text') {
-          state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
-          if (textXInput) textXInput.value = String(Math.round(nextX));
-          if (textYInput) textYInput.value = String(Math.round(nextY));
-        } else {
-          state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
-          if (xInput) xInput.value = String(Math.round(nextX));
-          if (yInput) yInput.value = String(Math.round(nextY));
-        }
-      }
-      state.compositeCacheKey = '';
-      updateOverlayPlacement();
-      applyCurrentDesignToViewer();
-      event.preventDefault();
-      event.stopPropagation();
-    });
-
-    const stopDrag = (event) => {
-      dragging = false;
-      resizing = false;
-      mockupContainer.classList.remove('is-positioning-print');
-      mockupContainer.classList.remove('is-resizing-print');
-      event?.stopPropagation?.();
-    };
-    designOverlay.addEventListener('pointerup', stopDrag);
-    designOverlay.addEventListener('pointercancel', stopDrag);
-  }
-
-  document.addEventListener('keydown', (event) => {
-    const activeTag = document.activeElement?.tagName?.toLowerCase();
-    if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
-    if (state.interactionMode !== 'position') return;
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-    const step = event.shiftKey ? 5 : 1;
-    const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
-    const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
-    nudgePlacement(state.activePlacementLayer, dx, dy);
-    event.preventDefault();
-  });
-
-  setInteractionMode(state.interactionMode);
-  updateOverlayPlacement();
-}
-
-function getPlacementPixelCenter(rect, layer, placement) {
-  const baseY = layer === 'text' ? 0.46 : 0.4;
-  return {
-    x: rect.left + rect.width * (0.5 + placement.x / 100),
-    y: rect.top + rect.height * (baseY + placement.y / 100),
-  };
-}
-
-function nudgePlacement(layer, dx, dy) {
-  const xInput = document.getElementById(layer === 'text' ? 'textPosX' : 'printPosX');
-  const yInput = document.getElementById(layer === 'text' ? 'textPosY' : 'printPosY');
-  if (layer === 'text') {
-    const nextX = Math.max(-80, Math.min(80, state.textPlacement.x + dx));
-    const nextY = Math.max(-75, Math.min(45, state.textPlacement.y + dy));
-    state.textPlacement = { ...state.textPlacement, x: nextX, y: nextY };
-    if (xInput) xInput.value = String(Math.round(nextX));
-    if (yInput) yInput.value = String(Math.round(nextY));
-  } else {
-    const nextX = Math.max(-80, Math.min(80, state.printPlacement.x + dx));
-    const nextY = Math.max(-75, Math.min(45, state.printPlacement.y + dy));
-    state.printPlacement = { ...state.printPlacement, x: nextX, y: nextY };
-    if (xInput) xInput.value = String(Math.round(nextX));
-    if (yInput) yInput.value = String(Math.round(nextY));
-  }
-  state.compositeCacheKey = '';
-  updateOverlayPlacement();
-  applyCurrentDesignToViewer();
-}
-
-function updateOverlayPlacement() {
-  const designOverlay = document.getElementById('mockupDesign');
-  const mockupContainer = document.getElementById('mockupContainer');
-  if (!designOverlay) return;
-  const placement = state.printPlacement || { x: 0, y: -12, scale: 1 };
-  const textPlacement = state.textPlacement || { x: 0, y: 18, scale: 1 };
-  designOverlay.style.setProperty('--print-x', `${placement.x}%`);
-  designOverlay.style.setProperty('--print-y', `${placement.y}%`);
-  designOverlay.style.setProperty('--print-scale', String(placement.scale));
-  designOverlay.style.setProperty('--text-x', `${textPlacement.x}%`);
-  designOverlay.style.setProperty('--text-y', `${textPlacement.y}%`);
-  designOverlay.style.setProperty('--text-scale', String(textPlacement.scale));
-  designOverlay.classList.toggle('active-image', state.activePlacementLayer !== 'text');
-  designOverlay.classList.toggle('active-text', state.activePlacementLayer === 'text');
-  designOverlay.querySelector('.mockup-print-design')?.classList.toggle('is-selected', state.activePlacementLayer !== 'text');
-  designOverlay.querySelector('.mockup-print-text')?.classList.toggle('is-selected', state.activePlacementLayer === 'text');
-  mockupContainer?.classList.toggle('has-custom-text', Boolean(state.customText));
-  mockupContainer?.classList.toggle('is-ai-generating', Boolean(state.isGeneratingAi));
+function updatePrice() {
+  const price = PRODUCT_PRICES[state.selectedProductType] || 250000;
+  const total = price * state.quantity;
+  const el = document.getElementById('totalPrice');
+  if (el) el.textContent = formatPrice(total);
 }
 
 /* ============================================================
-   VIEW TOGGLE (Front/Back)
+   ACTION BUTTONS
    ============================================================ */
-function initViewToggle() {
-  const toggleBtns = document.querySelectorAll('.view-toggle-btn');
-  toggleBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      toggleBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.currentView = btn.dataset.view;
-      setViewerSide(state.currentView);
-    });
-  });
+function updateActionButtons(enabled) {
+  document.getElementById('orderBtn').disabled = !enabled;
+  document.getElementById('downloadBtn').disabled = !enabled;
+  document.getElementById('shareDesignBtn').disabled = !enabled;
 }
 
-function setViewerSide(side) {
-  const viewer = state.viewer3d;
-  state.currentView = side;
-  document.querySelectorAll('.view-toggle-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === side);
-  });
-
-  if (window.tshirt360Viewer) {
-    window.tshirt360Viewer.showSide(side);
-  } else if (viewer) {
-    const turns = Math.round(viewer.targetRotationY / (Math.PI * 2));
-    viewer.targetRotationY = turns * Math.PI * 2 + (side === 'back' ? Math.PI : 0);
-    viewer.targetRotationX = 0;
-  } else if (state.cssViewer) {
-    if (side === 'back') state.cssViewer.showBack();
-    else state.cssViewer.showFront();
-  }
-
-  if (state.currentDesign) {
-    updateDesignOverlayForSide();
-    applyCurrentDesignToViewer();
-  }
-}
-
-function syncViewerSideFromRotation() {
-  const viewer = state.viewer3d;
-  if (!viewer) return;
-  const normalized = ((viewer.targetRotationY % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  const side = normalized > Math.PI / 2 && normalized < Math.PI * 1.5 ? 'back' : 'front';
-  state.currentView = side;
-  document.querySelectorAll('.view-toggle-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === side);
-  });
+function updateShareButton() {
+  const btn = document.getElementById('shareDesignBtn');
+  if (!btn) return;
+  const canShare = state.currentDesign?.designId && !state.currentDesign?.isDraft && !state.currentDesign?.designId?.startsWith('community-') && !state.currentDesign?.designId?.startsWith('text-only-');
+  btn.disabled = !canShare;
 }
 
 /* ============================================================
-   AI DESIGN GENERATION
+   PROMPT ENHANCE (NEW)
    ============================================================ */
-function initGenerateButtons() {
-  const promptBtn = document.getElementById('generatePromptBtn');
-  const imageBtn = document.getElementById('generateImageBtn');
+async function enhancePrompt() {
+  const input = document.getElementById('promptInput');
+  const btn = document.getElementById('promptEnhanceBtn');
+  if (!input || !btn) return;
+  const prompt = input.value.trim();
+  if (!prompt) { showToast('Nhập prompt trước khi enhance!', 'warning'); return; }
 
-  if (promptBtn) {
-    promptBtn.addEventListener('click', () => generateFromPrompt());
-  }
-
-  if (imageBtn) {
-    imageBtn.addEventListener('click', () => generateFromImage());
-  }
-}
-
-function normalizeSideSearchText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .toLowerCase();
-}
-
-function cleanDraftSidePrompt(segment, side) {
-  const text = normalizeSideSearchText(segment);
-  const sidePattern = side === 'back'
-    ? /\b(?:mat\s*sau|phia\s*sau|sau\s*lung|lung\s*ao|sau\s*ao|sau|back)\b/g
-    : /\b(?:mat\s*truoc|phia\s*truoc|truoc\s*ao|truoc|tru c|tr c|front)\b/g;
-  const cleaned = text
-    .replace(sidePattern, ' ')
-    .replace(/\b(?:in|o|tren|vao|cho|phan|mau\s*ao|ao\s*thun|ao|thiet\s*ke|hinh|graphic|artwork|print)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
-    .trim();
-  return normalizeDraftLandmarkIdea(cleaned);
-}
-
-function normalizeDraftLandmarkIdea(idea) {
-  const normalized = normalizeSideSearchText(idea);
-  const parts = [];
-  if (/\b(lang bac|l ng b c|lang chu tich ho chi minh|ho chi minh mausoleum)\b/.test(normalized)) {
-    parts.push('Ho Chi Minh Mausoleum landmark');
-  }
-  if (/\b(dinh doc lap|dinh c l p|dinh thong nhat|independence palace)\b/.test(normalized)) {
-    parts.push('Independence Palace Saigon landmark');
-  }
-  if (/\b(hoa sen|lotus|sen)\b/.test(normalized)) {
-    parts.push('Vietnamese lotus flower');
-  }
-  return parts.length ? `${parts.join(' with ')} illustration` : idea;
-}
-
-function cleanSideTextPrompt(segment, side) {
-  const text = normalizeSideSearchText(segment);
-  const sidePattern = side === 'back'
-    ? /\b(?:mat\s*sau|phia\s*sau|sau\s*lung|lung\s*ao|sau\s*ao|sau|back)\b/g
-    : /\b(?:mat\s*truoc|phia\s*truoc|truoc\s*ao|truoc|tru c|tr c|front)\b/g;
-  return text
-    .replace(/\b(?:in|them|viet|chu|text|lettering|slogan|cau chu|dong chu|o|tren|vao|cho|phan)\b/g, ' ')
-    .replace(sidePattern, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[,;:\-\s]+|[,;:\-\s]+$/g, '')
-    .trim()
-    .slice(0, 80);
-}
-
-function extractPromptTextSides(prompt) {
-  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
-  const textSides = { front: '', back: '' };
-  segments.forEach((segment) => {
-    const searchable = normalizeSideSearchText(segment);
-    const wantsText = /\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable);
-    if (!wantsText) return;
-    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front|truoc|tru c|tr c)\b/.test(searchable);
-    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back|sau)\b/.test(searchable);
-    if (hasFront) textSides.front = cleanSideTextPrompt(segment, 'front') || textSides.front;
-    if (hasBack) textSides.back = cleanSideTextPrompt(segment, 'back') || textSides.back;
-  });
-  return textSides.front || textSides.back ? textSides : null;
-}
-
-function addDraftSideIdea(ideas, idea) {
-  const clean = String(idea || '').trim();
-  if (!clean) return;
-  const key = normalizeSideSearchText(clean);
-  if (!ideas.some((existing) => normalizeSideSearchText(existing) === key)) {
-    ideas.push(clean);
-  }
-}
-
-function extractDraftPrintSides(prompt) {
-  const segments = String(prompt || '').split(/[,;.\n]+/).map(part => part.trim()).filter(Boolean);
-  const sideIdeas = { front: [], back: [] };
-  segments.forEach((segment) => {
-    const searchable = normalizeSideSearchText(segment);
-    if (/\b(chu|text|lettering|slogan|cau chu|dong chu|viet)\b/.test(searchable)) return;
-    const hasFront = /\b(mat truoc|phia truoc|truoc ao|in truoc|o truoc|tren truoc|front)\b/.test(searchable)
-      || /\btruoc\b/.test(searchable)
-      || /\btru c\b/.test(searchable)
-      || /\btr c\b/.test(searchable);
-    const hasBack = /\b(mat sau|phia sau|sau ao|sau lung|lung ao|in sau|o sau|tren sau|back)\b/.test(searchable)
-      || /\bsau\b/.test(searchable);
-    if (hasFront) addDraftSideIdea(sideIdeas.front, cleanDraftSidePrompt(segment, 'front'));
-    if (hasBack) addDraftSideIdea(sideIdeas.back, cleanDraftSidePrompt(segment, 'back'));
-  });
-  if (sideIdeas.back.length && !sideIdeas.front.length && segments.length > 1) {
-    const frontSegment = segments.find((segment) => {
-      const searchable = normalizeSideSearchText(segment);
-      return !(/\b(mat sau|phia sau|sau ao|sau lung|lung ao|back|sau)\b/.test(searchable));
-    });
-    if (frontSegment) addDraftSideIdea(sideIdeas.front, cleanDraftSidePrompt(frontSegment, 'front'));
-  }
-  const sides = {
-    front: sideIdeas.front.join(' and '),
-    back: sideIdeas.back.join(' and '),
-  };
-  return sides.front || sides.back ? sides : null;
-}
-
-async function showInstantDraftDesign(prompt, style = state.selectedStyle) {
-  const draftSides = extractDraftPrintSides(prompt);
-  const promptTextSides = extractPromptTextSides(prompt);
-  state.customTextSides = promptTextSides || { front: '', back: '' };
-  const textOnly = Boolean(promptTextSides && !draftSides);
-  const draftDesign = textOnly
-    ? {
-      success: true,
-      designId: 'text-only-' + Date.now(),
-      designUrl: '',
-      frontDesignUrl: '',
-      prompt,
-      style,
-      author: auth.user?.fullName || auth.user?.username || '',
-    }
-    : generateMockDesign(style, draftSides?.front || prompt);
-  draftDesign.provider = 'instant-draft';
-  draftDesign.isDraft = true;
-  draftDesign.frontDesignUrl = draftDesign.designUrl;
-  if (draftSides?.back) {
-    const backDraft = generateMockDesign(style, draftSides.back);
-    draftDesign.backDesignUrl = backDraft.designUrl;
-    draftDesign.printSides = {
-      front: draftSides.front || prompt,
-      back: draftSides.back,
-    };
-  }
-  if (promptTextSides) {
-    draftDesign.customTextSides = promptTextSides;
-  }
-  state.currentDesign = draftDesign;
-  state.isGeneratingAi = true;
-  setActivePlacementLayer('image');
-  await showDesignOnMockup(draftDesign.designUrl);
-  updateOverlayPlacement();
-  return draftDesign;
-}
-
-async function generateFromPrompt() {
-  const prompt = document.getElementById('promptInput')?.value?.trim();
-  if (!prompt) {
-    showToast(i18n.currentLang === 'vi' ? 'Vui lòng nhập mô tả thiết kế!' : 'Please enter a design description!', 'warning');
-    return;
-  }
-
-  const btn = document.getElementById('generatePromptBtn');
-  updateShareButton(false);
-  setLoading(btn, true);
-  const draftDesign = await showInstantDraftDesign(prompt, state.selectedStyle);
-  if (draftDesign.designId?.startsWith('text-only-')) {
-    state.isGeneratingAi = false;
-    updateOverlayPlacement();
-    setLoading(btn, false);
-    return;
-  }
-
-  const requestBody = {
-    prompt,
-    style: state.selectedStyle,
-    customText: state.customText,
-    author: auth.user?.fullName || auth.user?.username || '',
-  };
+  btn.classList.add('enhancing');
+  btn.disabled = true;
 
   try {
     const response = await fetch(`${API_BASE}/ai-design/generate`, {
       method: 'POST',
-      headers: auth.getAuthHeaders(),
-      body: JSON.stringify(requestBody),
+      headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
+      body: JSON.stringify({ prompt, style: state.selectedStyle, enhanceOnly: true }),
     });
-
     const data = await response.json();
-    if (!response.ok || data.success === false) {
-      throw new Error(formatAiError(data));
+    if (data.enhancedPrompt) {
+      input.value = data.enhancedPrompt;
+      state.customText = '';
+      showToast('Prompt đã được AI tối ưu!', 'success');
+    } else {
+      showToast('Không thể enhance prompt. Thử lại sau.', 'warning');
     }
-
-    if (data.success && data.designUrl) {
-      state.currentDesign = data;
-      state.customTextSides = data.customTextSides || state.customTextSides || { front: '', back: '' };
-      state.isGeneratingAi = false;
-      await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
-      updateShareButton(true);
-    }
-  } catch (err) {
-    state.isGeneratingAi = false;
-    updateOverlayPlacement();
-    if (err.message && err.message !== 'Failed to fetch') {
-      showToast(err.message, 'error', 7000);
-      console.warn('AI generation failed:', err.message);
-      setLoading(btn, false);
-      return;
-    }
-    console.warn('API unavailable, keeping instant draft design');
+  } catch (e) {
+    // Client-side fallback: simple enhancement
+    const enhanced = prompt.charAt(0).toUpperCase() + prompt.slice(1) + ', high quality, detailed, professional artwork, t-shirt design, centered composition, clean background';
+    input.value = enhanced;
+    showToast('Prompt đã được tối ưu (offline mode)', 'info');
   }
 
+  btn.classList.remove('enhancing');
+  btn.disabled = false;
+}
+
+/* ============================================================
+   DESIGN HISTORY (NEW - localStorage)
+   ============================================================ */
+const HISTORY_KEY = 'blankup_design_history';
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+}
+function saveToHistory(design) {
+  if (!design || design.isDraft) return;
+  const history = getHistory();
+  const entry = {
+    id: design.designId || 'design-' + Date.now(),
+    prompt: design.prompt || '',
+    style: design.style || 'minimalist',
+    designUrl: design.designUrl || '',
+    frontDesignUrl: design.frontDesignUrl || '',
+    backDesignUrl: design.backDesignUrl || '',
+    timestamp: Date.now(),
+  };
+  history.unshift(entry);
+  if (history.length > 20) history.length = 20;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  renderHistory();
+}
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (!list) return;
+  const history = getHistory();
+  if (history.length === 0) { list.innerHTML = '<div style="padding:8px 12px;font-size:0.78rem;color:var(--s-text-muted);">Chưa có thiết kế nào</div>'; return; }
+  list.innerHTML = history.map(h => {
+    const time = new Date(h.timestamp);
+    const timeStr = time.toLocaleDateString('vi-VN') + ' ' + time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="history-item" data-id="${escapeAttr(h.id)}">
+      <img class="history-item-thumb" src="${escapeAttr(h.designUrl || h.frontDesignUrl)}" alt="">
+      <div class="history-item-info">
+        <div class="history-item-prompt">${escapeHtml(h.prompt || 'Untitled')}</div>
+        <div class="history-item-time">${timeStr}</div>
+      </div>
+      <button class="history-item-delete" title="Xoá">✕</button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.history-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.history-item-delete')) return;
+      const id = item.dataset.id;
+      const entry = history.find(h => h.id === id);
+      if (entry) {
+        state.currentDesign = { success: true, designId: entry.id, designUrl: entry.designUrl, frontDesignUrl: entry.frontDesignUrl || entry.designUrl, backDesignUrl: entry.backDesignUrl, prompt: entry.prompt, style: entry.style, author: 'History' };
+        showDesignOnMockup(state.currentDesign.designUrl);
+        const promptInput = document.getElementById('promptInput');
+        if (promptInput && entry.prompt) promptInput.value = entry.prompt;
+        showToast('Đã khôi phục thiết kế', 'success');
+      }
+    });
+  });
+
+  list.querySelectorAll('.history-item-delete').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = btn.closest('.history-item');
+      const id = item?.dataset.id;
+      if (!id) return;
+      const h = getHistory().filter(x => x.id !== id);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+      renderHistory();
+    });
+  });
+}
+
+function initHistory() {
+  document.getElementById('historyToggle')?.addEventListener('click', () => {
+    document.getElementById('panelHistory')?.classList.toggle('open');
+  });
+  renderHistory();
+}
+
+/* ============================================================
+   AI GENERATION - PROMPT
+   ============================================================ */
+function initGenerateButtons() {
+  document.getElementById('generatePromptBtn')?.addEventListener('click', generateFromPrompt);
+  document.getElementById('generateImageBtn')?.addEventListener('click', generateFromImage);
+  document.getElementById('promptEnhanceBtn')?.addEventListener('click', enhancePrompt);
+}
+
+async function generateFromPrompt() {
+  const prompt = document.getElementById('promptInput')?.value?.trim();
+  if (!prompt) { showToast('Vui lòng nhập mô tả thiết kế!', 'warning'); return; }
+  const btn = document.getElementById('generatePromptBtn');
+  updateActionButtons(false);
+  setLoading(btn, true);
+
+  const draft = generateMockDesign(state.selectedStyle, prompt);
+  draft.isDraft = true;
+  state.currentDesign = draft;
+  state.isGeneratingAi = true;
+  await showDesignOnMockup(draft.designUrl);
+
+  try {
+    const resp = await fetch(`${API_BASE}/ai-design/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
+      body: JSON.stringify({ prompt, style: state.selectedStyle, customText: state.customText, author: auth.user?.fullName || auth.user?.username || '' }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.success === false) throw new Error(formatAiError(data));
+    if (data.success && data.designUrl) {
+      state.currentDesign = data;
+      state.customTextSides = data.customTextSides || state.customTextSides;
+      state.isGeneratingAi = false;
+      await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      updateShareButton();
+      saveToHistory(data);
+    }
+  } catch (e) {
+    state.isGeneratingAi = false;
+    if (e.message && e.message !== 'Failed to fetch') {
+      showToast(e.message, 'error', 7000);
+      setLoading(btn, false); return;
+    }
+    console.warn('API unavailable, keeping draft');
+  }
   state.isGeneratingAi = false;
-  updateOverlayPlacement();
   setLoading(btn, false);
 }
 
+/* ============================================================
+   AI GENERATION - IMAGE
+   ============================================================ */
 async function generateFromImage() {
-  if (!state.uploadedFile) {
-    showToast(i18n.currentLang === 'vi' ? 'Vui lòng upload ảnh!' : 'Please upload an image!', 'warning');
-    return;
-  }
-
+  if (!state.uploadedFile) { showToast('Vui lòng upload ảnh!', 'warning'); return; }
   const idea = document.getElementById('ideaInput')?.value?.trim() || '';
   const btn = document.getElementById('generateImageBtn');
-  updateShareButton(false);
+  updateActionButtons(false);
   setLoading(btn, true);
 
   try {
@@ -1496,659 +579,270 @@ async function generateFromImage() {
     formData.append('customText', state.customText);
     formData.append('author', auth.user?.fullName || auth.user?.username || '');
 
-    const response = await fetch(`${API_BASE}/ai-design/generate-from-image`, {
+    const resp = await fetch(`${API_BASE}/ai-design/generate-from-image`, {
       method: 'POST',
-      headers: {
-        Authorization: auth.token ? `Bearer ${auth.token}` : '',
-      },
+      headers: { Authorization: auth.token ? `Bearer ${auth.token}` : '' },
       body: formData,
     });
-
-    const data = await response.json();
-    if (!response.ok || data.success === false) {
-      throw new Error(formatAiError(data));
-    }
-
+    const data = await resp.json();
+    if (!resp.ok || data.success === false) throw new Error(formatAiError(data));
     if (data.success && data.designUrl) {
       state.currentDesign = data;
       showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
-      updateShareButton(true);
+      updateShareButton();
+      saveToHistory(data);
     }
-  } catch (err) {
-    if (err.message && err.message !== 'Failed to fetch') {
-      showToast(err.message, 'error', 7000);
-      console.warn('AI generation from image failed:', err.message);
-      setLoading(btn, false);
-      return;
+  } catch (e) {
+    if (e.message && e.message !== 'Failed to fetch') {
+      showToast(e.message, 'error', 7000);
+      setLoading(btn, false); return;
     }
-    console.warn('API unavailable, using mock design');
-    const mockDesign = generateMockDesign('abstract', 'Image remix');
-    state.currentDesign = mockDesign;
-    showDesignOnMockup(mockDesign.designUrl);
-    updateShareButton(false);
+    const mock = generateMockDesign('abstract', 'Image remix');
+    state.currentDesign = mock;
+    showDesignOnMockup(mock.designUrl);
   }
-
   setLoading(btn, false);
 }
 
-function formatAiError(data) {
-  const base = data?.error || (i18n.currentLang === 'vi'
-    ? 'AI tạo ảnh thất bại. Vui lòng kiểm tra API key hoặc billing.'
-    : 'AI image generation failed. Please check the API key or billing.');
-  const details = Array.isArray(data?.providerErrors) && data.providerErrors.length
-    ? `\n\n${data.providerErrors.join('\n')}`
-    : '';
-  return `${base}${details}`;
-}
-
-function setLoading(btn, loading) {
-  if (!btn) return;
-  if (loading) {
-    btn.classList.add('loading');
-    btn.disabled = true;
-  } else {
-    btn.classList.remove('loading');
-    btn.disabled = false;
-  }
-}
-
-async function showDesignOnMockup(designUrl, productMockupUrl = null, productMockupBlank = false) {
-  const emptyState = document.getElementById('previewEmpty');
-  const mockupContainer = document.getElementById('mockupContainer');
-  const designOverlay = document.getElementById('mockupDesign');
-  const productRender = document.getElementById('productRender3d');
-  const orderBtn = document.getElementById('orderBtn');
-  const downloadBtn = document.getElementById('downloadBtn');
-
-  if (emptyState) emptyState.style.display = 'none';
-  if (mockupContainer) {
-    mockupContainer.style.display = 'flex';
-    requestAnimationFrame(() => window.tshirt360Viewer?.resize());
-  }
-  setInteractionMode('position');
-
-  if (productRender && mockupContainer) {
-    const hasGltfViewer = Boolean(document.getElementById('tshirt360Canvas'));
-    if (productMockupUrl && !hasGltfViewer) {
-      productRender.src = productMockupUrl;
-      productRender.dataset.sourceUrl = productMockupUrl;
-      mockupContainer.classList.add('has-product-render');
-      mockupContainer.classList.toggle('design-baked-in', !productMockupBlank);
-    } else {
-      productRender.removeAttribute('src');
-      mockupContainer.classList.remove('has-product-render');
-      mockupContainer.classList.remove('design-baked-in');
-    }
-  }
-
-  const rawFrontUrl = getFrontDesignUrl(state.currentDesign) || designUrl;
-  const rawBackUrl = getBackDesignUrl(state.currentDesign);
-  state.preparedDesignUrls = { front: rawFrontUrl, back: rawBackUrl || null };
-  state.printDesignUrl = getPreparedDesignUrl();
-
-  if (designOverlay) {
-    updateDesignOverlayForSide();
-    applyCurrentDesignToViewer();
-    preparePrintDesigns(designOverlay);
-  }
-
-  if (orderBtn) orderBtn.disabled = false;
-  if (downloadBtn) downloadBtn.disabled = false;
-  updateShareButton();
-
-  updateMockupColor();
-}
-
-function removeProductMockupBackground(imageUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const size = 1024;
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      canvas.width = size;
-      canvas.height = size;
-      ctx.drawImage(img, 0, 0, size, size);
-
-      const imageData = ctx.getImageData(0, 0, size, size);
-      const data = imageData.data;
-      const labels = new Int32Array(size * size);
-      const queue = new Int32Array(size * size);
-      const corner = [data[0], data[1], data[2]];
-      const tolerance = 12;
-      let head = 0;
-      let tail = 0;
-
-      function isBackground(pixel) {
-        const index = pixel * 4;
-        return Math.max(
-          Math.abs(data[index] - corner[0]),
-          Math.abs(data[index + 1] - corner[1]),
-          Math.abs(data[index + 2] - corner[2])
-        ) < tolerance;
-      }
-
-      function addBackground(pixel) {
-        if (labels[pixel] || !isBackground(pixel)) return;
-        labels[pixel] = -1;
-        queue[tail++] = pixel;
-      }
-
-      for (let x = 0; x < size; x++) {
-        addBackground(x);
-        addBackground((size - 1) * size + x);
-      }
-      for (let y = 0; y < size; y++) {
-        addBackground(y * size);
-        addBackground(y * size + size - 1);
-      }
-
-      while (head < tail) {
-        const pixel = queue[head++];
-        const x = pixel % size;
-        const y = Math.floor(pixel / size);
-        if (x > 0) addBackground(pixel - 1);
-        if (x < size - 1) addBackground(pixel + 1);
-        if (y > 0) addBackground(pixel - size);
-        if (y < size - 1) addBackground(pixel + size);
-      }
-
-      for (let pixel = 0; pixel < labels.length; pixel++) {
-        if (labels[pixel] === -1) data[pixel * 4 + 3] = 0;
-      }
-
-      let component = 0;
-      let largestComponent = 0;
-      let largestCount = 0;
-      const componentSizes = [];
-      const componentBounds = [];
-
-      for (let pixel = 0; pixel < labels.length; pixel++) {
-        if (labels[pixel] || data[pixel * 4 + 3] === 0) continue;
-        component++;
-        head = 0;
-        tail = 0;
-        let count = 0;
-        let minX = size;
-        let minY = size;
-        let maxX = 0;
-        let maxY = 0;
-        labels[pixel] = component;
-        queue[tail++] = pixel;
-
-        while (head < tail) {
-          const current = queue[head++];
-          const x = current % size;
-          const y = Math.floor(current / size);
-          count++;
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x);
-          maxY = Math.max(maxY, y);
-          const neighbors = [current - 1, current + 1, current - size, current + size];
-          for (const next of neighbors) {
-            if (next < 0 || next >= labels.length || labels[next] || data[next * 4 + 3] === 0) continue;
-            if ((next === current - 1 && x === 0) || (next === current + 1 && x === size - 1)) continue;
-            labels[next] = component;
-            queue[tail++] = next;
-          }
-        }
-
-        componentSizes[component] = count;
-        componentBounds[component] = { minX, minY, maxX, maxY };
-        if (count > largestCount) {
-          largestCount = count;
-          largestComponent = component;
-        }
-      }
-
-      if (!largestComponent) return reject(new Error('No shirt subject detected'));
-      const bounds = componentBounds[largestComponent];
-      for (let pixel = 0; pixel < labels.length; pixel++) {
-        if (labels[pixel] !== largestComponent) data[pixel * 4 + 3] = 0;
-      }
-
-      const padding = 18;
-      const cropX = Math.max(0, bounds.minX - padding);
-      const cropY = Math.max(0, bounds.minY - padding);
-      const cropWidth = Math.min(size - cropX, bounds.maxX - bounds.minX + padding * 2 + 1);
-      const cropHeight = Math.min(size - cropY, bounds.maxY - bounds.minY + padding * 2 + 1);
-      ctx.putImageData(imageData, 0, 0);
-      const cropped = document.createElement('canvas');
-      cropped.width = cropWidth;
-      cropped.height = cropHeight;
-      cropped.getContext('2d').drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-      resolve(cropped.toDataURL('image/png'));
-    };
-    img.onerror = () => reject(new Error('Mockup image could not be loaded'));
-    img.src = imageUrl;
+/* ============================================================
+   VIEW TOGGLE (Front/Back)
+   ============================================================ */
+function initViewToggle() {
+  document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.currentView = btn.dataset.view;
+      setViewerSide(state.currentView);
+    });
   });
 }
 
-async function prepareDesignImage(url) {
-  if (!url || url.startsWith('data:image/svg+xml')) return url;
-  try {
-    return await removeLightImageBackground(url);
-  } catch (err) {
-    console.warn('Could not process design background:', err);
-    return url;
-  }
+function setViewerSide(side) {
+  state.currentView = side;
+  document.querySelectorAll('.view-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === side));
+  try { window.tshirt360Viewer?.showSide?.(side); } catch (e) { /* */ }
+  if (state.cssViewer) { side === 'back' ? state.cssViewer.showBack() : state.cssViewer.showFront(); }
+  if (state.currentDesign) { updateDesignOverlayForSide(); applyCurrentDesignToViewer(); }
 }
 
-async function preparePrintDesigns(designOverlay) {
-  if (!designOverlay) return;
-
-  const processVersion = ++state.designProcessVersion;
-  const rawFront = getFrontDesignUrl();
-  const rawBack = getBackDesignUrl();
-  const [front, back] = await Promise.all([
-    prepareDesignImage(rawFront),
-    rawBack ? prepareDesignImage(rawBack) : Promise.resolve(null),
-  ]);
-
-  if (processVersion !== state.designProcessVersion) return;
-
-  state.preparedDesignUrls = { front, back };
-  updateDesignOverlayForSide();
-  applyCurrentDesignToViewer();
-}
-
-async function renderPrintDesign(designUrl, designOverlay) {
-  state.preparedDesignUrls = { front: designUrl, back: null };
-  await preparePrintDesigns(designOverlay);
-}
-
-function removeLightImageBackground(imageUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const size = 900;
-      canvas.width = size;
-      canvas.height = size;
-      ctx.drawImage(img, 0, 0, size, size);
-
-      const imageData = ctx.getImageData(0, 0, size, size);
-      const data = imageData.data;
-      let minX = size;
-      let minY = size;
-      let maxX = 0;
-      let maxY = 0;
-
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const i = (y * size + x) * 4;
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const max = Math.max(r, g, b);
-          const min = Math.min(r, g, b);
-          const isLightBackground = max > 218 && max - min < 42;
-
-          if (isLightBackground) {
-            data[i + 3] = 0;
-          } else if (data[i + 3] > 0) {
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-          }
-        }
-      }
-
-      const labels = new Int32Array(size * size);
-      const queue = new Int32Array(size * size);
-      let currentLabel = 0;
-      let largestLabel = 0;
-      let largestCount = 0;
-      const bounds = [{ minX: size, minY: size, maxX: 0, maxY: 0 }];
-
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const start = y * size + x;
-          if (labels[start] || data[start * 4 + 3] === 0) continue;
-
-          currentLabel++;
-          let head = 0;
-          let tail = 0;
-          let count = 0;
-          let cMinX = x;
-          let cMinY = y;
-          let cMaxX = x;
-          let cMaxY = y;
-          labels[start] = currentLabel;
-          queue[tail++] = start;
-
-          while (head < tail) {
-            const index = queue[head++];
-            const cx = index % size;
-            const cy = Math.floor(index / size);
-            count++;
-            cMinX = Math.min(cMinX, cx);
-            cMinY = Math.min(cMinY, cy);
-            cMaxX = Math.max(cMaxX, cx);
-            cMaxY = Math.max(cMaxY, cy);
-
-            const neighbors = [index - 1, index + 1, index - size, index + size];
-            for (const next of neighbors) {
-              if (next < 0 || next >= labels.length || labels[next]) continue;
-              if ((next === index - 1 && cx === 0) || (next === index + 1 && cx === size - 1)) continue;
-              if (data[next * 4 + 3] === 0) continue;
-              labels[next] = currentLabel;
-              queue[tail++] = next;
-            }
-          }
-
-          bounds[currentLabel] = { minX: cMinX, minY: cMinY, maxX: cMaxX, maxY: cMaxY };
-          if (count > largestCount) {
-            largestCount = count;
-            largestLabel = currentLabel;
-          }
-        }
-      }
-
-      if (largestLabel) {
-        const largestBounds = bounds[largestLabel];
-        minX = largestBounds.minX;
-        minY = largestBounds.minY;
-        maxX = largestBounds.maxX;
-        maxY = largestBounds.maxY;
-
-        for (let i = 0; i < labels.length; i++) {
-          if (labels[i] !== largestLabel) {
-            data[i * 4 + 3] = 0;
-          }
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-
-      if (maxX <= minX || maxY <= minY) {
-        resolve(imageUrl);
-        return;
-      }
-
-      const padding = 28;
-      const cropX = Math.max(0, minX - padding);
-      const cropY = Math.max(0, minY - padding);
-      const cropW = Math.min(size - cropX, maxX - minX + padding * 2);
-      const cropH = Math.min(size - cropY, maxY - minY + padding * 2);
-      const crop = document.createElement('canvas');
-      crop.width = cropW;
-      crop.height = cropH;
-      crop.getContext('2d').drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-      resolve(crop.toDataURL('image/png'));
-    };
-    img.onerror = reject;
-    img.src = imageUrl;
+/* ============================================================
+   INTERACTION MODE (Position/Rotate)
+   ============================================================ */
+function initInteractionMode() {
+  document.getElementById('placementModeBtn')?.addEventListener('click', () => setInteractionMode('position'));
+  document.getElementById('rotateModeBtn')?.addEventListener('click', () => setInteractionMode('rotate'));
+  document.getElementById('resetViewBtn')?.addEventListener('click', () => {
+    state.printPlacement = { x: 0, y: -12, scale: 1 };
+    state.textPlacement = { x: 0, y: 18, scale: 1 };
+    syncPlacementInputs();
+    state.compositeCacheKey = '';
+    updateOverlayPlacement();
+    applyCurrentDesignToViewer();
+    try { window.tshirt360Viewer?.showSide?.(state.currentView); } catch (e) { /* */ }
   });
 }
 
 /* ============================================================
-   MOCK DESIGN GENERATOR (Client-side fallback)
+   PLACEMENT CONTROLS
    ============================================================ */
-function generateMockDesign(style, prompt) {
-  const designs = {
-    minimalist: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%23f8f9fa" width="200" height="200"/><circle cx="100" cy="80" r="35" fill="none" stroke="%230f172a" stroke-width="2"/><line x1="65" y1="130" x2="135" y2="130" stroke="%230f172a" stroke-width="2"/><line x1="75" y1="145" x2="125" y2="145" stroke="%230f172a" stroke-width="1.5" opacity="0.5"/><circle cx="100" cy="80" r="8" fill="%23ff6b00"/></svg>`,
+function syncPlacementInputs() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('printPosX', Math.round(state.printPlacement.x));
+  set('printPosY', Math.round(state.printPlacement.y));
+  set('printScale', Math.round(state.printPlacement.scale * 100));
+  set('textPosX', Math.round(state.textPlacement.x));
+  set('textPosY', Math.round(state.textPlacement.y));
+  set('textScale', Math.round(state.textPlacement.scale * 100));
+}
 
-    streetwear: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%25" stop-color="%23ff6b00"/><stop offset="100%25" stop-color="%23ff0066"/></linearGradient></defs><rect fill="%23111" width="200" height="200" rx="8"/><text x="100" y="85" font-family="Arial Black" font-size="28" fill="url(%23sg)" text-anchor="middle" font-weight="900">BLANK</text><text x="100" y="118" font-family="Arial Black" font-size="28" fill="white" text-anchor="middle" font-weight="900">UP</text><rect x="40" y="135" width="120" height="3" fill="url(%23sg)" rx="1.5"/></svg>`,
+function initPrintControls() {
+  const textInputs = [document.getElementById('customTextInput'), document.getElementById('customTextInputImage')].filter(Boolean);
+  textInputs.forEach(input => {
+    input.addEventListener('input', () => {
+      state.customText = input.value.trim();
+      textInputs.forEach(o => { if (o !== input) o.value = input.value; });
+      state.compositeCacheKey = '';
+      updateDesignOverlayForSide();
+      applyCurrentDesignToViewer();
+    });
+  });
 
-    vintage: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%23f5f0e8" width="200" height="200"/><circle cx="100" cy="100" r="70" fill="none" stroke="%238b6914" stroke-width="2"/><circle cx="100" cy="100" r="60" fill="none" stroke="%238b6914" stroke-width="1" opacity="0.5"/><text x="100" y="95" font-family="Georgia" font-size="16" fill="%238b6914" text-anchor="middle">ESTD.</text><text x="100" y="115" font-family="Georgia" font-size="22" fill="%238b6914" text-anchor="middle" font-weight="bold">2024</text><path d="M60 65 Q100 50 140 65" fill="none" stroke="%238b6914" stroke-width="1.5"/><path d="M60 135 Q100 150 140 135" fill="none" stroke="%238b6914" stroke-width="1.5"/></svg>`,
-
-    abstract: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><linearGradient id="ag" x1="0" y1="0" x2="1" y2="1"><stop offset="0%25" stop-color="%236366f1"/><stop offset="50%25" stop-color="%23a855f7"/><stop offset="100%25" stop-color="%23ec4899"/></linearGradient></defs><rect fill="%23f8f9fa" width="200" height="200"/><circle cx="70" cy="80" r="40" fill="%236366f1" opacity="0.6"/><circle cx="130" cy="90" r="35" fill="%23ec4899" opacity="0.5"/><circle cx="100" cy="130" r="30" fill="%23a855f7" opacity="0.5"/><circle cx="100" cy="95" r="15" fill="white" opacity="0.8"/></svg>`,
-
-    anime: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%231a1a2e" width="200" height="200" rx="8"/><circle cx="100" cy="85" r="40" fill="%23e2e8f0"/><circle cx="88" cy="78" r="8" fill="%231a1a2e"/><circle cx="112" cy="78" r="8" fill="%231a1a2e"/><circle cx="90" cy="76" r="3" fill="white"/><circle cx="114" cy="76" r="3" fill="white"/><path d="M92 95 Q100 102 108 95" fill="none" stroke="%23ff6b9d" stroke-width="2" stroke-linecap="round"/><path d="M65 60 L80 75 L60 80 Z" fill="%23e2e8f0"/><path d="M135 60 L120 75 L140 80 Z" fill="%23e2e8f0"/><text x="100" y="155" font-family="Arial" font-size="12" fill="%23ff6b00" text-anchor="middle" font-weight="bold">KAWAII ★</text></svg>`,
-
-    ai3d: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><defs><radialGradient id="d3a" cx="35%25" cy="25%25" r="70%25"><stop offset="0%25" stop-color="%23ffffff"/><stop offset="45%25" stop-color="%23ff9f43"/><stop offset="100%25" stop-color="%23d35400"/></radialGradient><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="%23000" flood-opacity="0.25"/></filter></defs><rect fill="%23f8fafc" width="200" height="200"/><circle cx="100" cy="92" r="54" fill="url(%23d3a)" filter="url(%23shadow)"/><circle cx="82" cy="78" r="9" fill="%230f172a"/><circle cx="118" cy="78" r="9" fill="%230f172a"/><ellipse cx="100" cy="105" rx="27" ry="18" fill="%23fff7ed"/><path d="M84 112 Q100 124 116 112" fill="none" stroke="%230f172a" stroke-width="4" stroke-linecap="round"/><path d="M64 55 L83 29 L92 65 Z" fill="%23ffb56b"/><path d="M136 55 L117 29 L108 65 Z" fill="%23ffb56b"/><circle cx="76" cy="70" r="11" fill="%23ffffff" opacity="0.28"/></svg>`,
-
-    watercolor: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%23fefefe" width="200" height="200"/><ellipse cx="80" cy="90" rx="50" ry="40" fill="%2393c5fd" opacity="0.4"/><ellipse cx="120" cy="100" rx="45" ry="35" fill="%23f9a8d4" opacity="0.4"/><ellipse cx="100" cy="120" rx="40" ry="30" fill="%2386efac" opacity="0.3"/><ellipse cx="90" cy="75" rx="25" ry="20" fill="%23fcd34d" opacity="0.3"/><circle cx="100" cy="95" r="5" fill="%23334155" opacity="0.6"/></svg>`,
-
-    geometric: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%230f172a" width="200" height="200"/><polygon points="100,30 160,100 100,170 40,100" fill="none" stroke="%23ff6b00" stroke-width="2"/><polygon points="100,50 145,100 100,150 55,100" fill="none" stroke="%2338bdf8" stroke-width="1.5"/><polygon points="100,70 130,100 100,130 70,100" fill="%23ff6b00" opacity="0.3"/><circle cx="100" cy="100" r="10" fill="%2338bdf8"/></svg>`,
-
-    typography: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%23ffffff" width="200" height="200"/><text x="100" y="70" font-family="Georgia" font-size="48" fill="%230f172a" text-anchor="middle" font-weight="900">B</text><text x="100" y="110" font-family="Arial" font-size="14" fill="%23ff6b00" text-anchor="middle" font-weight="bold" letter-spacing="8">BLANKUP</text><line x1="40" y1="120" x2="160" y2="120" stroke="%23ff6b00" stroke-width="2"/><text x="100" y="145" font-family="Arial" font-size="9" fill="%2364748b" text-anchor="middle" letter-spacing="4">NOT JUST A SHIRT</text></svg>`,
+  // Image placement
+  const bind = (ids, stateKey, defaults) => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        setActivePlacementLayer(stateKey === 'printPlacement' ? 'image' : 'text');
+        state[stateKey] = {
+          x: Number(document.getElementById(ids[0])?.value || defaults.x),
+          y: Number(document.getElementById(ids[1])?.value || defaults.y),
+          scale: Number(document.getElementById(ids[2])?.value || defaults.scale * 100) / 100,
+        };
+        state.compositeCacheKey = '';
+        updateOverlayPlacement();
+        applyCurrentDesignToViewer();
+      });
+    });
   };
+  bind(['printPosX', 'printPosY', 'printScale'], 'printPlacement', { x: 0, y: -12, scale: 1 });
+  bind(['textPosX', 'textPosY', 'textScale'], 'textPlacement', { x: 0, y: 18, scale: 1 });
 
-  const svgTemplate = designs[style] || designs.abstract;
-  const designUrl = `data:image/svg+xml;charset=utf-8,${svgTemplate}`;
+  document.getElementById('placementReset')?.addEventListener('click', () => {
+    state.printPlacement = { x: 0, y: -12, scale: 1 };
+    state.textPlacement = { x: 0, y: 18, scale: 1 };
+    syncPlacementInputs();
+    state.compositeCacheKey = '';
+    updateOverlayPlacement();
+    applyCurrentDesignToViewer();
+  });
 
-  const authorName = auth.user?.fullName || auth.user?.username || '';
+  // Keyboard nudge
+  document.addEventListener('keydown', e => {
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+    if (state.interactionMode !== 'position') return;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    const step = e.shiftKey ? 5 : 1;
+    const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+    const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    nudgePlacement(state.activePlacementLayer, dx, dy);
+    e.preventDefault();
+  });
 
-  return {
-    success: true,
-    designId: 'mock-' + Date.now(),
-    designUrl,
-    prompt,
-    style,
-    author: authorName,
-  };
+  setInteractionMode(state.interactionMode);
+  syncPlacementInputs();
+  updateOverlayPlacement();
+}
+
+function nudgePlacement(layer, dx, dy) {
+  if (layer === 'text') {
+    state.textPlacement.x = Math.max(-80, Math.min(80, state.textPlacement.x + dx));
+    state.textPlacement.y = Math.max(-75, Math.min(45, state.textPlacement.y + dy));
+  } else {
+    state.printPlacement.x = Math.max(-80, Math.min(80, state.printPlacement.x + dx));
+    state.printPlacement.y = Math.max(-75, Math.min(45, state.printPlacement.y + dy));
+  }
+  syncPlacementInputs();
+  state.compositeCacheKey = '';
+  updateOverlayPlacement();
+  applyCurrentDesignToViewer();
+}
+
+/* ============================================================
+   3D VIEWER
+   ============================================================ */
+function initThreeViewer() {
+  // Wait for tshirt-360.js module to load
+  const check = setInterval(() => {
+    if (window.tshirt360Viewer) {
+      clearInterval(check);
+      window.tshirt360Viewer.setColor(state.selectedColor);
+    }
+  }, 200);
+  setTimeout(() => clearInterval(check), 5000);
+
+  // CSS 3D fallback
+  initCss3DViewer();
+}
+
+function initCss3DViewer() {
+  const container = document.getElementById('canvasViewer');
+  if (!container) return;
+  let dragging = false, lastX = 0, lastY = 0, tiltX = -3, tiltY = 4;
+
+  function setTilt(x, y) {
+    tiltX = Math.max(-18, Math.min(18, x));
+    tiltY = Math.max(-38, Math.min(38, y));
+    container.style.setProperty('--tilt-x', `${tiltX}deg`);
+    container.style.setProperty('--tilt-y', `${tiltY}deg`);
+  }
+
+  state.cssViewer = { showFront: () => setTilt(-3, 4), showBack: () => setTilt(-3, -38) };
+
+  container.addEventListener('pointerdown', e => {
+    if (state.interactionMode === 'position') return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    container.setPointerCapture(e.pointerId);
+  });
+  container.addEventListener('pointermove', e => {
+    if (state.interactionMode === 'position' || !dragging) return;
+    setTilt(tiltX - (e.clientY - lastY) * 0.18, tiltY + (e.clientX - lastX) * 0.18);
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  container.addEventListener('pointerup', () => dragging = false);
+  container.addEventListener('pointercancel', () => dragging = false);
+  container.addEventListener('dblclick', () => setTilt(0, 0));
+  setTilt(-3, 4);
 }
 
 /* ============================================================
    ORDER FLOW
    ============================================================ */
-function canShareCurrentDesign() {
-  const designId = state.currentDesign?.designId;
-  return Boolean(
-    designId &&
-    !state.currentDesign?.isShared &&
-    !state.currentDesign?.isDraft &&
-    !designId.startsWith('community-') &&
-    !designId.startsWith('text-only-')
-  );
-}
-
-function updateShareButton(forceEnabled = null) {
-  const shareBtn = document.getElementById('shareDesignBtn');
-  if (!shareBtn) return;
-
-  const enabled = forceEnabled === null ? canShareCurrentDesign() : Boolean(forceEnabled && canShareCurrentDesign());
-  shareBtn.disabled = !enabled;
-  const isShared = state.currentDesign?.isShared === true;
-  shareBtn.classList.toggle('is-shared', isShared);
-  shareBtn.textContent = isShared ? i18n.t('studio.share.shared') : i18n.t('studio.share');
-}
-
-function initShareDesign() {
-  const shareBtn = document.getElementById('shareDesignBtn');
-  if (!shareBtn) return;
-
-  shareBtn.addEventListener('click', async () => {
-    if (!canShareCurrentDesign()) {
-      showToast(i18n.t('studio.share.needDesign'), 'warning');
-      return;
-    }
-
-    const designId = state.currentDesign.designId;
-    shareBtn.disabled = true;
-    shareBtn.textContent = i18n.t('studio.share.sharing');
-
-    try {
-      const response = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/share`, {
-        method: 'POST',
-        headers: auth.getAuthHeaders(),
-      });
-      const result = await response.json();
-      if (!response.ok || result.success === false) {
-        throw new Error(result.error || i18n.t('studio.share.error'));
-      }
-
-      state.currentDesign = {
-        ...state.currentDesign,
-        ...(result.data || {}),
-        designId,
-        isShared: true,
-      };
-      updateShareButton();
-      loadCommunityDesigns();
-      showToast(i18n.t('studio.share.success'), 'success');
-    } catch (err) {
-      showToast(err.message || i18n.t('studio.share.error'), 'error');
-      updateShareButton();
-    }
-  });
-
-  updateShareButton();
-}
-
 function initOrderFlow() {
-  const orderBtn = document.getElementById('orderBtn');
-  const downloadBtn = document.getElementById('downloadBtn');
   const modal = document.getElementById('orderModal');
-  const modalClose = document.getElementById('modalClose');
-  const orderForm = document.getElementById('orderForm');
-  const orderCloseBtn = document.getElementById('orderCloseBtn');
-  const paymentMethodOptions = document.getElementById('paymentMethodOptions');
+  const form = document.getElementById('orderForm');
+  const closeBtn = document.getElementById('modalClose');
+  const closeBtn2 = document.getElementById('orderCloseBtn');
 
-  if (paymentMethodOptions) {
-    paymentMethodOptions.querySelectorAll('.payment-method-option').forEach(btn => {
-      btn.addEventListener('click', () => {
-        state.selectedPaymentMethod = btn.dataset.paymentMethod || 'COD';
-        updatePaymentMethodUI();
-      });
-    });
-  }
+  document.getElementById('orderBtn')?.addEventListener('click', () => {
+    if (!state.currentDesign) return;
+    updateOrderSummary();
+    if (auth.isLoggedIn()) {
+      const nameInput = document.getElementById('orderName');
+      if (nameInput && !nameInput.value) nameInput.value = auth.user?.fullName || auth.user?.username || '';
+    }
+    modal?.classList.add('active');
+  });
 
-  // Open order modal
-  if (orderBtn) {
-    orderBtn.addEventListener('click', () => {
-      if (!state.currentDesign) return;
-      updateOrderSummary();
-      updatePaymentMethodUI();
-      
-      // Pre-fill user's name if logged in
-      if (auth.isLoggedIn()) {
-        const orderNameInput = document.getElementById('orderName');
-        if (orderNameInput && !orderNameInput.value) {
-          orderNameInput.value = auth.user.fullName || auth.user.username;
-        }
-      }
-      
-      modal.classList.add('open');
-    });
-  }
+  closeBtn?.addEventListener('click', () => modal?.classList.remove('active'));
+  closeBtn2?.addEventListener('click', () => { modal?.classList.remove('active'); resetOrderModal(); });
+  modal?.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('active'); });
 
-  // Close modal
-  if (modalClose) {
-    modalClose.addEventListener('click', () => modal.classList.remove('open'));
-  }
-  if (orderCloseBtn) {
-    orderCloseBtn.addEventListener('click', () => {
-      modal.classList.remove('open');
-      resetOrderModal();
-    });
-  }
-
-  // Close on overlay click
-  if (modal) {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) modal.classList.remove('open');
-    });
-  }
-
-  // Submit order
-  if (orderForm) {
-    orderForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await submitOrder();
-    });
-  }
-
-  // Download design
-  if (downloadBtn) {
-    downloadBtn.addEventListener('click', () => {
-      const url = getActiveDesignUrl();
-      if (url) {
-        downloadDesign(url);
-      }
-    });
-  }
-}
-
-function updatePaymentMethodUI() {
-  const note = document.getElementById('paymentMethodNote');
+  // Payment method
   document.querySelectorAll('.payment-method-option').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.paymentMethod === state.selectedPaymentMethod);
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.payment-method-option').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.selectedPaymentMethod = btn.dataset.paymentMethod || 'COD';
+    });
   });
-  if (!note) return;
-  if (state.selectedPaymentMethod === 'BANK_TRANSFER') {
-    note.textContent = 'Sau khi tạo đơn, hệ thống sẽ hiển thị QR chuyển khoản và chờ xác nhận thanh toán.';
-  } else {
-    note.textContent = 'Thanh toán khi nhận hàng (COD).';
-  }
-}
 
-function getOrderTotalAmount() {
-  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
-  return product.price * state.quantity;
-}
-
-function buildVietQrUrl({ amount, transferContent }) {
-  const bankId = encodeURIComponent(BANK_TRANSFER_INFO.bankId);
-  const accountNumber = encodeURIComponent(BANK_TRANSFER_INFO.accountNumber);
-  const template = encodeURIComponent(BANK_TRANSFER_INFO.template || 'compact2');
-  const params = new URLSearchParams({
-    amount: String(amount || 0),
-    addInfo: transferContent || '',
-    accountName: BANK_TRANSFER_INFO.accountName || '',
-  });
-  return `https://img.vietqr.io/image/${bankId}-${accountNumber}-${template}.png?${params.toString()}`;
+  form?.addEventListener('submit', e => { e.preventDefault(); submitOrder(); });
 }
 
 function updateOrderSummary() {
-  const isVi = i18n.currentLang === 'vi';
-  const product = PRODUCT_TYPES[state.selectedProductType] || PRODUCT_TYPES.tshirt;
-  const total = getOrderTotalAmount();
-
-  const colorNames = {
-    '#ffffff': isVi ? 'Trắng' : 'White',
-    '#000000': isVi ? 'Đen' : 'Black',
-    '#1e293b': 'Navy',
-    '#6b7280': isVi ? 'Xám' : 'Gray',
-    '#374151': isVi ? 'Than chì' : 'Charcoal',
-    '#dc2626': isVi ? 'Đỏ' : 'Red',
-    '#2563eb': isVi ? 'Xanh dương' : 'Blue',
-    '#1e3a5f': isVi ? 'Xanh navy đậm' : 'Deep navy',
-    '#8b0000': isVi ? 'Đỏ rượu' : 'Maroon',
-    '#059669': isVi ? 'Xanh lá' : 'Green',
-  };
-
-  document.getElementById('orderProduct').textContent = product.label;
+  const product = PRODUCT_LABELS[state.selectedProductType] || 'T-Shirt Custom AI';
+  const price = PRODUCT_PRICES[state.selectedProductType] || 250000;
+  const total = price * state.quantity;
+  const colorNames = { '#ffffff': 'Trắng', '#000000': 'Đen', '#1e293b': 'Navy', '#6b7280': 'Xám', '#dc2626': 'Đỏ', '#2563eb': 'Xanh', '#059669': 'Xanh lá' };
+  document.getElementById('orderProduct').textContent = product;
   document.getElementById('orderColor').textContent = colorNames[state.selectedColor] || state.selectedColor;
   document.getElementById('orderSize').textContent = state.selectedSize;
   document.getElementById('orderQty').textContent = state.quantity;
+  document.getElementById('orderTotal').textContent = formatPrice(total);
+}
 
-  if (isVi) {
-    document.getElementById('orderTotal').textContent = total.toLocaleString('vi-VN') + 'đ';
-  } else {
-    document.getElementById('orderTotal').textContent = '$' + (total / 25000).toFixed(0);
-  }
+function resetOrderModal() {
+  document.getElementById('orderFormContent').style.display = 'block';
+  document.getElementById('orderSuccess').style.display = 'none';
+  document.getElementById('bankTransferBox').style.display = 'none';
+  document.getElementById('orderForm')?.reset();
+  document.getElementById('orderSubmitBtn').disabled = false;
 }
 
 async function submitOrder() {
   const submitBtn = document.getElementById('orderSubmitBtn');
-  const name = document.getElementById('orderName').value.trim();
-  const phone = document.getElementById('orderPhone').value.trim();
-  const address = document.getElementById('orderAddress').value.trim();
-  const note = document.getElementById('orderNote').value.trim();
+  const name = document.getElementById('orderName')?.value?.trim();
+  const phone = document.getElementById('orderPhone')?.value?.trim();
+  const address = document.getElementById('orderAddress')?.value?.trim();
+  const note = document.getElementById('orderNote')?.value?.trim();
 
-  if (!name || !phone || !address) {
-    showToast(i18n.currentLang === 'vi' ? 'Vui lòng điền đầy đủ thông tin!' : 'Please fill in all required fields!', 'warning');
-    return;
-  }
-
-  const normalizedPhone = phone.replace(/[\s.-]/g, '');
-  const isValidVnPhone = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/.test(normalizedPhone);
-  if (!isValidVnPhone) {
-    showToast(i18n.t('order.phoneInvalid'), 'warning');
-    document.getElementById('orderPhone').focus();
-    return;
-  }
+  if (!name || !phone || !address) { showToast('Vui lòng điền đầy đủ thông tin!', 'warning'); return; }
+  if (!/^(\+?84|0)[3-9]\d{8}$/.test(phone.replace(/[\s.\-]/g, ''))) { showToast('Số điện thoại không hợp lệ!', 'warning'); return; }
 
   submitBtn.disabled = true;
-  submitBtn.innerHTML = `<span>${i18n.t('order.submitting')}</span>`;
+  submitBtn.textContent = 'Đang xử lý...';
 
   const orderData = {
     designUrl: state.currentDesign?.designUrl || '',
@@ -2159,7 +853,6 @@ async function submitOrder() {
     size: state.selectedSize,
     quantity: state.quantity,
     customText: state.customText,
-    customTextSides: state.customTextSides,
     printPlacement: state.printPlacement,
     textPlacement: state.textPlacement,
     customer: { name, phone, address, note },
@@ -2169,182 +862,89 @@ async function submitOrder() {
   };
 
   try {
-    const response = await fetch(`${API_BASE}/orders`, {
+    const resp = await fetch(`${API_BASE}/orders`, {
       method: 'POST',
-      headers: auth.getAuthHeaders(),
+      headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
       body: JSON.stringify(orderData),
     });
-
-    const data = await response.json();
-    if (!response.ok || data.success === false) {
-      throw new Error(data.error || (i18n.currentLang === 'vi' ? 'Đặt hàng thất bại. Vui lòng thử lại.' : 'Order failed. Please try again.'));
-    }
+    const data = await resp.json();
+    if (!resp.ok || data.success === false) throw new Error(data.error || 'Đặt hàng thất bại.');
     showOrderSuccess(data.orderId || 'BU-' + Date.now(), data.payment || state.selectedPaymentMethod, data.transferContent);
-  } catch (err) {
-    showToast(err.message || (i18n.currentLang === 'vi' ? 'Đặt hàng thất bại. Vui lòng thử lại.' : 'Order failed. Please try again.'), 'error', 7000);
+  } catch (e) {
+    showToast(e.message || 'Đặt hàng thất bại. Thử lại sau.', 'error', 7000);
   }
-
   submitBtn.disabled = false;
-  submitBtn.innerHTML = `<span data-i18n="order.submit">${i18n.t('order.submit')}</span>`;
+  submitBtn.textContent = 'Xác nhận đặt hàng';
 }
 
-function showOrderSuccess(orderId, paymentMethod = state.selectedPaymentMethod, transferContent = '') {
-  const formContent = document.getElementById('orderFormContent');
-  const successContent = document.getElementById('orderSuccess');
-  const orderIdEl = document.getElementById('orderSuccessId');
-  const titleEl = successContent?.querySelector('.order-success-title');
-  const noteEl = successContent?.querySelector('.order-success-note');
-  const iconEl = successContent?.querySelector('.order-success-icon');
-  const bankBox = document.getElementById('bankTransferBox');
-  const isBankTransfer = paymentMethod === 'BANK_TRANSFER';
+function showOrderSuccess(orderId, payment, transferContent) {
+  document.getElementById('orderFormContent').style.display = 'none';
+  document.getElementById('orderSuccess').style.display = 'block';
+  document.getElementById('orderSuccessId').textContent = `Mã đơn hàng: ${orderId}`;
 
-  if (formContent) formContent.style.display = 'none';
-  if (successContent) successContent.classList.add('show');
-  if (orderIdEl) {
-    orderIdEl.textContent = isBankTransfer
-      ? `Mã đơn: ${orderId}. Vui lòng chuyển khoản đúng số tiền và nội dung bên dưới.`
-      : `${i18n.t('order.success.desc')}${orderId}`;
-  }
-  if (titleEl) {
-    titleEl.textContent = isBankTransfer ? 'Đang chờ thanh toán' : 'Đặt hàng thành công!';
-  }
-  if (noteEl) {
-    noteEl.textContent = isBankTransfer
-      ? 'Đơn hàng sẽ chuyển sang trạng thái thành công sau khi hệ thống xác nhận giao dịch.'
-      : 'Chúng tôi sẽ liên hệ xác nhận trong vòng 24 giờ.';
-  }
-  if (iconEl) iconEl.textContent = isBankTransfer ? '⏳' : '🎉';
-  if (bankBox) {
-    bankBox.classList.toggle('show', isBankTransfer);
-    const transferText = transferContent || `BLANKUP ${orderId}`;
-    const qrImage = document.getElementById('successQrImage');
-    const statusEl = document.getElementById('bankTransferStatus');
+  if (payment === 'BANK_TRANSFER') {
+    const box = document.getElementById('bankTransferBox');
+    box.style.display = 'block';
+    const qrUrl = `https://img.vietqr.io/image/${BANK_TRANSFER_INFO.bankId}-${BANK_TRANSFER_INFO.accountNumber}-compact2.png?amount=${PRODUCT_PRICES[state.selectedProductType] * state.quantity}&addInfo=${encodeURIComponent(transferContent || orderId)}&accountName=${encodeURIComponent(BANK_TRANSFER_INFO.accountName)}`;
+    document.getElementById('successQrImage').src = qrUrl;
     document.getElementById('successBankName').textContent = BANK_TRANSFER_INFO.bankName;
     document.getElementById('successAccountName').textContent = BANK_TRANSFER_INFO.accountName;
     document.getElementById('successAccountNumber').textContent = BANK_TRANSFER_INFO.accountNumber;
-    document.getElementById('successTransferContent').textContent = transferText;
-    if (statusEl) {
-      statusEl.textContent = isBankTransfer
-        ? 'Đang chờ hệ thống xác nhận chuyển khoản...'
-        : '';
-      statusEl.classList.toggle('paid', false);
-    }
-    if (qrImage) {
-      qrImage.src = buildVietQrUrl({
-        amount: getOrderTotalAmount(),
-        transferContent: transferText,
-      });
-      qrImage.alt = `QR chuyển khoản ${orderId}`;
-    }
-  }
-
-  stopPaymentPolling();
-  if (isBankTransfer) {
-    startPaymentPolling(orderId);
+    document.getElementById('successTransferContent').textContent = transferContent || orderId;
   }
 }
 
-function stopPaymentPolling() {
-  if (state.paymentPollingTimer) {
-    clearInterval(state.paymentPollingTimer);
-    state.paymentPollingTimer = null;
-  }
-}
-
-async function refreshPaymentStatus(orderId) {
-  const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}`);
-  if (!response.ok) return;
-  const result = await response.json();
-  const order = result?.data;
-  if (order?.paymentStatus === 'paid') {
-    markBankTransferPaid(orderId);
-    stopPaymentPolling();
-  } else if (order?.paymentStatus === 'underpaid') {
-    const statusEl = document.getElementById('bankTransferStatus');
-    if (statusEl) {
-      const received = Number(order.paymentReceivedAmount || 0).toLocaleString('vi-VN') + 'đ';
-      statusEl.textContent = `Hệ thống đã nhận ${received}, nhưng số tiền chưa đủ. Vui lòng kiểm tra lại đơn hàng.`;
-    }
-  }
-}
-
-function startPaymentPolling(orderId) {
-  let checks = 0;
-  refreshPaymentStatus(orderId).catch(() => {});
-  state.paymentPollingTimer = setInterval(() => {
-    checks += 1;
-    if (checks > 120) {
-      stopPaymentPolling();
-      const statusEl = document.getElementById('bankTransferStatus');
-      if (statusEl) {
-        statusEl.textContent = 'Chưa thấy giao dịch. Bạn vẫn có thể đóng cửa sổ, shop sẽ kiểm tra lại theo mã đơn.';
-      }
+/* ============================================================
+   DOWNLOAD
+   ============================================================ */
+function initDownload() {
+  document.getElementById('downloadBtn')?.addEventListener('click', async () => {
+    const url = getActiveDesignUrl();
+    if (!url) return;
+    const link = document.createElement('a');
+    if (url.startsWith('data:')) {
+      link.href = url; link.download = `blankup-design-${Date.now()}.svg`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
       return;
     }
-    refreshPaymentStatus(orderId).catch(() => {});
-  }, 5000);
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Download failed');
+      const blob = await resp.blob();
+      const ext = blob.type.includes('png') ? 'png' : 'jpg';
+      const objUrl = URL.createObjectURL(blob);
+      link.href = objUrl; link.download = `blankup-design-${Date.now()}.${ext}`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      URL.revokeObjectURL(objUrl);
+    } catch { window.open(url, '_blank'); }
+  });
 }
 
-function markBankTransferPaid(orderId) {
-  const successContent = document.getElementById('orderSuccess');
-  const titleEl = successContent?.querySelector('.order-success-title');
-  const noteEl = successContent?.querySelector('.order-success-note');
-  const iconEl = successContent?.querySelector('.order-success-icon');
-  const orderIdEl = document.getElementById('orderSuccessId');
-  const statusEl = document.getElementById('bankTransferStatus');
-
-  if (titleEl) titleEl.textContent = 'Thanh toán thành công!';
-  if (noteEl) noteEl.textContent = 'Đơn hàng đã được xác nhận thanh toán. Chúng tôi sẽ xử lý và liên hệ bạn sớm.';
-  if (iconEl) iconEl.textContent = '✅';
-  if (orderIdEl) orderIdEl.textContent = `Mã đơn: ${orderId}`;
-  if (statusEl) {
-    statusEl.textContent = 'Đã nhận chuyển khoản. Cảm ơn bạn!';
-    statusEl.classList.add('paid');
-  }
-}
-
-function resetOrderModal() {
-  const formContent = document.getElementById('orderFormContent');
-  const successContent = document.getElementById('orderSuccess');
-  const orderForm = document.getElementById('orderForm');
-
-  if (formContent) formContent.style.display = 'block';
-  if (successContent) successContent.classList.remove('show');
-  stopPaymentPolling();
-  document.getElementById('bankTransferBox')?.classList.remove('show');
-  document.getElementById('successQrImage')?.removeAttribute('src');
-  if (orderForm) orderForm.reset();
-}
-
-async function downloadDesign(url) {
-  const link = document.createElement('a');
-
-  if (url.startsWith('data:')) {
-    link.href = url;
-    link.download = `blankup-design-${Date.now()}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    return;
-  }
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Download failed');
-
-    const blob = await response.blob();
-    const ext = blob.type.includes('png') ? 'png' : 'jpg';
-    const objectUrl = URL.createObjectURL(blob);
-
-    link.href = objectUrl;
-    link.download = `blankup-design-${Date.now()}.${ext}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(objectUrl);
-  } catch (err) {
-    window.open(url, '_blank');
-  }
+/* ============================================================
+   SHARE
+   ============================================================ */
+function initShareDesign() {
+  document.getElementById('shareDesignBtn')?.addEventListener('click', async () => {
+    if (!state.currentDesign?.designId || state.currentDesign?.isDraft || state.currentDesign?.designId?.startsWith('community-') || state.currentDesign?.designId?.startsWith('text-only-')) {
+      showToast('Cần có thiết kế AI thật để chia sẻ!', 'warning'); return;
+    }
+    const btn = document.getElementById('shareDesignBtn');
+    btn.disabled = true; btn.textContent = 'Đang chia sẻ...';
+    try {
+      const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(state.currentDesign.designId)}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
+        body: JSON.stringify({ designUrl: state.currentDesign.designUrl, frontDesignUrl: getFrontDesignUrl(), backDesignUrl: getBackDesignUrl(), prompt: state.currentDesign.prompt, style: state.currentDesign.style, author: auth.user?.fullName || auth.user?.username || '' }),
+      });
+      const result = await resp.json();
+      if (!resp.ok || result.success === false) throw new Error(result.error || 'Share failed');
+      state.currentDesign.isShared = true;
+      updateShareButton();
+      loadCommunityDesigns();
+      showToast('Đã chia sẻ thiết kế!', 'success');
+    } catch (e) { showToast(e.message || 'Chia sẻ thất bại', 'error'); }
+    btn.disabled = false; btn.textContent = 'Chia sẻ';
+  });
 }
 
 /* ============================================================
@@ -2353,140 +953,85 @@ async function downloadDesign(url) {
 async function loadCommunityDesigns() {
   const grid = document.getElementById('communityGrid');
   if (!grid) return;
-
   let designs;
   try {
-    const response = await fetch(`${API_BASE}/ai-design/gallery`);
-    if (!response.ok) throw new Error('Failed');
-    const result = await response.json();
+    const resp = await fetch(`${API_BASE}/ai-design/gallery`);
+    if (!resp.ok) throw new Error('Failed');
+    const result = await resp.json();
     designs = result.data || [];
-  } catch (err) {
-    designs = getFallbackDesigns();
-  }
+  } catch { designs = getFallbackDesigns(); }
 
-  const isVi = i18n.currentLang === 'vi';
-
-  grid.innerHTML = designs.map(design => {
-    const prompt = isVi ? design.prompt : (design.promptEn || design.prompt);
-    const previewUrl = design.frontDesignUrl || design.designUrl || generateMockDesign(design.style, prompt).designUrl;
-    const backDesignUrl = design.backDesignUrl || '';
-    const productMockupUrl = design.productMockupUrl || '';
-    const productMockupBlank = Boolean(design.productMockupBlank);
-    const author = design.author || 'Anonymous';
-
-    return `
-      <div class="community-card" style="cursor: pointer;" title="${isVi ? 'Nhấp để thử thiết kế này' : 'Click to try this design'}"
-        data-design-url="${escapeAttr(previewUrl)}"
-        data-back-design-url="${escapeAttr(backDesignUrl)}"
-        data-product-mockup-url="${escapeAttr(productMockupUrl)}"
-        data-product-mockup-blank="${productMockupBlank ? 'true' : 'false'}"
-        data-prompt="${escapeAttr(prompt)}"
-        data-style="${escapeAttr(design.style)}"
-        data-author="${escapeAttr(author)}">
-        <div class="community-card-image">
-          <img src="${previewUrl}" alt="${escapeAttr(prompt)}">
-        </div>
-        <div class="community-card-info">
-          <div class="community-card-prompt">"${escapeHtml(prompt)}"</div>
-          <div class="community-card-meta">
-            <span class="community-card-author">👤 ${escapeHtml(author)}</span>
-            <span class="community-card-likes">❤️ ${design.likes || 0}</span>
-          </div>
-          <span class="community-card-style">${escapeHtml(i18n.t('style.' + design.style) || design.style)}</span>
-        </div>
+  grid.innerHTML = designs.map(d => {
+    const previewUrl = d.frontDesignUrl || d.designUrl || generateMockDesign(d.style, d.prompt).designUrl;
+    return `<div class="community-card" data-url="${escapeAttr(previewUrl)}" data-prompt="${escapeAttr(d.prompt || '')}" data-style="${escapeAttr(d.style || '')}" data-author="${escapeAttr(d.author || 'Anonymous')}" data-back="${escapeAttr(d.backDesignUrl || '')}">
+      <img class="community-card-img" src="${escapeAttr(previewUrl)}" alt="${escapeAttr(d.prompt || '')}">
+      <div class="community-card-info">
+        <div class="community-card-prompt">"${escapeHtml(d.prompt || '')}"</div>
+        <div class="community-card-meta"><span>👤 ${escapeHtml(d.author || 'Anonymous')}</span><span>❤️ ${d.likes || 0}</span></div>
       </div>
-    `;
+    </div>`;
   }).join('');
 
   grid.querySelectorAll('.community-card').forEach(card => {
     card.addEventListener('click', () => {
-      loadCommunityDesign(card.dataset.designUrl, card.dataset.prompt, card.dataset.style, card.dataset.author, card.dataset.productMockupUrl, card.dataset.productMockupBlank === 'true', card.dataset.backDesignUrl);
+      state.currentDesign = { success: true, designId: 'community-' + Date.now(), designUrl: card.dataset.url, frontDesignUrl: card.dataset.url, backDesignUrl: card.dataset.back, prompt: card.dataset.prompt, style: card.dataset.style, author: card.dataset.author };
+      showDesignOnMockup(card.dataset.url);
+      const pi = document.getElementById('promptInput');
+      if (pi && card.dataset.prompt) pi.value = card.dataset.prompt;
+      const sb = document.querySelector(`.style-chip[data-style="${card.dataset.style}"]`);
+      if (sb) { document.querySelectorAll('.style-chip').forEach(b => b.classList.remove('active')); sb.classList.add('active'); state.selectedStyle = card.dataset.style; }
     });
   });
 }
 
-// Function to load community design into workspace
-window.loadCommunityDesign = function(url, prompt, style, author, productMockupUrl = '', productMockupBlank = false, backDesignUrl = '') {
-  state.currentDesign = {
-    success: true,
-    designId: 'community-' + Date.now(),
-    designUrl: url,
-    frontDesignUrl: url,
-    backDesignUrl,
-    prompt: prompt,
-    style: style,
-    author: author,
-    productMockupUrl,
-    productMockupBlank,
-  };
-  
-  showDesignOnMockup(url, productMockupUrl, productMockupBlank);
-
-  // Set prompt textarea value
-  const promptInput = document.getElementById('promptInput');
-  if (promptInput) promptInput.value = prompt;
-
-  // Set style option active state
-  const styleBtn = document.querySelector(`.style-option[data-style="${style}"]`);
-  if (styleBtn) {
-    document.querySelectorAll('.style-option').forEach(b => b.classList.remove('active'));
-    styleBtn.classList.add('active');
-    state.selectedStyle = style;
-  }
-};
-
-i18n.onChange(() => {
-  loadCommunityDesigns();
-});
-
 function getFallbackDesigns() {
   return [
-    { id: 'd1', prompt: 'Rồng Việt Nam cyberpunk', promptEn: 'Vietnamese dragon cyberpunk', style: 'streetwear', author: 'Minh T.', likes: 234 },
-    { id: 'd2', prompt: 'Hoa sen minimalist', promptEn: 'Minimalist lotus flower', style: 'minimalist', author: 'An N.', likes: 189 },
-    { id: 'd3', prompt: 'Phong cảnh Hội An vintage', promptEn: 'Hoi An landscape vintage', style: 'vintage', author: 'Hương L.', likes: 156 },
-    { id: 'd4', prompt: 'Samurai Nhật Bản anime', promptEn: 'Japanese samurai anime', style: 'anime', author: 'Khoa P.', likes: 312 },
-    { id: 'd5', prompt: 'Geometric abstract neon', promptEn: 'Geometric abstract neon', style: 'geometric', author: 'Trang V.', likes: 198 },
-    { id: 'd6', prompt: 'Typography nghệ thuật', promptEn: 'Artistic typography', style: 'typography', author: 'Đức M.', likes: 145 },
+    { prompt: 'Rồng Việt Nam cyberpunk', style: 'streetwear', author: 'Minh T.', likes: 234 },
+    { prompt: 'Hoa sen minimalist', style: 'minimalist', author: 'An N.', likes: 189 },
+    { prompt: 'Phong cảnh Hội An vintage', style: 'vintage', author: 'Hương L.', likes: 156 },
+    { prompt: 'Samurai Nhật Bản anime', style: 'anime', author: 'Khoa P.', likes: 312 },
+    { prompt: 'Geometric abstract neon', style: 'geometric', author: 'Trang V.', likes: 198 },
+    { prompt: 'Typography nghệ thuật', style: 'typography', author: 'Đức M.', likes: 145 },
   ];
 }
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, '&#096;');
-}
-
 /* ============================================================
-   COLOR UTILITIES
+   INIT
    ============================================================ */
-function isLightColor(hex) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return (r * 299 + g * 587 + b * 114) / 1000 > 128;
-}
+document.addEventListener('DOMContentLoaded', () => {
+  i18n.init();
+  initTabs();
+  initStyleSelector();
+  initUpload();
+  initProductTypeSelector();
+  initColorPicker();
+  initSizeSelector();
+  initQuantity();
+  initGenerateButtons();
+  initPrintControls();
+  initInteractionMode();
+  initOrderFlow();
+  initDownload();
+  initShareDesign();
+  initViewToggle();
+  initThreeViewer();
+  initHistory();
+  loadCommunityDesigns();
+  updatePrice();
 
-function lightenColor(hex, percent) {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.min(255, (num >> 16) + amt);
-  const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
-  const B = Math.min(255, (num & 0x0000FF) + amt);
-  return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-}
+  // Load design from URL params
+  const params = new URLSearchParams(window.location.search);
+  const designUrl = params.get('designUrl');
+  if (designUrl) {
+    setTimeout(() => {
+      if (typeof window.loadCommunityDesign === 'function') {
+        window.loadCommunityDesign(designUrl, params.get('prompt') || '', params.get('style') || 'abstract', params.get('author') || 'Community');
+      } else {
+        state.currentDesign = { success: true, designId: 'url-' + Date.now(), designUrl, prompt: params.get('prompt') || '', style: params.get('style') || 'abstract' };
+        showDesignOnMockup(designUrl);
+      }
+    }, 300);
+  }
+});
 
-function darkenColor(hex, percent) {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, (num >> 16) - amt);
-  const G = Math.max(0, ((num >> 8) & 0x00FF) - amt);
-  const B = Math.max(0, (num & 0x0000FF) - amt);
-  return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-}
+i18n.onChange?.(() => loadCommunityDesigns());
