@@ -1,51 +1,51 @@
-<!-- frontend/index.html -->
+<!-- frontend/index.html — v2 Premium Landing Page -->
 <!DOCTYPE html>
 <html lang="vi" data-lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blankup — Not Just A Shirt | AI Custom T-Shirt Design</title>
-  <meta name="description" content="Blankup - Nền tảng thiết kế áo thun bằng AI. Mô tả ý tưởng, AI dựng artwork, xem trước trên áo 3D rồi đặt hàng COD.">
-  <meta name="keywords" content="custom t-shirt, AI design, áo thun, thiết kế áo, Blankup">
+  <title>Blankup — AI Design Studio | Áo Thun Độc Nhất</title>
+  <meta name="description" content="Blankup - Nền tảng thiết kế áo thun bằng AI. Mô tả ý tưởng, AI dựng artwork, xem trước trên áo 3D rồi đặt hàngCOD.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Anton&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=air-1">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=premium-1">
+  <link rel="stylesheet" href="css/home.css?v=premium-1">
 </head>
 <body class="home-page">
 
   <!-- ====== NAVIGATION ====== -->
-  <nav class="navbar" id="navbar">
-    <div class="container">
-      <a href="/" class="navbar-logo" id="logo">
-        <svg class="logo-icon" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="38" height="38" rx="4" fill="#b43e12"/>
-          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="#f6f3ec" opacity="0.92"/>
-          <path d="M16 10 L19 6 L22 10" stroke="#f6f3ec" stroke-width="1.5" fill="none"/>
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">
+        <svg width="32" height="32" viewBox="0 0 38 38" fill="none">
+          <rect width="38" height="38" rx="10" fill="url(#logoGrad)"/>
+          <defs><linearGradient id="logoGrad" x1="0" y1="0" x2="38" y2="38"><stop stop-color="#ff6b00"/><stop offset="1" stop-color="#ff8c38"/></linearGradient></defs>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.9"/>
+          <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
         </svg>
-        <span>BLANK<span class="logo-highlight">UP</span></span>
+        <span>BLANK<span class="nav-logo-accent">UP</span></span>
       </a>
 
-      <div class="navbar-menu" id="navMenu">
-        <a href="#hero" data-i18n="nav.home">Trang chủ</a>
-        <a href="#how-it-works" data-i18n="nav.howItWorks">Quy trình</a>
-        <a href="#products" data-i18n="nav.products">Bộ sưu tập</a>
-        <a href="#ai-preview" data-i18n="nav.studio">AI Studio</a>
-        <a href="showroom.html">3D Showroom</a>
-        <a href="#contact" data-i18n="nav.contact">Liên hệ</a>
+      <div class="nav-menu" id="navMenu">
+        <a href="#features" class="nav-link">Tính năng</a>
+        <a href="#how" class="nav-link">Quy trình</a>
+        <a href="#gallery" class="nav-link">Bộ sưu tập</a>
+        <a href="#studio" class="nav-link">AI Studio</a>
+        <a href="#reviews" class="nav-link">Đánh giá</a>
       </div>
 
-      <div class="navbar-actions">
-        <button class="theme-toggle" id="themeToggleBtn" aria-label="Toggle theme">
-          <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/></svg>
-          <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.79 6.79 0 0 0-5.4 12.4 8.78 8.78 0 0 0 11.6-11.6A6.79 6.79 0 0 0 12 3z"/></svg>
+      <div class="nav-actions">
+        <button class="nav-theme" id="themeToggleBtn" aria-label="Toggle theme">
+          <svg class="sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6.79 6.79 0 0 0-5.4 12.4 8.78 8.78 0 0 0 11.6-11.6A6.79 6.79 0 0 0 12 3z"/></svg>
         </button>
-        <div class="lang-toggle" id="langToggle">
-          <span class="lang-vi active" data-lang="vi">VI</span>
-          <span class="lang-en" data-lang="en">EN</span>
+        <div class="nav-lang" id="langToggle">
+          <span class="active" data-lang="vi">VI</span>
+          <span data-lang="en">EN</span>
         </div>
-        <a href="studio.html" class="btn btn-primary btn-sm" data-i18n="nav.cta">Bắt đầu thiết kế</a>
-        <button class="navbar-toggle" id="navToggle" aria-label="Toggle menu">
+        <a href="studio.html" class="nav-cta">Bắt đầu thiết kế</a>
+        <button class="nav-burger" id="navToggle" aria-label="Menu">
           <span></span><span></span><span></span>
         </button>
       </div>
@@ -53,403 +53,413 @@
   </nav>
 
   <!-- ====== HERO ====== -->
-  <section class="hero section" id="hero">
-    <div class="container">
-      <div class="hero-content">
-        <div class="tag"><span data-i18n="hero.badge">Edition 001 · AI-Generated · 1-of-1</span></div>
-        <h1 class="hero-title">
-          <span data-i18n="hero.title1">Not Just A</span><br>
-          <span class="highlight" data-i18n="hero.titleHighlight">Shirt</span>
-        </h1>
-        <p class="hero-subtitle" data-i18n="hero.subtitle">
-          Mô tả ý tưởng — AI dựng artwork, bạn xem trước trên áo 3D rồi mới đặt hàng. Một bản thiết kế, một chiếc áo, không ai mặc giống ai.
-        </p>
-        <div class="hero-buttons">
-          <a href="studio.html" class="btn btn-primary btn-lg" data-i18n="hero.cta">Bắt đầu thiết kế</a>
-          <a href="#products" class="btn btn-secondary btn-lg" data-i18n="hero.cta2">Xem bộ sưu tập</a>
-        </div>
-        <div class="hero-stats">
-          <div class="hero-stat">
-            <div class="hero-stat-value">10.000<span class="accent">+</span></div>
-            <div class="hero-stat-label" data-i18n="hero.stats.designs">Thiết kế đã tạo</div>
-          </div>
-          <div class="hero-stat">
-            <div class="hero-stat-value">5.000<span class="accent">+</span></div>
-            <div class="hero-stat-label" data-i18n="hero.stats.customers">Khách hàng</div>
-          </div>
-          <div class="hero-stat">
-            <div class="hero-stat-value">4.9<span class="accent">/5</span></div>
-            <div class="hero-stat-label" data-i18n="hero.stats.rating">Đánh giá trung bình</div>
-          </div>
-        </div>
+  <section class="hero" id="hero">
+    <div class="hero-bg">
+      <div class="hero-gradient"></div>
+      <div class="hero-orbs">
+        <div class="hero-orb hero-orb-1"></div>
+        <div class="hero-orb hero-orb-2"></div>
+        <div class="hero-orb hero-orb-3"></div>
+      </div>
+      <div class="hero-grid"></div>
+    </div>
+
+    <div class="hero-content">
+      <div class="hero-badge anim-fade-up">
+        <span class="hero-badge-dot"></span>
+        AI-Powered Design · Limited Edition
       </div>
 
-      <div class="hero-visual">
-        <div class="hero-mockup frame">
-          <span class="reg-mark tl"><span class="reg-mark-circle"></span></span>
-          <span class="reg-mark br"><span class="reg-mark-circle"></span></span>
-          <div class="hero-tag-hang">BLANKUP<br>NOT JUST A SHIRT</div>
-          <svg class="hero-tshirt-svg" viewBox="0 0 400 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Technical flat sketch — the way a real spec sheet draws a garment -->
-            <!-- body + sleeves -->
-            <path d="M96 68 L36 106 L13 178 L68 194 L82 132 L82 424 L318 424 L318 132 L332 194 L387 178 L364 106 L304 68 L262 86 Q231 104 200 104 Q169 104 138 86 Z"
-                  fill="#ffffff" stroke="#17140f" stroke-width="1.5"/>
-            <!-- collar rib (double line = ribbed knit) -->
-            <ellipse cx="200" cy="72" rx="40" ry="17" fill="none" stroke="#17140f" stroke-width="1.5"/>
-            <ellipse cx="200" cy="72" rx="40" ry="17" fill="none" stroke="#17140f" stroke-width="1" stroke-dasharray="1.5 3" transform="translate(0,5) scale(1,0.9)" opacity="0.5"/>
-            <!-- stitch lines (hem, cuffs, side seams) -->
-            <path d="M82 410 L318 410" stroke="#17140f" stroke-width="1" stroke-dasharray="3 3" opacity="0.55"/>
-            <path d="M68 184 L82 200" stroke="#17140f" stroke-width="1" stroke-dasharray="3 3" opacity="0.55"/>
-            <path d="M332 184 L318 200" stroke="#17140f" stroke-width="1" stroke-dasharray="3 3" opacity="0.55"/>
-            <path d="M82 132 L82 424 M318 132 L318 424" stroke="#17140f" stroke-width="1" opacity="0.15"/>
-            <!-- subtle fold shading (tonal only, no colour) -->
-            <path d="M82 210 Q120 260 108 330 Q100 380 82 424" stroke="#17140f" stroke-width="1" opacity="0.06" fill="none"/>
-            <path d="M318 210 Q280 260 292 330 Q300 380 318 424" stroke="#17140f" stroke-width="1" opacity="0.06" fill="none"/>
+      <h1 class="hero-title anim-fade-up" style="animation-delay:0.1s">
+        Design Your<br>
+        <span class="hero-title-gradient">Own Universe</span>
+      </h1>
 
-            <!-- print area with its own registration marks, like a real tech pack -->
-            <g>
-              <rect x="152" y="176" width="96" height="96" fill="none" stroke="#17140f" stroke-width="1" stroke-dasharray="2 3" opacity="0.4"/>
-              <rect x="160" y="184" width="80" height="80" fill="#b43e12"/>
-              <text x="200" y="230" text-anchor="middle" font-family="DM Mono, monospace" font-size="9" letter-spacing="2" fill="#ffffff">BLANKUP</text>
-              <!-- print registration crosses at patch corners -->
-              <g stroke="#17140f" stroke-width="0.75" opacity="0.5">
-                <path d="M152 176 h8 M152 176 v8"/>
-                <path d="M248 176 h-8 M248 176 v8"/>
-                <path d="M152 272 h8 M152 272 v-8"/>
-                <path d="M248 272 h-8 M248 272 v-8"/>
-              </g>
-            </g>
+      <p class="hero-subtitle anim-fade-up" style="animation-delay:0.2s">
+        Mô tả ý tưởng — AI dựng artwork — Xem trước trên áo 3D — Đặt hàng.<br>
+        Mỗi chiếc áo là một tác phẩm nghệ thuật độc nhất.
+      </p>
 
-            <!-- callout labels, like a real tech pack annotation -->
-            <g font-family="DM Mono, monospace" font-size="8" fill="#8a8272" letter-spacing="0.5">
-              <text x="26" y="150">SLEEVE</text>
-              <line x1="26" y1="154" x2="55" y2="168" stroke="#8a8272" stroke-width="0.75"/>
-              <text x="292" y="80">RIB COLLAR</text>
-              <line x1="290" y1="82" x2="238" y2="72" stroke="#8a8272" stroke-width="0.75"/>
-              <text x="20" y="418">HEM</text>
-              <line x1="40" y1="414" x2="82" y2="408" stroke="#8a8272" stroke-width="0.75"/>
-            </g>
-          </svg>
+      <div class="hero-cta anim-fade-up" style="animation-delay:0.3s">
+        <a href="studio.html" class="hero-btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Bắt đầu thiết kế
+        </a>
+        <a href="#how" class="hero-btn-secondary">
+          Tìm hiểu thêm
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </a>
+      </div>
+
+      <div class="hero-trust anim-fade-up" style="animation-delay:0.4s">
+        <div class="hero-trust-avatars">
+          <div class="hero-trust-avatar" style="background:#ff6b00;">MT</div>
+          <div class="hero-trust-avatar" style="background:#3b82f6;">TL</div>
+          <div class="hero-trust-avatar" style="background:#10b981;">KP</div>
+          <div class="hero-trust-avatar" style="background:#8b5cf6;">HN</div>
         </div>
-        <div class="hero-chip-row">
-          <span class="hero-chip"><b>AI</b>&nbsp;Design</span>
-          <span class="hero-chip"><b>100%</b>&nbsp;Cotton</span>
-          <span class="hero-chip"><b>COD</b>&nbsp;Toàn quốc</span>
+        <div class="hero-trust-text">
+          <strong>5.000+</strong> khách hàng tin tưởng
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-visual anim-fade-up" style="animation-delay:0.3s">
+      <div class="hero-mockup-wrapper">
+        <div class="hero-mockup-glow"></div>
+        <div class="hero-mockup-card">
+          <div class="hero-mockup-header">
+            <div class="hero-mockup-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="hero-mockup-title">AI Design Studio</span>
+          </div>
+          <div class="hero-mockup-body">
+            <div class="hero-mockup-prompt">
+              <span class="hero-mockup-prompt-text">Một con rồng Việt Nam phong cách cyberpunk...</span>
+              <span class="hero-mockup-prompt-cursor">|</span>
+            </div>
+            <div class="hero-mockup-result">
+              <svg viewBox="0 0 200 200" class="hero-mockup-svg">
+                <rect width="200" height="200" fill="#111827" rx="12"/>
+                <circle cx="100" cy="90" r="40" fill="#ff6b00" opacity="0.2"/>
+                <circle cx="100" cy="90" r="25" fill="#ff6b00" opacity="0.35"/>
+                <circle cx="100" cy="90" r="12" fill="#ff6b00" opacity="0.6"/>
+                <text x="100" y="150" text-anchor="middle" font-family="Outfit" font-size="11" fill="#ff6b00" font-weight="700">BLANKUP</text>
+              </svg>
+            </div>
+          </div>
+          <div class="hero-mockup-footer">
+            <span class="hero-mockup-tag">T-Shirt · Black · M</span>
+            <span class="hero-mockup-price">250,000₫</span>
+          </div>
+        </div>
+
+        <div class="hero-float-card hero-float-1">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>AI generated</span>
+        </div>
+        <div class="hero-float-card hero-float-2">
+          <div class="hero-float-stars">★★★★★</div>
+          <span>4.9/5</span>
+        </div>
+        <div class="hero-float-card hero-float-3">
+          <span class="hero-float-price">250K</span>
+          <span>COD</span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ====== POSTER STATEMENT (Air-inspired full-bleed display type) ====== -->
-  <section class="poster">
-    <div class="container poster-inner">
-      <span class="poster-mark">01</span>
-      <h2 class="poster-headline">Not Just A <span class="accent">Shirt.</span></h2>
-      <span class="poster-mark">/01</span>
+  <!-- ====== STATS BAR ====== -->
+  <section class="stats-bar">
+    <div class="stats-inner">
+      <div class="stat-item">
+        <div class="stat-value" data-count="10000">0</div>
+        <div class="stat-label">Thiết kế đã tạo</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-value" data-count="5000">0</div>
+        <div class="stat-label">Khách hàng</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-value">4.9<span class="stat-accent">/5</span></div>
+        <div class="stat-label">Đánh giá trung bình</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-value">99<span class="stat-accent">%</span></div>
+        <div class="stat-label">Hài lòng</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== FEATURES ====== -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-header anim-on-scroll">
+        <span class="section-badge">Tính năng</span>
+        <h2 class="section-title">Tại sao chọn <span class="text-gradient">Blankup</span>?</h2>
+        <p class="section-subtitle">Không chỉ là áo thun — đây là trải nghiệm thiết kế AI hoàn toàn mới</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card anim-on-scroll">
+          <div class="feature-icon" style="background: linear-gradient(135deg, #ff6b00, #ff8c38);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3>AI Design</h3>
+          <p>Mô tả ý tưởng — AI tạo artwork trong vài giây. Không cần biết thiết kế.</p>
+        </div>
+        <div class="feature-card anim-on-scroll" style="animation-delay:0.1s">
+          <div class="feature-icon" style="background: linear-gradient(135deg, #3b82f6, #60a5fa);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          </div>
+          <h3>3D Preview</h3>
+          <p>Xem thiết kế trên mockup áo 3D trước khi đặt hàng. xoay, kéo, chỉnh vị trí.</p>
+        </div>
+        <div class="feature-card anim-on-scroll" style="animation-delay:0.2s">
+          <div class="feature-icon" style="background: linear-gradient(135deg, #10b981, #34d399);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          </div>
+          <h3>Đặt hàng COD</h3>
+          <p>Thanh toán khi nhận hàng. Kiểm tra áo trước khi trả tiền. An toàn 100%.</p>
+        </div>
+        <div class="feature-card anim-on-scroll" style="animation-delay:0.3s">
+          <div class="feature-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <h3>Upload ảnh</h3>
+          <p>Tải ảnh tham khảo, AI sẽ sáng tạo dựa trên ý tưởng của bạn.</p>
+        </div>
+      </div>
     </div>
   </section>
 
   <!-- ====== HOW IT WORKS ====== -->
-  <section class="how-it-works section" id="how-it-works">
+  <section class="how" id="how">
     <div class="container">
-      <div class="section-header">
-        <div class="tag tag-rust"><span data-i18n="how.badge">Quy trình · 3 bước</span></div>
-        <h2 class="section-title" data-i18n="how.title">Cách hoạt động</h2>
-        <p class="section-subtitle" data-i18n="how.subtitle">
-          Từ ý tưởng đến chiếc áo cầm trên tay — không cần biết thiết kế
-        </p>
+      <div class="section-header anim-on-scroll">
+        <span class="section-badge">Quy trình</span>
+        <h2 class="section-title">3 bước đơn giản</h2>
+        <p class="section-subtitle">Từ ý tưởng đến chiếc áo cầm trên tay</p>
       </div>
 
-      <div class="steps-grid">
-        <div class="step-card animate-on-scroll">
-          <div class="step-number">01</div>
-          <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 8l2-3h8l2 3-1 1v11H7V9z"/><path d="M9 5l3-2 3 2"/></svg></div>
-          <h3 class="step-title" data-i18n="how.step1.title">Chọn sản phẩm</h3>
-          <p class="step-desc" data-i18n="how.step1.desc">Chọn kiểu áo, màu và form dáng từ bộ sưu tập chất lượng cao</p>
+      <div class="how-steps">
+        <div class="how-step anim-on-scroll">
+          <div class="how-step-number">01</div>
+          <div class="how-step-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8l2-3h8l2 3-1 1v11H7V9z"/><path d="M9 5l3-2 3 2"/></svg>
+          </div>
+          <h3>Chọn sản phẩm</h3>
+          <p>Chọn kiểu áo, màu sắc và form dáng từ bộ sưu tập chất lượng cao.</p>
         </div>
-        <div class="step-card animate-on-scroll animate-delay-1">
-          <div class="step-number">02</div>
-          <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 18l5-9 4 6 3-4 4 7z"/><circle cx="9" cy="7" r="1.6"/></svg></div>
-          <h3 class="step-title" data-i18n="how.step2.title">AI tạo thiết kế</h3>
-          <p class="step-desc" data-i18n="how.step2.desc">Viết ý tưởng hoặc tải ảnh lên — AI dựng artwork trong vài giây</p>
+        <div class="how-step-connector"></div>
+        <div class="how-step anim-on-scroll" style="animation-delay:0.15s">
+          <div class="how-step-number">02</div>
+          <div class="how-step-icon" style="background: linear-gradient(135deg, #ff6b00, #ff8c38); color: white;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3>AI tạo thiết kế</h3>
+          <p>Viết prompt hoặc upload ảnh — AI dựng artwork trong vài giây.</p>
         </div>
-        <div class="step-card animate-on-scroll animate-delay-2">
-          <div class="step-number">03</div>
-          <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="8" width="16" height="11" rx="1"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg></div>
-          <h3 class="step-title" data-i18n="how.step3.title">Đặt hàng & nhận áo</h3>
-          <p class="step-desc" data-i18n="how.step3.desc">Xác nhận đơn, thanh toán khi nhận hàng, giao tận nơi toàn quốc</p>
+        <div class="how-step-connector"></div>
+        <div class="how-step anim-on-scroll" style="animation-delay:0.3s">
+          <div class="how-step-number">03</div>
+          <div class="how-step-icon" style="background: linear-gradient(135deg, #10b981, #34d399); color: white;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h3>Nhận áo</h3>
+          <p>Đặt hàng COD, giao tận nơi toàn quốc. Kiểm tra trước khi thanh toán.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ====== PRODUCTS ====== -->
-  <section class="section" id="products">
+  <!-- ====== GALLERY ====== -->
+  <section class="gallery" id="gallery">
     <div class="container">
-      <div class="section-header">
-        <div class="tag tag-light"><span data-i18n="products.badge">Bộ sưu tập cộng đồng</span></div>
-        <h2 class="section-title" data-i18n="products.title">Sản phẩm của chúng tôi</h2>
-        <p class="section-subtitle" data-i18n="products.subtitle">
-          Khám phá thiết kế từ cộng đồng, chọn mẫu bạn thích rồi tiếp tục chỉnh trong AI Studio
-        </p>
+      <div class="section-header anim-on-scroll">
+        <span class="section-badge">Bộ sưu tập</span>
+        <h2 class="section-title">Thiết kế cộng đồng</h2>
+        <p class="section-subtitle">Lấy cảm hứng từ các thiết kế AI của cộng đồng Blankup</p>
       </div>
 
-      <div class="products-filter" id="productsFilter">
-        <button class="filter-btn active" data-category="all" data-i18n="products.all">Tất cả</button>
-        <button class="filter-btn" data-category="minimalist">Tối giản</button>
-        <button class="filter-btn" data-category="streetwear">Streetwear</button>
-        <button class="filter-btn" data-category="anime">Anime</button>
-        <button class="filter-btn" data-category="typography">Typography</button>
+      <div class="gallery-grid" id="galleryGrid">
+        <!-- Loaded dynamically -->
       </div>
 
-      <div class="products-grid" id="productsGrid">
-        <!-- Products loaded dynamically via JS -->
+      <div class="gallery-cta anim-on-scroll">
+        <a href="studio.html" class="hero-btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Tạo thiết kế của bạn
+        </a>
       </div>
     </div>
   </section>
 
-  <!-- ====== AI STUDIO PREVIEW ====== -->
-  <section class="ai-preview section" id="ai-preview">
+  <!-- ====== STUDIO PREVIEW ====== -->
+  <section class="studio-preview" id="studio">
     <div class="container">
-      <div class="ai-content">
-        <div class="tag tag-rust"><span data-i18n="ai.badge">Công nghệ AI</span></div>
-        <h2 class="section-title" data-i18n="ai.title">AI Design Studio</h2>
-        <p class="section-subtitle" style="margin-left:0; text-align:left;" data-i18n="ai.subtitle">
-          Biến ý tưởng thành thiết kế áo thun trong vài giây
+      <div class="studio-preview-content anim-on-scroll">
+        <span class="section-badge">AI Studio</span>
+        <h2 class="section-title">Biến ý tưởng thành<br><span class="text-gradient">tác phẩm nghệ thuật</span></h2>
+        <p class="section-subtitle" style="text-align:left; margin-left:0;">
+          AI Design Studio của Blankup sử dụng công nghệ AI mới nhất để biến mô tả của bạn thành thiết kế áo thun chuyên nghiệp.
         </p>
+        <div class="studio-preview-features">
+          <div class="studio-feature">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Prompt Enhancement — AI tối ưu prompt tự động</span>
+          </div>
+          <div class="studio-feature">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>8 phong cách thiết kế chuyên nghiệp</span>
+          </div>
+          <div class="studio-feature">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>3D preview với nhiều màu áo và kích cỡ</span>
+          </div>
+          <div class="studio-feature">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Tải design và chia sẻ cộng đồng</span>
+          </div>
+        </div>
+        <a href="studio.html" class="hero-btn-primary" style="margin-top:24px;">
+          Mở AI Studio
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
 
-        <div class="ai-features">
-          <div class="ai-feature animate-on-scroll">
+      <div class="studio-preview-visual anim-on-scroll">
+        <div class="studio-preview-mockup">
+          <div class="studio-preview-screen">
+            <div class="studio-preview-toolbar">
+              <span class="studio-preview-dot" style="background:#ff5f57;"></span>
+              <span class="studio-preview-dot" style="background:#ffbd2e;"></span>
+              <span class="studio-preview-dot" style="background:#28c840;"></span>
+              <span class="studio-preview-url">blankup.vn/studio</span>
+            </div>
+            <div class="studio-preview-content-area">
+              <div class="studio-preview-left">
+                <div class="studio-preview-prompt-box">
+                  <div class="studio-preview-prompt-label">Prompt</div>
+                  <div class="studio-preview-prompt-text">Rồng Việt Nam cyberpunk neon...</div>
+                </div>
+                <div class="studio-preview-styles">
+                  <span class="studio-preview-style active">Minimal</span>
+                  <span class="studio-preview-style">Street</span>
+                  <span class="studio-preview-style">Anime</span>
+                </div>
+              </div>
+              <div class="studio-preview-canvas">
+                <svg viewBox="0 0 160 200" class="studio-preview-shirt">
+                  <path d="M40 30 L15 50 L5 90 L30 95 L37 70 L37 185 L123 185 L123 70 L130 95 L155 90 L145 50 L120 30 Q105 40 80 40 Q55 40 40 30 Z" fill="white" stroke="#ddd" stroke-width="1"/>
+                  <rect x="55" y="70" width="50" height="50" fill="#ff6b00" opacity="0.3" rx="4"/>
+                  <circle cx="80" cy="95" r="15" fill="#ff6b00" opacity="0.5"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== REVIEWS ====== -->
+  <section class="reviews" id="reviews">
+    <div class="container">
+      <div class="section-header anim-on-scroll">
+        <span class="section-badge">Đánh giá</span>
+        <h2 class="section-title">Khách hàng nói gì</h2>
+        <p class="section-subtitle">Hàng ngàn khách hàng đã tin tưởng Blankup</p>
+      </div>
+
+      <div class="reviews-track" id="reviewsTrack">
+        <div class="review-card anim-on-scroll">
+          <div class="review-stars">★★★★★</div>
+          <p>"Tui rất bất ngờ với chất lượng áo và thiết kế AI. Chỉ cần mô tả ý tưởng, vài giây sau đã có design đẹp mê ly!"</p>
+          <div class="review-author">
+            <div class="review-avatar" style="background:#ff6b00;">MT</div>
             <div>
-              <div class="ai-feature-title" data-i18n="ai.feature1.title">Viết prompt</div>
-              <div class="ai-feature-desc" data-i18n="ai.feature1.desc">Mô tả ý tưởng bằng lời — AI biến nó thành hình ảnh</div>
-            </div>
-          </div>
-          <div class="ai-feature animate-on-scroll animate-delay-1">
-            <div>
-              <div class="ai-feature-title" data-i18n="ai.feature2.title">Upload ảnh</div>
-              <div class="ai-feature-desc" data-i18n="ai.feature2.desc">Tải ảnh tham khảo kèm ý tưởng để AI sáng tạo thêm</div>
-            </div>
-          </div>
-          <div class="ai-feature animate-on-scroll animate-delay-2">
-            <div>
-              <div class="ai-feature-title" data-i18n="ai.feature3.title">Xem trước trực tiếp</div>
-              <div class="ai-feature-desc" data-i18n="ai.feature3.desc">Xem thiết kế trên mockup áo thật trước khi đặt hàng</div>
+              <div class="review-name">Minh Tuấn</div>
+              <div class="review-role">Designer, TP.HCM</div>
             </div>
           </div>
         </div>
-
-        <a href="studio.html" class="btn btn-primary btn-lg" data-i18n="ai.cta">Mở AI Studio</a>
-      </div>
-
-      <div class="ai-demo-visual animate-on-scroll">
-        <div class="ai-demo-card frame">
-          <span class="reg-mark tr"><span class="reg-mark-circle"></span></span>
-          <span class="reg-mark bl"><span class="reg-mark-circle"></span></span>
-          <div class="ai-demo-header">AI RENDER LOG</div>
-          <div class="ai-demo-prompt" data-i18n="ai.demo.placeholder">
-            "Một con rồng Việt Nam phong cách cyberpunk, hiệu ứng neon xanh, nền đen"
+        <div class="review-card anim-on-scroll" style="animation-delay:0.1s">
+          <div class="review-stars">★★★★★</div>
+          <p>"Đặt áo cho cả team, mỗi người một design khác nhau mà giá hợp lý. AI thiết kế nhanh và đẹp hơn tui tưởng!"</p>
+          <div class="review-author">
+            <div class="review-avatar" style="background:#3b82f6;">TL</div>
+            <div>
+              <div class="review-name">Thanh Lan</div>
+              <div class="review-role">CEO Startup, Hà Nội</div>
+            </div>
           </div>
-          <div class="ai-demo-result"></div>
+        </div>
+        <div class="review-card anim-on-scroll" style="animation-delay:0.2s">
+          <div class="review-stars">★★★★★</div>
+          <p>"Lần đầu thấy web cho tự thiết kế áo bằng AI ở VN. Upload ảnh mèo nhà lên, AI biến thành artwork cực chất!"</p>
+          <div class="review-author">
+            <div class="review-avatar" style="background:#10b981;">KP</div>
+            <div>
+              <div class="review-name">Khoa Phạm</div>
+              <div class="review-role">Sinh viên, Đà Nẵng</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ====== TESTIMONIALS ====== -->
-  <section class="section" id="testimonials">
-    <div class="container">
-      <div class="section-header">
-        <div class="tag"><span data-i18n="testimonials.badge">Phản hồi khách hàng</span></div>
-        <h2 class="section-title" data-i18n="testimonials.title">Khách hàng nói gì</h2>
-        <p class="section-subtitle" data-i18n="testimonials.subtitle">
-          Hàng ngàn khách hàng đã tin tưởng và yêu thích sản phẩm của Blankup
-        </p>
-      </div>
-
-      <div class="testimonials-wrapper">
-        <div class="testimonials-track" id="testimonialsTrack">
-          <div class="testimonial-card">
-            <div class="testimonial-stars">★★★★★</div>
-            <p class="testimonial-text">"Tui rất bất ngờ với chất lượng áo và thiết kế AI. Chỉ cần mô tả ý tưởng, vài giây sau đã có design đẹp mê ly!"</p>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">MT</div>
-              <div>
-                <div class="testimonial-name">Minh Tuấn</div>
-                <div class="testimonial-role">Designer, TP.HCM</div>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <div class="testimonial-stars">★★★★★</div>
-            <p class="testimonial-text">"Đặt áo cho cả team, mỗi người một design khác nhau mà giá hợp lý. AI thiết kế nhanh và đẹp hơn tui tưởng!"</p>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">TL</div>
-              <div>
-                <div class="testimonial-name">Thanh Lan</div>
-                <div class="testimonial-role">CEO Startup, Hà Nội</div>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <div class="testimonial-stars">★★★★★</div>
-            <p class="testimonial-text">"Lần đầu thấy web cho tự thiết kế áo bằng AI ở VN. Upload ảnh mèo nhà lên, AI biến thành artwork cực chất!"</p>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">KP</div>
-              <div>
-                <div class="testimonial-name">Khoa Phạm</div>
-                <div class="testimonial-role">Sinh viên, Đà Nẵng</div>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <div class="testimonial-stars">★★★★★</div>
-            <p class="testimonial-text">"Giao hàng nhanh, chất áo mặc rất thoải mái. In ấn sắc nét, đúng design mình chọn. Sẽ quay lại mua thêm!"</p>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">HN</div>
-              <div>
-                <div class="testimonial-name">Hương Nguyễn</div>
-                <div class="testimonial-role">Marketing, TP.HCM</div>
-              </div>
-            </div>
-          </div>
-          <div class="testimonial-card">
-            <div class="testimonial-stars">★★★★★</div>
-            <p class="testimonial-text">"COD tiện lợi, không cần lo thanh toán trước. Áo đẹp, form chuẩn, cotton mát. 10 điểm cho Blankup!"</p>
-            <div class="testimonial-author">
-              <div class="testimonial-avatar">DM</div>
-              <div>
-                <div class="testimonial-name">Đức Mạnh</div>
-                <div class="testimonial-role">Freelancer, Cần Thơ</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="testimonials-nav">
-        <button id="testimonialPrev" aria-label="Previous">‹</button>
-        <button id="testimonialNext" aria-label="Next">›</button>
-      </div>
+  <!-- ====== CTA SECTION ====== -->
+  <section class="cta-section">
+    <div class="cta-bg">
+      <div class="cta-orb cta-orb-1"></div>
+      <div class="cta-orb cta-orb-2"></div>
     </div>
-  </section>
-
-  <!-- ====== CONTACT ====== -->
-  <section class="contact section" id="contact">
     <div class="container">
-      <div class="contact-left">
-        <div class="tag tag-rust"><span data-i18n="contact.badge">Liên hệ</span></div>
-        <h2 class="section-title" data-i18n="contact.title">Kết nối với chúng tôi</h2>
-        <p class="section-subtitle" style="margin-left:0; text-align:left;" data-i18n="contact.subtitle">
-          Có câu hỏi? Đội ngũ Blankup luôn sẵn sàng hỗ trợ bạn
-        </p>
-
-        <div class="contact-info-cards">
-          <div class="contact-info-card">
-            <div class="contact-info-label">Address</div>
-            <div class="contact-info-value" data-i18n="contact.info.address">TP. Hồ Chí Minh, Việt Nam</div>
-          </div>
-          <div class="contact-info-card">
-            <div class="contact-info-label">Email</div>
-            <div class="contact-info-value" data-i18n="contact.info.email">hello@blankup.vn</div>
-          </div>
-          <div class="contact-info-card">
-            <div class="contact-info-label">Phone</div>
-            <div class="contact-info-value" data-i18n="contact.info.phone">0123 456 789</div>
-          </div>
-          <div class="contact-info-card">
-            <div class="contact-info-label">Working Hours</div>
-            <div class="contact-info-value" data-i18n="contact.info.hours">T2 - T7: 8:00 - 18:00</div>
-          </div>
+      <div class="cta-content anim-on-scroll">
+        <h2 class="cta-title">Sẵn sàng tạo thiết kế<br><span class="text-gradient">đầu tiên của bạn?</span></h2>
+        <p class="cta-subtitle">Miễn phí tạo design. Chỉ thanh toán khi đặt áo.</p>
+        <div class="cta-buttons">
+          <a href="studio.html" class="hero-btn-primary hero-btn-lg">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Bắt đầu ngay — Miễn phí
+          </a>
         </div>
-      </div>
-
-      <div class="contact-form-card">
-        <form id="contactForm">
-          <div class="form-row">
-            <div class="form-group">
-              <label data-i18n="contact.name">Họ tên</label>
-              <input type="text" class="form-input" id="contactName" required data-i18n-placeholder="contact.name">
-            </div>
-            <div class="form-group">
-              <label data-i18n="contact.email">Email</label>
-              <input type="email" class="form-input" id="contactEmail" required placeholder="email@example.com">
-            </div>
-          </div>
-          <div class="form-group">
-            <label data-i18n="contact.phone">Số điện thoại</label>
-            <input type="tel" class="form-input" id="contactPhone" data-i18n-placeholder="contact.phone">
-          </div>
-          <div class="form-group">
-            <label data-i18n="contact.message">Tin nhắn</label>
-            <textarea class="form-input" id="contactMessage" rows="4" required data-i18n-placeholder="contact.message"></textarea>
-          </div>
-          <button type="submit" class="btn btn-primary btn-lg" style="width:100%;" id="contactSubmitBtn">
-            <span data-i18n="contact.send">Gửi tin nhắn</span>
-          </button>
-          <div class="form-success" id="contactSuccess" data-i18n="contact.success">
-            Tin nhắn đã được gửi thành công!
-          </div>
-        </form>
+        <p class="cta-note">Không cần thẻ tín dụng · Không phí ẩn · Hủy bất cứ lúc nào</p>
       </div>
     </div>
   </section>
 
   <!-- ====== FOOTER ====== -->
-  <footer class="footer" id="footer">
+  <footer class="footer">
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
-          <div class="navbar-logo">
-            <svg class="logo-icon" viewBox="0 0 38 38" fill="none">
-              <rect width="38" height="38" rx="4" fill="#b43e12"/>
-              <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="#f6f3ec" opacity="0.92"/>
-              <path d="M16 10 L19 6 L22 10" stroke="#f6f3ec" stroke-width="1.5" fill="none"/>
+          <a href="/" class="nav-logo">
+            <svg width="28" height="28" viewBox="0 0 38 38" fill="none">
+              <rect width="38" height="38" rx="10" fill="url(#logoGrad2)"/>
+              <defs><linearGradient id="logoGrad2" x1="0" y1="0" x2="38" y2="38"><stop stop-color="#ff6b00"/><stop offset="1" stop-color="#ff8c38"/></linearGradient></defs>
+              <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.9"/>
+              <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
             </svg>
-            <span>BLANK<span class="logo-highlight">UP</span></span>
-          </div>
-          <p class="footer-desc" data-i18n="footer.desc">
-            Nền tảng thiết kế áo thun bằng AI. Mỗi chiếc áo là một tác phẩm nghệ thuật độc nhất.
-          </p>
-          <div class="footer-social">
-            <a href="#" aria-label="Facebook">FB</a>
-            <a href="#" aria-label="Instagram">IG</a>
-            <a href="#" aria-label="TikTok">TT</a>
-          </div>
+            <span>BLANK<span class="nav-logo-accent">UP</span></span>
+          </a>
+          <p class="footer-desc">Nền tảng thiết kế áo thun bằng AI. Mỗi chiếc áo là một tác phẩm nghệ thuật độc nhất.</p>
         </div>
-
         <div>
-          <h4 class="footer-col-title" data-i18n="footer.product">Sản phẩm</h4>
-          <ul class="footer-links">
-            <li><a href="#products" data-i18n="footer.product.tshirt">Áo thun</a></li>
-            <li><a href="#products" data-i18n="footer.product.polo">Áo polo</a></li>
-            <li><a href="#products" data-i18n="footer.product.hoodie">Hoodie</a></li>
-            <li><a href="#products" data-i18n="footer.product.oversize">Oversize</a></li>
+          <h4>Sản phẩm</h4>
+          <ul>
+            <li><a href="#gallery">Áo thun</a></li>
+            <li><a href="#gallery">Áo polo</a></li>
+            <li><a href="#gallery">Hoodie</a></li>
           </ul>
         </div>
-
         <div>
-          <h4 class="footer-col-title" data-i18n="footer.support">Hỗ trợ</h4>
-          <ul class="footer-links">
-            <li><a href="#" data-i18n="footer.support.faq">Câu hỏi thường gặp</a></li>
-            <li><a href="#" data-i18n="footer.support.shipping">Chính sách giao hàng</a></li>
-            <li><a href="#" data-i18n="footer.support.returns">Đổi trả</a></li>
-            <li><a href="#contact" data-i18n="footer.support.contact">Liên hệ</a></li>
+          <h4>Hỗ trợ</h4>
+          <ul>
+            <li><a href="#">FAQ</a></li>
+            <li><a href="#">Giao hàng</a></li>
+            <li><a href="#">Đổi trả</a></li>
+            <li><a href="#contact">Liên hệ</a></li>
           </ul>
         </div>
-
         <div>
-          <h4 class="footer-col-title" data-i18n="footer.legal">Pháp lý</h4>
-          <ul class="footer-links">
-            <li><a href="#" data-i18n="footer.legal.terms">Điều khoản sử dụng</a></li>
-            <li><a href="#" data-i18n="footer.legal.privacy">Chính sách bảo mật</a></li>
+          <h4>Pháp lý</h4>
+          <ul>
+            <li><a href="#">Điều khoản</a></li>
+            <li><a href="#">Bảo mật</a></li>
           </ul>
         </div>
       </div>
-
       <div class="footer-bottom">
-        <span data-i18n="footer.copyright">© 2024 Blankup. Mọi quyền được bảo lưu.</span>
-        <span class="footer-made" data-i18n="footer.made">Thiết kế tại Việt Nam</span>
+        <span>© 2024 Blankup. Mọi quyền được bảo lưu.</span>
+        <span>Thiết kế tại Việt Nam 🇻🇳</span>
       </div>
     </div>
   </footer>
@@ -457,6 +467,6 @@
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
-  <script src="js/app.js?v=editorial-1"></script>
+  <script src="js/home.js?v=premium-1"></script>
 </body>
 </html>
