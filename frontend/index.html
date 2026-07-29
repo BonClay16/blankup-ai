@@ -1,4 +1,4 @@
-<!-- frontend/index.html — v2 Premium Landing Page -->
+<!-- frontend/index.html — v4 Warm Editorial Redesign -->
 <!DOCTYPE html>
 <html lang="vi" data-lang="vi">
 <head>
@@ -8,11 +8,13 @@
   <meta name="description" content="Blankup - Biến ý tưởng thành tác phẩm nghệ thuật trên áo thun. Mô tả ý tưởng, AI tạo design, xem trước 3D, đặt hàng COD.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=premium-1">
-  <link rel="stylesheet" href="css/home.css?v=premium-1">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=v4">
+  <link rel="stylesheet" href="css/home.css?v=v4">
 </head>
 <body class="home-page">
+<div class="cursor-glow hidden" id="cursorGlow"></div>
+<div class="noise-overlay"></div>
 
   <!-- ====== NAVIGATION ====== -->
   <nav class="nav" id="nav">
@@ -56,96 +58,104 @@
   <section class="hero" id="hero">
     <div class="hero-bg">
       <div class="hero-gradient"></div>
-      <div class="hero-orbs">
-        <div class="hero-orb hero-orb-1"></div>
-        <div class="hero-orb hero-orb-2"></div>
-        <div class="hero-orb hero-orb-3"></div>
-      </div>
       <div class="hero-grid"></div>
     </div>
 
     <div class="hero-content">
-      <div class="hero-badge anim-fade-up">
-        <span class="hero-badge-dot"></span>
-        Ideas Made Wearable · AI Design Studio
-      </div>
-
-      <h1 class="hero-title anim-fade-up" style="animation-delay:0.1s">
-        <span class="hero-title-sub">NOT JUST A SHIRT.</span>
-        <span class="hero-title-gradient">Ideas Made Wearable.</span>
-      </h1>
-
-      <p class="hero-subtitle anim-fade-up" style="animation-delay:0.2s">
-        Mô tả ý tưởng — AI tạo tác phẩm nghệ thuật độc nhất — Xem trước 3D — Nhận áo.<br>
-        Mỗi chiếc áo là một câu chuyện. Viết câu chuyện của bạn.
-      </p>
-
-      <div class="hero-cta anim-fade-up" style="animation-delay:0.3s">
-        <a href="studio.html" class="hero-btn-primary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          Tạo thiết kế miễn phí
-        </a>
-        <a href="#gallery" class="hero-btn-secondary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Xem cảm hứng
-        </a>
-      </div>
-
-      <div class="hero-trust anim-fade-up" style="animation-delay:0.4s">
-        <div class="hero-trust-avatars">
-          <div class="hero-trust-avatar" style="background:#ff6b00;">MT</div>
-          <div class="hero-trust-avatar" style="background:#3b82f6;">TL</div>
-          <div class="hero-trust-avatar" style="background:#10b981;">KP</div>
-          <div class="hero-trust-avatar" style="background:#8b5cf6;">HN</div>
+      <div class="hero-left">
+        <div class="hero-badge anim-fade-up">
+          <span class="hero-badge-dot"></span>
+          Ideas Made Wearable · AI Design Studio
         </div>
-        <div class="hero-trust-text">
-          <strong>5.000+</strong> khách hàng tin tưởng
-        </div>
-      </div>
-    </div>
 
-    <div class="hero-visual anim-fade-up" style="animation-delay:0.3s">
-      <div class="hero-mockup-wrapper">
-        <div class="hero-mockup-glow"></div>
-        <div class="hero-mockup-card">
-          <div class="hero-mockup-header">
-            <div class="hero-mockup-dots">
-              <span></span><span></span><span></span>
-            </div>
-            <span class="hero-mockup-title">AI Design Studio</span>
+        <h1 class="hero-title anim-fade-up" style="animation-delay:0.1s">
+          <span class="hero-title-sub">NOT JUST A SHIRT.</span>
+          <span class="hero-title-gradient">Ideas Made Wearable.</span>
+        </h1>
+
+        <p class="hero-subtitle anim-fade-up" style="animation-delay:0.2s">
+          Mô tả ý tưởng — AI tạo tác phẩm nghệ thuật độc nhất — Xem trước 3D — Nhận áo.
+        </p>
+
+        <div class="hero-cta anim-fade-up" style="animation-delay:0.3s">
+          <a href="studio.html" class="hero-btn-primary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Tạo thiết kế miễn phí
+          </a>
+          <a href="#gallery" class="hero-btn-secondary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Xem cảm hứng
+          </a>
+        </div>
+
+        <div class="live-prompt anim-fade-up" style="animation-delay:0.35s">
+          <span class="live-prompt-label">Prompt</span>
+          <span class="live-prompt-text">
+            <span class="typing-text" id="heroTyping">Một con rồng Việt Nam phong cách cyberpunk</span>
+            <span class="typing-cursor">|</span>
+          </span>
+        </div>
+
+        <div class="hero-trust anim-fade-up" style="animation-delay:0.4s">
+          <div class="hero-trust-avatars">
+            <div class="hero-trust-avatar" style="background:#ff5e00;">MT</div>
+            <div class="hero-trust-avatar" style="background:#3b82f6;">TL</div>
+            <div class="hero-trust-avatar" style="background:#10b981;">KP</div>
+            <div class="hero-trust-avatar" style="background:#8b5cf6;">HN</div>
           </div>
-          <div class="hero-mockup-body">
-            <div class="hero-mockup-prompt">
-              <span class="hero-mockup-prompt-text">Một con rồng Việt Nam phong cách cyberpunk...</span>
-              <span class="hero-mockup-prompt-cursor">|</span>
-            </div>
-            <div class="hero-mockup-result">
-              <svg viewBox="0 0 200 200" class="hero-mockup-svg">
-                <rect width="200" height="200" fill="#111827" rx="12"/>
-                <circle cx="100" cy="90" r="40" fill="#ff6b00" opacity="0.2"/>
-                <circle cx="100" cy="90" r="25" fill="#ff6b00" opacity="0.35"/>
-                <circle cx="100" cy="90" r="12" fill="#ff6b00" opacity="0.6"/>
-                <text x="100" y="150" text-anchor="middle" font-family="Outfit" font-size="11" fill="#ff6b00" font-weight="700">BLANKUP</text>
-              </svg>
-            </div>
-          </div>
-          <div class="hero-mockup-footer">
-            <span class="hero-mockup-tag">T-Shirt · Black · M</span>
-            <span class="hero-mockup-price">250,000₫</span>
+          <div class="hero-trust-text">
+            <strong>5.000+</strong> khách hàng tin tưởng
           </div>
         </div>
+      </div>
 
-        <div class="hero-float-card hero-float-1">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          <span>AI Design</span>
-        </div>
-        <div class="hero-float-card hero-float-2">
-          <div class="hero-float-stars">★★★★★</div>
-          <span>4.9/5</span>
-        </div>
-        <div class="hero-float-card hero-float-3">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6b00" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          <span>COD</span>
+      <div class="hero-visual anim-fade-up" style="animation-delay:0.3s">
+        <div class="hero-canvas-area">
+          <div class="hero-canvas-glow"></div>
+          <div class="hero-mockup-card" id="heroMockup">
+            <div class="hero-mockup-header">
+              <div class="hero-mockup-dots">
+                <span></span><span></span><span></span>
+              </div>
+              <span class="hero-mockup-title">AI Design Studio</span>
+            </div>
+            <div class="hero-mockup-body">
+              <div class="hero-mockup-prompt">
+                <span class="hero-mockup-prompt-text">
+                  <span class="hero-typing-wrapper">
+                    <span class="hero-typing-text" id="heroPromptTyping">rồng Việt Nam cyberpunk neon...</span>
+                    <span class="hero-typing-cursor">|</span>
+                  </span>
+                </span>
+              </div>
+              <div class="hero-mockup-result" id="heroArtwork">
+                <svg viewBox="0 0 200 200" class="hero-mockup-svg">
+                  <rect width="200" height="200" fill="#111827" rx="12"/>
+                  <circle cx="100" cy="90" r="40" fill="#ff5e00" opacity="0.2"/>
+                  <circle cx="100" cy="90" r="25" fill="#ff5e00" opacity="0.35"/>
+                  <circle cx="100" cy="90" r="12" fill="#ff5e00" opacity="0.6"/>
+                  <text x="100" y="150" text-anchor="middle" font-family="Archivo" font-size="11" fill="#ff5e00" font-weight="700">BLANKUP</text>
+                </svg>
+              </div>
+            </div>
+            <div class="hero-mockup-footer">
+              <span class="hero-mockup-tag">T-Shirt · Black · M</span>
+              <span class="hero-mockup-price">250,000₫</span>
+            </div>
+          </div>
+
+          <div class="hero-float-card hero-float-1">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>AI Design</span>
+          </div>
+          <div class="hero-float-card hero-float-2">
+            <div class="hero-float-stars">★★★★★</div>
+            <span>4.9/5</span>
+          </div>
+          <div class="hero-float-card hero-float-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>COD</span>
+          </div>
         </div>
       </div>
     </div>
@@ -178,38 +188,43 @@
 
   <!-- ====== FEATURES ====== -->
   <section class="features" id="features">
+    <div class="section-bloom"></div>
     <div class="container">
       <div class="section-header anim-on-scroll">
-        <span class="section-badge">Tính năng</span>
-        <h2 class="section-title">Từ ý tưởng đến<br><span class="text-gradient">tác phẩm</span></h2>
+        <div class="section-meta">
+          <span class="section-number">01</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">Tính năng</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Từ ý tưởng đến</span><br><span class="text-gradient">tác phẩm</span></h2>
         <p class="section-subtitle">Mọi công cụ bạn cần để biến bất kỳ ý tưởng nào thành chiếc áo thun độc nhất</p>
       </div>
 
       <div class="features-grid">
         <div class="feature-card anim-on-scroll">
-          <div class="feature-icon" style="background: linear-gradient(135deg, #ff6b00, #ff8c38);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <div class="feature-icon" style="background: linear-gradient(135deg, #ff5e00, #ff8a00);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           </div>
           <h3>AI Design</h3>
           <p>Mô tả ý tưởng — AI tạo artwork trong vài giây. Không cần biết thiết kế.</p>
         </div>
         <div class="feature-card anim-on-scroll" style="animation-delay:0.1s">
-          <div class="feature-icon" style="background: linear-gradient(135deg, #3b82f6, #60a5fa);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          <div class="feature-icon" style="background: linear-gradient(135deg, #ff5e00, #ff8a00);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
           </div>
           <h3>3D Preview</h3>
           <p>Xem thiết kế trên mockup áo 3D trước khi đặt hàng. xoay, kéo, chỉnh vị trí.</p>
         </div>
         <div class="feature-card anim-on-scroll" style="animation-delay:0.2s">
-          <div class="feature-icon" style="background: linear-gradient(135deg, #10b981, #34d399);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <div class="feature-icon" style="background: linear-gradient(135deg, #ff5e00, #ff8a00);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
           </div>
           <h3>Đặt hàng COD</h3>
           <p>Thanh toán khi nhận hàng. Kiểm tra áo trước khi trả tiền. An toàn 100%.</p>
         </div>
         <div class="feature-card anim-on-scroll" style="animation-delay:0.3s">
-          <div class="feature-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div class="feature-icon" style="background: linear-gradient(135deg, #ff5e00, #ff8a00);">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </div>
           <h3>Upload ảnh</h3>
           <p>Tải ảnh tham khảo, AI sẽ sáng tạo dựa trên ý tưởng của bạn.</p>
@@ -220,10 +235,15 @@
 
   <!-- ====== HOW IT WORKS ====== -->
   <section class="how" id="how">
+    <div class="section-bloom"></div>
     <div class="container">
       <div class="section-header anim-on-scroll">
-        <span class="section-badge">Quy trình</span>
-        <h2 class="section-title">Biến ý tưởng<br><span class="text-gradient">thành hiện thực</span></h2>
+        <div class="section-meta">
+          <span class="section-number">02</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">Quy trình</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Biến ý tưởng</span><br><span class="text-gradient">thành hiện thực</span></h2>
         <p class="section-subtitle">Ba bước đơn giản — từ ý tưởng đến chiếc áo trên tay bạn</p>
       </div>
 
@@ -231,7 +251,7 @@
         <div class="how-step anim-on-scroll">
           <div class="how-step-number">01</div>
           <div class="how-step-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8l2-3h8l2 3-1 1v11H7V9z"/><path d="M9 5l3-2 3 2"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8l2-3h8l2 3-1 1v11H7V9z"/><path d="M9 5l3-2 3 2"/></svg>
           </div>
           <h3>Chọn áo nền</h3>
           <p>Chọn kiểu áo, màu sắc và form dáng yêu thích — canvas trắng cho ý tưởng của bạn.</p>
@@ -239,8 +259,8 @@
         <div class="how-step-connector"></div>
         <div class="how-step anim-on-scroll" style="animation-delay:0.15s">
           <div class="how-step-number">02</div>
-          <div class="how-step-icon" style="background: linear-gradient(135deg, #ff6b00, #ff8c38); color: white;">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <div class="how-step-icon" style="background: linear-gradient(135deg, #ff5e00, #ff8a00); color: white;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           </div>
           <h3>AI tạo design</h3>
           <p>Viết ý tưởng hoặc upload ảnh — AI biến thành artwork trong vài giây.</p>
@@ -248,7 +268,7 @@
         <div class="how-step-connector"></div>
         <div class="how-step anim-on-scroll" style="animation-delay:0.3s">
           <div class="how-step-number">03</div>
-          <div class="how-step-icon" style="background: linear-gradient(135deg, #10b981, #34d399); color: white;">
+          <div class="how-step-icon" style="background: linear-gradient(135deg, #ff5e00, #ff8a00); color: white;">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           </div>
           <h3>Nhận áo & mặc</h3>
@@ -260,10 +280,15 @@
 
   <!-- ====== GALLERY ====== -->
   <section class="gallery" id="gallery">
+    <div class="section-bloom"></div>
     <div class="container">
       <div class="section-header anim-on-scroll">
-        <span class="section-badge">Cảm hứng</span>
-        <h2 class="section-title">Thiết kế từ<br><span class="text-gradient">cộng đồng</span></h2>
+        <div class="section-meta">
+          <span class="section-number">03</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">Cảm hứng</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Thiết kế từ</span><br><span class="text-gradient">cộng đồng</span></h2>
         <p class="section-subtitle">Hàng ngàn ý tưởng đã thành hình — khám phá và lấy cảm hứng từ cộng đồng Blankup</p>
       </div>
 
@@ -282,28 +307,33 @@
 
   <!-- ====== STUDIO PREVIEW ====== -->
   <section class="studio-preview" id="studio">
+    <div class="section-bloom"></div>
     <div class="container">
       <div class="studio-preview-content anim-on-scroll">
-        <span class="section-badge">AI Studio</span>
-        <h2 class="section-title">Nơi ý tưởng<br><span class="text-gradient">lên áo</span></h2>
+        <div class="section-meta" style="justify-content:flex-start;">
+          <span class="section-number">04</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">AI Studio</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Nơi ý tưởng</span><br><span class="text-gradient">lên áo</span></h2>
         <p class="section-subtitle" style="text-align:left; margin-left:0;">
           AI Design Studio của Blankup biến mô tả của bạn thành tác phẩm nghệ thuật trên áo thun — không cần kỹ năng thiết kế.
         </p>
         <div class="studio-preview-features">
           <div class="studio-feature">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Prompt Enhancement — AI tối ưu prompt tự động</span>
           </div>
           <div class="studio-feature">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             <span>8 phong cách thiết kế chuyên nghiệp</span>
           </div>
           <div class="studio-feature">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             <span>3D preview với nhiều màu áo và kích cỡ</span>
           </div>
           <div class="studio-feature">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             <span>Tải design và chia sẻ cộng đồng</span>
           </div>
         </div>
@@ -337,8 +367,8 @@
               <div class="studio-preview-canvas">
                 <svg viewBox="0 0 160 200" class="studio-preview-shirt">
                   <path d="M40 30 L15 50 L5 90 L30 95 L37 70 L37 185 L123 185 L123 70 L130 95 L155 90 L145 50 L120 30 Q105 40 80 40 Q55 40 40 30 Z" fill="white" stroke="#ddd" stroke-width="1"/>
-                  <rect x="55" y="70" width="50" height="50" fill="#ff6b00" opacity="0.3" rx="4"/>
-                  <circle cx="80" cy="95" r="15" fill="#ff6b00" opacity="0.5"/>
+                  <rect x="55" y="70" width="50" height="50" fill="#ff5e00" opacity="0.3" rx="4"/>
+                  <circle cx="80" cy="95" r="15" fill="#ff5e00" opacity="0.5"/>
                 </svg>
               </div>
             </div>
@@ -350,10 +380,15 @@
 
   <!-- ====== REVIEWS ====== -->
   <section class="reviews" id="reviews">
+    <div class="section-bloom"></div>
     <div class="container">
       <div class="section-header anim-on-scroll">
-        <span class="section-badge">Đánh giá</span>
-        <h2 class="section-title">Ý tưởng đã thành<br><span class="text-gradient">hiện thực</span></h2>
+        <div class="section-meta">
+          <span class="section-number">05</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">Đánh giá</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Ý tưởng đã thành</span><br><span class="text-gradient">hiện thực</span></h2>
         <p class="section-subtitle">Hàng ngàn khách hàng đã biến ý tưởng của họ thành áo thun cùng Blankup</p>
       </div>
 
@@ -403,15 +438,29 @@
     </div>
     <div class="container">
       <div class="cta-content anim-on-scroll">
-        <h2 class="cta-title">Sẵn sàng biến ý tưởng<br><span class="text-gradient">thành hiện thực?</span></h2>
-        <p class="cta-subtitle">Tạo design miễn phí. Chỉ thanh toán khi nhận áo.</p>
+        <span class="cta-badge">Bắt đầu ngay</span>
+        <h2 class="cta-title">Ý tưởng của bạn<br><span class="text-gradient">đang chờ</span></h2>
+        <p class="cta-subtitle">Tạo thiết kế miễn phí với AI. Chỉ thanh toán khi bạn nhận được áo và hài lòng.</p>
         <div class="cta-buttons">
           <a href="studio.html" class="hero-btn-primary hero-btn-lg">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             Bắt đầu — Miễn phí
           </a>
         </div>
-        <p class="cta-note">Không cần thẻ tín dụng · Không phí ẩn · Hủy bất cứ lúc nào</p>
+        <div class="cta-trust">
+          <span class="cta-trust-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Miễn phí tạo design
+          </span>
+          <span class="cta-trust-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            COD toàn quốc
+          </span>
+          <span class="cta-trust-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff5e00" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Hủy bất cứ lúc nào
+          </span>
+        </div>
       </div>
     </div>
   </section>
@@ -467,6 +516,6 @@
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
-  <script src="js/home.js?v=premium-1"></script>
+  <script src="js/home.js?v=v4"></script>
 </body>
 </html>

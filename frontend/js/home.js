@@ -1,5 +1,135 @@
-// frontend/js/home.js — v2 Premium Landing Page
+// frontend/js/home.js — v4 Premium Interactions
 const API_BASE = window.location.origin + '/api';
+
+/* ============================================================
+   CURSOR GLOW
+   ============================================================ */
+function initCursorGlow() {
+  const glow = document.getElementById('cursorGlow');
+  if (!glow) return;
+  let raf = null;
+  let mouseX = -400;
+  let mouseY = -400;
+  let currentX = -400;
+  let currentY = -400;
+
+  function update() {
+    currentX += (mouseX - currentX) * 0.08;
+    currentY += (mouseY - currentY) * 0.08;
+    glow.style.transform = `translate(${currentX}px, ${currentY}px) translate(-50%, -50%)`;
+    raf = requestAnimationFrame(update);
+  }
+
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    glow.classList.remove('hidden');
+    if (!raf) raf = requestAnimationFrame(update);
+  });
+
+  document.addEventListener('mouseleave', () => {
+    glow.classList.add('hidden');
+  });
+}
+
+/* ============================================================
+   TYPING ANIMATION
+   ============================================================ */
+function initTypingAnimation() {
+  const el = document.getElementById('heroTyping');
+  if (!el) return;
+
+  const phrases = [
+    'Một con rồng Việt Nam phong cách cyberpunk',
+    'Hoa sen kết hợp sóng nước nghệ thuật',
+    'Phượng hoàng lửa vintage anime style',
+    'Geometric abstract neon pattern',
+    'Bức tranh phố cổ Hội An',
+    'Chữ thư pháp kết hợp minimal',
+  ];
+
+  let phraseIndex = 0;
+  let charIndex = 0;
+  let isDeleting = false;
+  let isPaused = false;
+
+  function type() {
+    if (isPaused) {
+      setTimeout(type, 3000);
+      isPaused = false;
+      return;
+    }
+
+    const current = phrases[phraseIndex];
+    if (!isDeleting) {
+      charIndex++;
+      el.textContent = current.substring(0, charIndex);
+      if (charIndex === current.length) {
+        isPaused = true;
+        isDeleting = true;
+        setTimeout(type, 2000);
+        return;
+      }
+      setTimeout(type, 50 + Math.random() * 60);
+    } else {
+      charIndex--;
+      el.textContent = current.substring(0, charIndex);
+      if (charIndex === 0) {
+        isDeleting = false;
+        phraseIndex = (phraseIndex + 1) % phrases.length;
+        setTimeout(type, 400);
+        return;
+      }
+      setTimeout(type, 25 + Math.random() * 30);
+    }
+  }
+
+  type();
+}
+
+/* ============================================================
+   3D TILT ON HERO MOCKUP
+   ============================================================ */
+function initHeroTilt() {
+  const card = document.getElementById('heroMockup');
+  if (!card) return;
+
+  card.addEventListener('mousemove', (e) => {
+    const rect = card.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const tiltX = (y - 0.5) * 6;
+    const tiltY = (0.5 - x) * 6;
+    card.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale3d(1.02,1.02,1.02)`;
+    card.style.transition = 'transform 0.1s ease-out';
+  });
+
+  card.addEventListener('mouseleave', () => {
+    card.style.transform = 'perspective(800px) rotateX(0deg) rotateY(0deg) scale3d(1,1,1)';
+    card.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+  });
+}
+
+/* ============================================================
+   MAGNETIC BUTTONS
+   ============================================================ */
+function initMagneticButtons() {
+  document.querySelectorAll('.hero-btn-primary, .hero-btn-secondary, .nav-cta').forEach(btn => {
+    btn.addEventListener('mousemove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      const dx = (x - 0.5) * 8;
+      const dy = (y - 0.5) * 8;
+      btn.style.transform = `translate(${dx}px, ${dy}px)`;
+      btn.style.transition = 'transform 0.2s ease-out';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = '';
+      btn.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    });
+  });
+}
 
 /* ============================================================
    SCROLL ANIMATIONS (Intersection Observer)
@@ -11,7 +141,7 @@ function initScrollAnimations() {
         entry.target.classList.add('visible');
       }
     });
-  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
 
   document.querySelectorAll('.anim-on-scroll').forEach(el => observer.observe(el));
 }
@@ -23,11 +153,8 @@ function initNavbar() {
   const nav = document.getElementById('nav');
   if (!nav) return;
 
-  let lastScroll = 0;
   window.addEventListener('scroll', () => {
-    const scrollY = window.scrollY;
-    nav.classList.toggle('scrolled', scrollY > 50);
-    lastScroll = scrollY;
+    nav.classList.toggle('scrolled', window.scrollY > 50);
   }, { passive: true });
 
   // Theme toggle
@@ -93,14 +220,14 @@ function initCounters() {
 }
 
 function animateCounter(el, target) {
-  const duration = 2000;
+  const duration = 2500;
   const start = performance.now();
   const format = (v) => v.toLocaleString('vi-VN');
 
   function update(now) {
     const elapsed = now - start;
     const progress = Math.min(elapsed / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+    const eased = 1 - Math.pow(1 - progress, 3);
     const current = Math.round(eased * target);
     el.textContent = format(current);
     if (progress < 1) requestAnimationFrame(update);
@@ -131,20 +258,21 @@ async function loadGallery() {
     designs = getFallbackDesigns();
   }
 
-  grid.innerHTML = designs.map(d => {
+  grid.innerHTML = designs.map((d, i) => {
     const url = d.frontDesignUrl || d.designUrl || '';
     const prompt = d.prompt || 'AI Design';
     const author = d.author || 'Community';
+    const badge = i < 3 ? 'Trending' : '';
     return `<div class="gallery-card anim-on-scroll" onclick="window.location.href='studio.html'">
       <img class="gallery-card-img" src="${escapeAttr(url)}" alt="${escapeAttr(prompt)}" loading="lazy">
+      ${badge ? `<span class="gallery-card-badge">${badge}</span>` : ''}
       <div class="gallery-card-info">
         <div class="gallery-card-prompt">"${escapeHtml(prompt)}"</div>
-        <div class="gallery-card-meta"><span>${escapeHtml(author)}</span><span>${d.likes || 0} ❤️</span></div>
+        <div class="gallery-card-meta"><span>${escapeHtml(author)}</span><span>${d.likes || 0} ♥</span></div>
       </div>
     </div>`;
   }).join('');
 
-  // Re-observe new elements
   initScrollAnimations();
 }
 
@@ -191,6 +319,10 @@ function initLang() {
    INIT
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
+  initCursorGlow();
+  initTypingAnimation();
+  initHeroTilt();
+  initMagneticButtons();
   initNavbar();
   initScrollAnimations();
   initCounters();
