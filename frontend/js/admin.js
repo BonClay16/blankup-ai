@@ -233,7 +233,65 @@ function renderOverview() {
   setText('ops-underpaid-count', paymentStats.underpaid);
 
   renderCategoryBreakdown(stats.categories || {});
+  renderRevenueChart();
   renderRecentOrders();
+}
+
+function renderRevenueChart() {
+  const svg = document.getElementById('revenueChart');
+  const empty = document.getElementById('revenueChartEmpty');
+  const labelsEl = document.getElementById('revenueChartLabels');
+  const totalEl = document.getElementById('revenueChartTotal');
+  if (!svg) return;
+
+  const W = 600, H = 200, PAD_L = 8, PAD_R = 8, PAD_T = 14, PAD_B = 8;
+  const days = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    days.push(d.toDateString());
+  }
+  const paidStatuses = ['paid'];
+  const revenueByDay = days.map(() => 0);
+  (adminState.orders || []).forEach(order => {
+    if (!order.createdAt) return;
+    const created = new Date(order.createdAt);
+    const idx = days.indexOf(created.toDateString());
+    if (idx === -1) return;
+    const isPaid = paidStatuses.includes(order.paymentStatus) || order.status === 'completed';
+    if (!isPaid) return;
+    revenueByDay[idx] += Number(order.total || (order.price || 0) * (order.quantity || 1));
+  });
+
+  const total = revenueByDay.reduce((a, b) => a + b, 0);
+  if (totalEl) totalEl.textContent = formatMoney(total);
+  if (labelsEl) {
+    labelsEl.innerHTML = days.map(d => {
+      const dt = new Date(d);
+      return `<span class="revenue-chart-label">${dt.getDate()}/${dt.getMonth() + 1}</span>`;
+    }).join('');
+  }
+
+  const max = Math.max(...revenueByDay, 1);
+  const px = (i) => PAD_L + (i * (W - PAD_L - PAD_R)) / 6;
+  const py = (v) => H - PAD_B - (v / max) * (H - PAD_T - PAD_B);
+
+  const line = revenueByDay.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const area = `${PAD_L},${H - PAD_B} ${line} ${W - PAD_R},${H - PAD_B}`;
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#b43e12" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="#b43e12" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    ${[0.25, 0.5, 0.75, 1].map(f => `<line x1="${PAD_L}" x2="${W - PAD_R}" y1="${py(max * f).toFixed(1)}" y2="${py(max * f).toFixed(1)}" stroke="#e7e2d6" stroke-width="1"/>`).join('')}
+    ${revenueByDay.map((v, i) => v > 0 ? `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.5" fill="#b43e12"/>` : '').join('')}
+    <polygon points="${area}" fill="url(#revFill)"/>
+    <polyline points="${line}" fill="none" stroke="#b43e12" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  `;
+  if (empty) empty.style.display = total > 0 ? 'none' : 'flex';
 }
 
 function renderCategoryBreakdown(categories) {

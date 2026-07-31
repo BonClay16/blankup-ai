@@ -48,6 +48,113 @@ document.addEventListener('DOMContentLoaded', () => {
   const verifySubmitBtn = document.getElementById('verifySubmitBtn');
   const loginCard = document.querySelector('.login-card');
 
+  // ---- Social login (Google / Facebook) ----
+  const googleBtn = document.getElementById('googleLoginBtn');
+  const facebookBtn = document.getElementById('facebookLoginBtn');
+  const socialCfg = window.BLANKUP_SOCIAL || {};
+
+  function showSocialError(message) {
+    errorMsg.textContent = message;
+    errorMsg.style.display = 'block';
+  }
+
+  async function completeSocialLogin(provider, profile) {
+    let payload;
+    if (provider === 'google') {
+      if (!profile.idToken) return;
+      payload = { provider, idToken: profile.idToken };
+    } else {
+      if (!profile.providerId || !profile.fullName) return;
+      payload = {
+        provider,
+        providerId: profile.providerId,
+        email: profile.email || null,
+        fullName: profile.fullName,
+        avatar: profile.avatar || null,
+      };
+    }
+    try {
+      const res = await fetch('/api/auth/social', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showSocialError(data.error || 'Đăng nhập mạng xã hội thất bại.');
+        return;
+      }
+      auth.token = data.token;
+      auth.user = data.user;
+      localStorage.setItem('blankup_token', data.token);
+      localStorage.setItem('blankup_user', JSON.stringify(data.user));
+      auth.updateNavbar();
+      redirectAfterLogin();
+    } catch {
+      showSocialError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+    }
+  }
+
+  if (googleBtn) {
+    googleBtn.addEventListener('click', () => {
+      errorMsg.style.display = 'none';
+      if (!socialCfg.googleClientId) {
+        showSocialError('Đăng nhập Google chưa được cấu hình. Vui lòng đăng nhập bằng tài khoản thường.');
+        return;
+      }
+      googleBtn.disabled = true;
+      if (typeof google === 'undefined') {
+        showSocialError('Không thể tải Google Sign-In. Vui lòng thử lại.');
+        googleBtn.disabled = false;
+        return;
+      }
+      google.accounts.id.initialize({
+        client_id: socialCfg.googleClientId,
+        callback: (response) => {
+          googleBtn.disabled = false;
+          if (!response.credential) {
+            showSocialError('Không nhận được thông tin từ Google.');
+            return;
+          }
+          completeSocialLogin('google', { idToken: response.credential });
+        },
+      });
+      google.accounts.id.prompt();
+    });
+  }
+
+  if (facebookBtn) {
+    facebookBtn.addEventListener('click', () => {
+      errorMsg.style.display = 'none';
+      if (!socialCfg.facebookAppId) {
+        showSocialError('Đăng nhập Facebook chưa được kích hoạt. Vui lòng đăng nhập bằng tài khoản thường.');
+        return;
+      }
+      if (typeof FB === 'undefined') {
+        showSocialError('Không thể tải Facebook SDK. Vui lòng thử lại.');
+        return;
+      }
+      FB.login((response) => {
+        if (!response.authResponse) {
+          showSocialError('Bạn đã hủy đăng nhập Facebook.');
+          return;
+        }
+        FB.api('/me', { fields: 'id,name,email,picture.width(256)' }, (profile) => {
+          if (!profile || profile.error) {
+            showSocialError('Không thể lấy thông tin Facebook.');
+            return;
+          }
+          completeSocialLogin('facebook', {
+            providerId: profile.id,
+            email: profile.email,
+            fullName: profile.name,
+            avatar: profile.picture?.data?.url || null,
+          });
+        });
+      }, { scope: 'public_profile,email' });
+    });
+  }
+
   // Toggle between Login and Register
   if (switchBtn) {
     switchBtn.addEventListener('click', () => {

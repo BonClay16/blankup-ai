@@ -220,9 +220,15 @@ async function loadOrders() {
 
     if (!orders.length) {
       container.innerHTML = `
-        <div class="account-empty">
-          Bạn chưa có đơn hàng nào.<br>
-          <a href="studio.html">Bắt đầu thiết kế chiếc áo đầu tiên →</a>
+        <div class="account-empty account-empty-hero">
+          <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.38 3.46 16 2 12 3.46 8 2 3.62 3.46a2 2 0 0 0-1.34 1.89v13.3a2 2 0 0 0 2.66 1.89L8 19l4-1.46L16 19l4.38-1.46a2 2 0 0 0 1.34-1.89V5.35a2 2 0 0 0-1.34-1.89z"/>
+            <circle cx="12" cy="10" r="1.2" fill="currentColor" stroke="none"/>
+            <path d="M10 15.5c1.2.7 2.8.7 4 0" stroke-width="1.2"/>
+          </svg>
+          <p class="account-empty-title">Chưa có đơn hàng nào</p>
+          <p class="account-empty-desc">Mọi đơn hàng bạn đặt sẽ xuất hiện ở đây. Hãy tạo chiếc áo đầu tiên của riêng bạn ngay bây giờ!</p>
+          <a href="studio.html" class="account-empty-cta">Bắt đầu thiết kế chiếc áo đầu tiên →</a>
         </div>`;
       return;
     }

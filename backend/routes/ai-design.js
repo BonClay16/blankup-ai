@@ -861,6 +861,39 @@ router.post('/:id/share', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/ai-design/:id/like  — Toggle like on a design
+// ---------------------------------------------------------------------------
+router.post('/:id/like', (req, res) => {
+  try {
+    const designId = decodeURIComponent(req.params.id);
+    const userId = req.body.userId || 'anonymous';
+
+    const designs = readDesigns();
+    const design = designs.find(d => d.designId === designId);
+    if (!design) return res.status(404).json({ success: false, error: 'Design not found' });
+
+    if (!design.likedBy) design.likedBy = [];
+    if (typeof design.likes !== 'number') design.likes = design.likedBy.length;
+
+    const idx = design.likedBy.indexOf(userId);
+    if (idx === -1) {
+      design.likedBy.push(userId);
+      design.likes = design.likedBy.length;
+      writeDesigns(designs);
+      return res.json({ success: true, liked: true, likes: design.likes });
+    }
+
+    design.likedBy.splice(idx, 1);
+    design.likes = design.likedBy.length;
+    writeDesigns(designs);
+    res.json({ success: true, liked: false, likes: design.likes });
+  } catch (err) {
+    console.error('[AI-Design] Error toggling like:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to toggle like' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/ai-design/gallery
 // Return sample designs with their SVG thumbnails
 // ---------------------------------------------------------------------------

@@ -183,7 +183,6 @@
             <h3 class="card-title">Phân tích danh mục</h3>
             <div class="breakdown-list" id="categoryBreakdownList"></div>
           </div>
-
           <div class="dashboard-card status-summary-card">
             <h3 class="card-title">Trạng thái đơn hàng</h3>
             <div class="status-summary-stats">
@@ -214,6 +213,18 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="dashboard-card revenue-chart-card">
+          <div class="card-header-flex">
+            <h3 class="card-title">Doanh thu 7 ngày gần nhất</h3>
+            <span class="revenue-chart-total" id="revenueChartTotal"></span>
+          </div>
+          <div class="revenue-chart-wrap">
+            <svg class="revenue-chart" id="revenueChart" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div class="revenue-chart-empty" id="revenueChartEmpty">Chưa có dữ liệu doanh thu trong 7 ngày qua.</div>
+          </div>
+          <div class="revenue-chart-labels" id="revenueChartLabels"></div>
         </div>
 
         <div class="dashboard-card recent-orders-card">

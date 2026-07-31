@@ -27,6 +27,9 @@ window.tshirt360Viewer = {
   showSide(side) {
     if (viewer.ready) frameModel(side);
   },
+  setRemoveWhiteBg(enabled) {
+    return setRemoveWhiteBg(enabled);
+  },
 };
 
 const canvas = document.getElementById('tshirt360Canvas');
@@ -159,6 +162,7 @@ function applyDesign(url) {
     viewer.scene.remove(mesh);
   });
   viewer.decalMeshes = [];
+  viewer.decalUniforms = [];
 
   new THREE.TextureLoader().load(url, (texture) => {
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -174,8 +178,12 @@ function applyDesign(url) {
     viewer.shirtMeshes.forEach((target) => {
       const geometry = new DecalGeometry(target, position, orientation, decalSize);
       if (!geometry.attributes.position?.count) return;
+      const uniforms = {
+        map: { value: texture },
+        uRemoveWhite: { value: viewer.removeWhiteBg !== false },
+      };
       const material = new THREE.ShaderMaterial({
-        uniforms: { map: { value: texture } },
+        uniforms,
         transparent: true,
         depthTest: true,
         depthWrite: false,
@@ -190,12 +198,16 @@ function applyDesign(url) {
         `,
         fragmentShader: `
           uniform sampler2D map;
+          uniform float uRemoveWhite;
           varying vec2 vUv;
           void main() {
             vec4 pixel = texture2D(map, vUv);
-            float high = max(pixel.r, max(pixel.g, pixel.b));
-            float low = min(pixel.r, min(pixel.g, pixel.b));
-            if (pixel.a < 0.08 || (high > 0.84 && high - low < 0.22)) discard;
+            if (pixel.a < 0.08) discard;
+            if (uRemoveWhite > 0.5) {
+              float high = max(pixel.r, max(pixel.g, pixel.b));
+              float low = min(pixel.r, min(pixel.g, pixel.b));
+              if (high > 0.84 && high - low < 0.22) discard;
+            }
             gl_FragColor = pixel;
           }
         `,
@@ -204,6 +216,16 @@ function applyDesign(url) {
       decal.renderOrder = 2;
       viewer.scene.add(decal);
       viewer.decalMeshes.push(decal);
+      viewer.decalUniforms.push(uniforms);
     });
   });
+}
+
+function setRemoveWhiteBg(enabled) {
+  if (!viewer) return;
+  viewer.removeWhiteBg = !!enabled;
+  if (viewer.decalUniforms) {
+    viewer.decalUniforms.forEach((u) => { u.uRemoveWhite.value = viewer.removeWhiteBg; });
+  }
+  return viewer.removeWhiteBg;
 }

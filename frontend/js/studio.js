@@ -86,6 +86,146 @@ function setLoading(btn, loading) { if (!btn) return; btn.classList.toggle('load
 function formatAiError(data) { if (data?.error) return data.error; if (data?.message) return data.message; return 'AI generation failed. Please try again.'; }
 
 /* ============================================================
+   TRIAL MODE HELPERS
+   ============================================================ */
+function isTrialMode() { return document.documentElement.dataset.trial === 'true'; }
+
+function consumeTrial() {
+  localStorage.setItem('blankup_guest_trial_used', 'true');
+  document.documentElement.dataset.trial = 'trial-consumed';
+  const banner = document.getElementById('trialBanner');
+  if (banner) banner.classList.remove('active');
+}
+
+function showTrialExpiredModal() {
+  const modal = document.getElementById('authRequiredModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    const heading = modal.querySelector('h3');
+    const desc = modal.querySelector('p');
+    if (heading) heading.textContent = 'Đã hết lượt dùng thử';
+    if (desc) desc.innerHTML = 'Bạn đã dùng xong lượt tạo miễn phí. Đăng ký tài khoản để <strong>dùng không giới hạn</strong> và tải về thiết kế!';
+  }
+}
+
+function addWatermark(canvasEl) {
+  if (!isTrialMode()) return;
+  const existing = canvasEl?.querySelector('.watermark-overlay');
+  if (existing) return;
+  const wm = document.createElement('div');
+  wm.className = 'watermark-overlay';
+  wm.innerHTML = '<svg viewBox="0 0 200 200"><text x="100" y="100" text-anchor="middle" dominant-baseline="central" font-size="18" font-weight="800" fill="currentColor" transform="rotate(-25,100,100)">BLANKUP<br/>TRIAL</text></svg>';
+  if (canvasEl) canvasEl.appendChild(wm);
+}
+
+function removeWatermark(canvasEl) {
+  const wm = canvasEl?.querySelector('.watermark-overlay');
+  if (wm) wm.remove();
+}
+
+function guardTrialBeforeGenerate() {
+  const used = localStorage.getItem('blankup_guest_trial_used') === 'true';
+  if (used) {
+    showTrialExpiredModal();
+    return true;
+  }
+  return false;
+}
+
+function markTrialUsedAfterGenerate() {
+  if (isTrialMode()) {
+    consumeTrial();
+    showTrialExpiredModal();
+    showToast('Bạn đã dùng hết lượt dùng thử. Đăng ký để dùng không giới hạn!', 'info', 6000);
+  }
+}
+
+/* ============================================================
+   AI GENERATION PROGRESS
+   ============================================================ */
+const GEN_STAGES = [
+  { pct: 8,  msg: 'Đang khởi tạo AI...' },
+  { pct: 20, msg: 'AI đang phân tích từ khóa tiếng Việt...' },
+  { pct: 35, msg: 'Nhận diện phong cách và ý tưởng thiết kế...' },
+  { pct: 50, msg: 'Tối ưu hóa prompt sang tiếng Anh thời trang...' },
+  { pct: 65, msg: 'Đang chọn màu sắc và bố cục hài hòa...' },
+  { pct: 78, msg: 'Đang vẽ chi tiết thiết kế bằng mô hình Flux...' },
+  { pct: 88, msg: 'Hoàn thiện chi tiết và hiệu ứng ánh sáng...' },
+  { pct: 95, msg: 'Áp bản decal lên mô hình 3D...' },
+];
+
+const genProgress = {
+  overlay: null,
+  fill: null,
+  messageEl: null,
+  percentEl: null,
+  timer: null,
+  currentPct: 0,
+  stageIdx: 0,
+  done: false,
+};
+
+function initGenProgress() {
+  genProgress.overlay = document.getElementById('genProgressOverlay');
+  genProgress.fill = document.getElementById('genProgressFill');
+  genProgress.messageEl = document.getElementById('genProgressMessage');
+  genProgress.percentEl = document.getElementById('genProgressPercent');
+}
+
+function startGenProgress() {
+  if (!genProgress.overlay) initGenProgress();
+  genProgress.done = false;
+  genProgress.currentPct = 0;
+  genProgress.stageIdx = 0;
+  genProgress.overlay.classList.remove('error', 'success');
+  genProgress.overlay.classList.add('active');
+  updateGenProgressUI(0, GEN_STAGES[0].msg);
+  clearInterval(genProgress.timer);
+  genProgress.timer = setInterval(() => {
+    if (genProgress.done) return;
+    const step = 1 + Math.floor(Math.random() * 3);
+    const next = Math.min(genProgress.currentPct + step, GEN_STAGES[GEN_STAGES.length - 1].pct);
+    genProgress.currentPct = next;
+    let msg = GEN_STAGES[genProgress.stageIdx].msg;
+    for (let i = 0; i < GEN_STAGES.length; i++) {
+      if (next >= GEN_STAGES[i].pct) {
+        genProgress.stageIdx = i;
+        msg = GEN_STAGES[i].msg;
+      }
+    }
+    updateGenProgressUI(next, msg);
+  }, 650);
+}
+
+function updateGenProgressUI(pct, msg) {
+  if (genProgress.fill) genProgress.fill.style.width = pct + '%';
+  if (genProgress.percentEl) genProgress.percentEl.textContent = pct + '%';
+  if (genProgress.messageEl && msg) genProgress.messageEl.textContent = msg;
+}
+
+function completeGenProgress(success = true, message = '') {
+  if (!genProgress.overlay || genProgress.done) return;
+  genProgress.done = true;
+  clearInterval(genProgress.timer);
+  genProgress.currentPct = 100;
+  updateGenProgressUI(100, message || (success ? 'Hoàn tất!' : ''));
+  genProgress.overlay.classList.add(success ? 'success' : 'error');
+  const title = genProgress.overlay.querySelector('.gen-progress-title');
+  if (title) title.textContent = success ? 'Thiết kế đã sẵn sàng!' : 'Có lỗi xảy ra';
+  setTimeout(() => {
+    genProgress.overlay.classList.remove('active', 'success', 'error');
+    if (title) title.textContent = 'AI đang sáng tạo...';
+    genProgress.currentPct = 0;
+    updateGenProgressUI(0, GEN_STAGES[0].msg);
+  }, success ? 900 : 2200);
+}
+
+function failGenProgress(message = 'Vui lòng thử lại sau') {
+  completeGenProgress(false, message);
+}
+
+/* ============================================================
    COMPOSITE DESIGN (canvas overlay for text + image)
    ============================================================ */
 function loadImageForCanvas(url) {
@@ -249,6 +389,9 @@ async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlan
   document.getElementById('placementPanel')?.style && (document.getElementById('placementPanel').style.display = 'block');
   updatePrice();
   updateActionButtons(true);
+
+  if (isTrialMode()) addWatermark(viewer);
+  else removeWatermark(viewer);
 }
 
 /* ============================================================
@@ -521,11 +664,13 @@ function initGenerateButtons() {
 }
 
 async function generateFromPrompt() {
+  if (guardTrialBeforeGenerate()) return;
   const prompt = document.getElementById('promptInput')?.value?.trim();
   if (!prompt) { showToast('Vui lòng nhập mô tả thiết kế!', 'warning'); return; }
   const btn = document.getElementById('generatePromptBtn');
   updateActionButtons(false);
   setLoading(btn, true);
+  startGenProgress();
 
   const draft = generateMockDesign(state.selectedStyle, prompt);
   draft.isDraft = true;
@@ -545,12 +690,17 @@ async function generateFromPrompt() {
       state.currentDesign = data;
       state.customTextSides = data.customTextSides || state.customTextSides;
       state.isGeneratingAi = false;
+      completeGenProgress(true);
       await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
       updateShareButton();
       saveToHistory(data);
+      markTrialUsedAfterGenerate();
+    } else {
+      failGenProgress();
     }
   } catch (e) {
     state.isGeneratingAi = false;
+    failGenProgress();
     if (e.message && e.message !== 'Failed to fetch') {
       showToast(e.message, 'error', 7000);
       setLoading(btn, false); return;
@@ -565,11 +715,13 @@ async function generateFromPrompt() {
    AI GENERATION - IMAGE
    ============================================================ */
 async function generateFromImage() {
+  if (guardTrialBeforeGenerate()) return;
   if (!state.uploadedFile) { showToast('Vui lòng upload ảnh!', 'warning'); return; }
   const idea = document.getElementById('ideaInput')?.value?.trim() || '';
   const btn = document.getElementById('generateImageBtn');
   updateActionButtons(false);
   setLoading(btn, true);
+  startGenProgress();
 
   try {
     const formData = new FormData();
@@ -588,11 +740,16 @@ async function generateFromImage() {
     if (!resp.ok || data.success === false) throw new Error(formatAiError(data));
     if (data.success && data.designUrl) {
       state.currentDesign = data;
+      completeGenProgress(true);
       showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
       updateShareButton();
       saveToHistory(data);
+      markTrialUsedAfterGenerate();
+    } else {
+      failGenProgress();
     }
   } catch (e) {
+    failGenProgress();
     if (e.message && e.message !== 'Failed to fetch') {
       showToast(e.message, 'error', 7000);
       setLoading(btn, false); return;
@@ -640,6 +797,11 @@ function initInteractionMode() {
     updateOverlayPlacement();
     applyCurrentDesignToViewer();
     try { window.tshirt360Viewer?.showSide?.(state.currentView); } catch (e) { /* */ }
+  });
+  document.getElementById('removeWhiteBgBtn')?.addEventListener('click', () => {
+    const btn = document.getElementById('removeWhiteBgBtn');
+    const enabled = window.tshirt360Viewer?.setRemoveWhiteBg ? window.tshirt360Viewer.setRemoveWhiteBg(btn.classList.contains('active') === false) : true;
+    btn.classList.toggle('active', enabled);
   });
 }
 
@@ -786,6 +948,7 @@ function initOrderFlow() {
   const closeBtn2 = document.getElementById('orderCloseBtn');
 
   document.getElementById('orderBtn')?.addEventListener('click', () => {
+    if (guardTrialBeforeGenerate()) return;
     if (!state.currentDesign) return;
     updateOrderSummary();
     if (auth.isLoggedIn()) {
@@ -869,7 +1032,31 @@ async function submitOrder() {
     });
     const data = await resp.json();
     if (!resp.ok || data.success === false) throw new Error(data.error || 'Đặt hàng thất bại.');
-    showOrderSuccess(data.orderId || 'BU-' + Date.now(), data.payment || state.selectedPaymentMethod, data.transferContent);
+
+    const orderId = data.orderId || 'BU-' + Date.now();
+    const payment = data.payment || state.selectedPaymentMethod;
+
+    if (payment === 'VNPAY') {
+      showOrderSuccess(orderId, payment, data.transferContent);
+      try {
+        const payResp = await fetch(`${API_BASE}/payment/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
+          body: JSON.stringify({ orderId, paymentMethod: 'VNPAY' }),
+        });
+        const payData = await payResp.json();
+        if (payData.success && payData.paymentUrl) {
+          window.location.href = payData.paymentUrl;
+          return;
+        }
+        showToast('Không thể tạo link thanh toán. Vui lòng thử lại.', 'error');
+      } catch {
+        showToast('Không thể kết nối cổng thanh toán.', 'error');
+      }
+      return;
+    }
+
+    showOrderSuccess(orderId, payment, data.transferContent);
   } catch (e) {
     showToast(e.message || 'Đặt hàng thất bại. Thử lại sau.', 'error', 7000);
   }
@@ -885,12 +1072,18 @@ function showOrderSuccess(orderId, payment, transferContent) {
   if (payment === 'BANK_TRANSFER') {
     const box = document.getElementById('bankTransferBox');
     box.style.display = 'block';
-    const qrUrl = `https://img.vietqr.io/image/${BANK_TRANSFER_INFO.bankId}-${BANK_TRANSFER_INFO.accountNumber}-compact2.png?amount=${PRODUCT_PRICES[state.selectedProductType] * state.quantity}&addInfo=${encodeURIComponent(transferContent || orderId)}&accountName=${encodeURIComponent(BANK_TRANSFER_INFO.accountName)}`;
+    const amount = PRODUCT_PRICES[state.selectedProductType] * state.quantity;
+    const qrUrl = `https://img.vietqr.io/image/${BANK_TRANSFER_INFO.bankId}-${BANK_TRANSFER_INFO.accountNumber}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(transferContent || orderId)}&accountName=${encodeURIComponent(BANK_TRANSFER_INFO.accountName)}`;
     document.getElementById('successQrImage').src = qrUrl;
     document.getElementById('successBankName').textContent = BANK_TRANSFER_INFO.bankName;
     document.getElementById('successAccountName').textContent = BANK_TRANSFER_INFO.accountName;
     document.getElementById('successAccountNumber').textContent = BANK_TRANSFER_INFO.accountNumber;
     document.getElementById('successTransferContent').textContent = transferContent || orderId;
+  }
+
+  if (payment === 'VNPAY') {
+    const note = document.querySelector('.order-success-note');
+    if (note) note.textContent = 'Đang chuyển hướng đến cổng thanh toán VNPay...';
   }
 }
 
@@ -899,6 +1092,7 @@ function showOrderSuccess(orderId, payment, transferContent) {
    ============================================================ */
 function initDownload() {
   document.getElementById('downloadBtn')?.addEventListener('click', async () => {
+    if (guardTrialBeforeGenerate()) return;
     const url = getActiveDesignUrl();
     if (!url) return;
     const link = document.createElement('a');
@@ -925,6 +1119,7 @@ function initDownload() {
    ============================================================ */
 function initShareDesign() {
   document.getElementById('shareDesignBtn')?.addEventListener('click', async () => {
+    if (guardTrialBeforeGenerate()) return;
     if (!state.currentDesign?.designId || state.currentDesign?.isDraft || state.currentDesign?.designId?.startsWith('community-') || state.currentDesign?.designId?.startsWith('text-only-')) {
       showToast('Cần có thiết kế AI thật để chia sẻ!', 'warning'); return;
     }
@@ -950,6 +1145,10 @@ function initShareDesign() {
 /* ============================================================
    COMMUNITY GALLERY
    ============================================================ */
+function getUserId() {
+  return auth.user?.id || ('guest_' + (localStorage.getItem('guest_id') || (() => { const id = Date.now().toString(36); localStorage.setItem('guest_id', id); return id; })()));
+}
+
 async function loadCommunityDesigns() {
   const grid = document.getElementById('communityGrid');
   if (!grid) return;
@@ -959,45 +1158,243 @@ async function loadCommunityDesigns() {
     if (!resp.ok) throw new Error('Failed');
     const result = await resp.json();
     designs = result.data || [];
-  } catch { designs = getFallbackDesigns(); }
+  } catch { return; }
+
+  const userId = getUserId();
 
   grid.innerHTML = designs.map(d => {
-    const previewUrl = d.frontDesignUrl || d.designUrl || generateMockDesign(d.style, d.prompt).designUrl;
-    return `<div class="community-card" data-url="${escapeAttr(previewUrl)}" data-prompt="${escapeAttr(d.prompt || '')}" data-style="${escapeAttr(d.style || '')}" data-author="${escapeAttr(d.author || 'Anonymous')}" data-back="${escapeAttr(d.backDesignUrl || '')}">
-      <img class="community-card-img" src="${escapeAttr(previewUrl)}" alt="${escapeAttr(d.prompt || '')}">
+    const previewUrl = d.frontDesignUrl || d.designUrl || '';
+    const liked = d.likedBy?.includes(userId);
+    return `<div class="community-card" data-id="${escapeAttr(d.designId || '')}">
+      <div class="community-card-img-wrap" data-url="${escapeAttr(previewUrl)}" data-prompt="${escapeAttr(d.prompt || '')}" data-style="${escapeAttr(d.style || '')}" data-author="${escapeAttr(d.author || 'Anonymous')}" data-back="${escapeAttr(d.backDesignUrl || '')}">
+        <img class="community-card-img" src="${escapeAttr(previewUrl)}" alt="${escapeAttr(d.prompt || '')}" loading="lazy">
+      </div>
       <div class="community-card-info">
         <div class="community-card-prompt">"${escapeHtml(d.prompt || '')}"</div>
-        <div class="community-card-meta"><span>👤 ${escapeHtml(d.author || 'Anonymous')}</span><span>❤️ ${d.likes || 0}</span></div>
+        <div class="community-card-meta">
+          <span class="community-card-author" data-author="${escapeAttr(d.author || 'Anonymous')}">👤 ${escapeHtml(d.author || 'Anonymous')}</span>
+          <button class="community-card-like ${liked ? 'liked' : ''}" data-id="${escapeAttr(d.designId || '')}" data-likes="${d.likes || 0}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span>${d.likes || 0}</span>
+          </button>
+        </div>
       </div>
     </div>`;
   }).join('');
 
-  grid.querySelectorAll('.community-card').forEach(card => {
-    card.addEventListener('click', () => {
-      state.currentDesign = { success: true, designId: 'community-' + Date.now(), designUrl: card.dataset.url, frontDesignUrl: card.dataset.url, backDesignUrl: card.dataset.back, prompt: card.dataset.prompt, style: card.dataset.style, author: card.dataset.author };
-      showDesignOnMockup(card.dataset.url);
+  grid.querySelectorAll('.community-card-img-wrap').forEach(wrap => {
+    wrap.addEventListener('click', () => {
+      state.currentDesign = { success: true, designId: 'community-' + Date.now(), designUrl: wrap.dataset.url, frontDesignUrl: wrap.dataset.url, backDesignUrl: wrap.dataset.back, prompt: wrap.dataset.prompt, style: wrap.dataset.style, author: wrap.dataset.author };
+      showDesignOnMockup(wrap.dataset.url);
       const pi = document.getElementById('promptInput');
-      if (pi && card.dataset.prompt) pi.value = card.dataset.prompt;
-      const sb = document.querySelector(`.style-chip[data-style="${card.dataset.style}"]`);
-      if (sb) { document.querySelectorAll('.style-chip').forEach(b => b.classList.remove('active')); sb.classList.add('active'); state.selectedStyle = card.dataset.style; }
+      if (pi && wrap.dataset.prompt) pi.value = wrap.dataset.prompt;
+      const sb = document.querySelector(`.style-chip[data-style="${wrap.dataset.style}"]`);
+      if (sb) { document.querySelectorAll('.style-chip').forEach(b => b.classList.remove('active')); sb.classList.add('active'); state.selectedStyle = wrap.dataset.style; }
     });
   });
-}
 
-function getFallbackDesigns() {
-  return [
-    { prompt: 'Rồng Việt Nam cyberpunk', style: 'streetwear', author: 'Minh T.', likes: 234 },
-    { prompt: 'Hoa sen minimalist', style: 'minimalist', author: 'An N.', likes: 189 },
-    { prompt: 'Phong cảnh Hội An vintage', style: 'vintage', author: 'Hương L.', likes: 156 },
-    { prompt: 'Samurai Nhật Bản anime', style: 'anime', author: 'Khoa P.', likes: 312 },
-    { prompt: 'Geometric abstract neon', style: 'geometric', author: 'Trang V.', likes: 198 },
-    { prompt: 'Typography nghệ thuật', style: 'typography', author: 'Đức M.', likes: 145 },
-  ];
+  grid.querySelectorAll('.community-card-like').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const designId = btn.dataset.id;
+      if (!designId) return;
+      try {
+        const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/like`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          btn.classList.toggle('liked', data.liked);
+          const heart = btn.querySelector('svg');
+          if (heart) heart.setAttribute('fill', data.liked ? 'currentColor' : 'none');
+          const label = btn.querySelector('span');
+          if (label) label.textContent = data.likes;
+        }
+      } catch { /* silently fail */ }
+    });
+  });
 }
 
 /* ============================================================
    INIT
    ============================================================ */
+/* ============================================================
+   ONBOARDING
+   ============================================================ */
+function initOnboarding() {
+  if (localStorage.getItem('blankup_onboarding_done') === 'true') return;
+  if (localStorage.getItem('blankup_guest_trial_used') === 'true') return;
+  const authModal = document.getElementById('authRequiredModal');
+  if (authModal && authModal.style.display === 'flex') return;
+
+  const steps = [
+    {
+      title: 'Chào mừng đến với AI Studio',
+      desc: 'Tạo thiết kế áo thun độc đáo với AI. Chúng tôi sẽ hướng dẫn bạn các bước cơ bản để bắt đầu.',
+      target: null,
+      arrow: null,
+    },
+    {
+      title: 'Nhập mô tả thiết kế',
+      desc: 'Viết mô tả chi tiết về thiết kế bạn muốn. AI sẽ biến ý tưởng của bạn thành hiện thực.',
+      target: '#promptInput',
+      arrow: 'bottom',
+    },
+    {
+      title: 'Chọn phong cách',
+      desc: 'Lựa chọn từ 8 phong cách: Tối giản, Streetwear, Vintage, Anime, Màu nước và nhiều hơn nữa.',
+      target: '.style-grid',
+      arrow: 'bottom',
+    },
+    {
+      title: 'Tạo thiết kế',
+      desc: 'Nhấn nút này để AI tạo ra thiết kế độc đáo dựa trên mô tả và phong cách bạn đã chọn.',
+      target: '#generatePromptBtn',
+      arrow: 'right',
+    },
+    {
+      title: 'Xem trước 3D',
+      desc: 'Thiết kế hiển thị trực tiếp trên mô hình áo 3D. Xoay, phóng to để xem mọi góc cạnh.',
+      target: '#canvasWrapper',
+      arrow: 'top',
+    },
+    {
+      title: 'Tùy chỉnh & Đặt hàng',
+      desc: 'Chọn loại áo, màu sắc, kích cỡ và số lượng. Khi hài lòng, bạn có thể đặt hàng hoặc tải về.',
+      target: '.studio-right',
+      arrow: 'left',
+    },
+    {
+      title: 'Sẵn sàng sáng tạo!',
+      desc: 'Bạn đã nắm được các thao tác cơ bản. Hãy tạo ra những thiết kế độc đáo của riêng bạn!',
+      target: null,
+      arrow: null,
+    },
+  ];
+
+  let currentStep = 0;
+  const overlay = document.getElementById('onboardingOverlay');
+  const tooltip = document.getElementById('onboardingTooltip');
+  const dots = document.getElementById('onboardingDots');
+  const skipBtn = document.getElementById('onboardingSkip');
+  const prevBtn = document.getElementById('onboardingPrev');
+  const nextBtn = document.getElementById('onboardingNext');
+  let highlightEl = null;
+
+  function removeHighlight() {
+    if (highlightEl) { highlightEl.remove(); highlightEl = null; }
+  }
+
+  function showStep(idx) {
+    const step = steps[idx];
+    currentStep = idx;
+
+    removeHighlight();
+    prevBtn.style.display = idx === 0 ? 'none' : '';
+    nextBtn.textContent = idx === steps.length - 1 ? 'Bắt đầu!' : 'Tiếp theo';
+    skipBtn.style.display = idx === steps.length - 1 ? 'none' : '';
+
+    dots.querySelectorAll('.onboarding-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === idx);
+    });
+
+    tooltip.className = 'onboarding-tooltip';
+    tooltip.innerHTML = `
+      <div class="onboarding-tooltip-step">Bước ${idx + 1}/${steps.length}</div>
+      <div class="onboarding-tooltip-title">${step.title}</div>
+      <div class="onboarding-tooltip-desc">${step.desc}</div>
+      <div class="onboarding-tooltip-arrow"></div>
+    `;
+
+    if (!step.target) {
+      tooltip.style.position = 'relative';
+      tooltip.style.left = 'auto';
+      tooltip.style.top = 'auto';
+      tooltip.style.transform = 'none';
+      tooltip.style.maxWidth = '420px';
+      return;
+    }
+
+    const targetEl = document.querySelector(step.target);
+    if (!targetEl) {
+      tooltip.style.position = 'relative';
+      tooltip.style.left = 'auto';
+      tooltip.style.top = 'auto';
+      tooltip.style.transform = 'none';
+      return;
+    }
+
+    const rect = targetEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Highlight ring
+    highlightEl = document.createElement('div');
+    highlightEl.className = 'onboarding-highlight';
+    highlightEl.style.left = rect.left + 'px';
+    highlightEl.style.top = rect.top + 'px';
+    highlightEl.style.width = rect.width + 'px';
+    highlightEl.style.height = rect.height + 'px';
+    overlay.appendChild(highlightEl);
+
+    const tipW = 340;
+    const tipH = 160;
+
+    tooltip.style.position = 'absolute';
+    tooltip.style.maxWidth = tipW + 'px';
+    tooltip.classList.add('onboarding-arrow-' + step.arrow);
+
+    switch (step.arrow) {
+      case 'bottom':
+        tooltip.style.left = Math.max(16, Math.min(rect.left + rect.width / 2 - tipW / 2, vw - tipW - 16)) + 'px';
+        tooltip.style.top = (rect.bottom + 12) + 'px';
+        break;
+      case 'top':
+        tooltip.style.left = Math.max(16, Math.min(rect.left + rect.width / 2 - tipW / 2, vw - tipW - 16)) + 'px';
+        tooltip.style.top = (rect.top - tipH - 12) + 'px';
+        break;
+      case 'left':
+        tooltip.style.left = (rect.left - tipW - 12) + 'px';
+        tooltip.style.top = Math.max(16, Math.min(rect.top + rect.height / 2 - tipH / 2, vh - tipH - 16)) + 'px';
+        break;
+      case 'right':
+        tooltip.style.left = (rect.right + 12) + 'px';
+        tooltip.style.top = Math.max(16, Math.min(rect.top + rect.height / 2 - tipH / 2, vh - tipH - 16)) + 'px';
+        break;
+    }
+
+    // Clamp tooltip within viewport
+    const tRect = tooltip.getBoundingClientRect();
+    if (tRect.right > vw) tooltip.style.left = (vw - tRect.width - 16) + 'px';
+    if (tRect.left < 0) tooltip.style.left = '16px';
+    if (tRect.bottom > vh) tooltip.style.top = (vh - tRect.height - 16) + 'px';
+    if (tRect.top < 0) tooltip.style.top = '16px';
+  }
+
+  function finish() {
+    overlay.style.display = 'none';
+    document.body.style.overflow = '';
+    removeHighlight();
+    localStorage.setItem('blankup_onboarding_done', 'true');
+  }
+
+  skipBtn.addEventListener('click', finish);
+  prevBtn.addEventListener('click', () => { if (currentStep > 0) showStep(currentStep - 1); });
+  nextBtn.addEventListener('click', () => {
+    if (currentStep < steps.length - 1) showStep(currentStep + 1);
+    else finish();
+  });
+
+  // Build dots
+  dots.innerHTML = steps.map((_, i) => `<span class="onboarding-dot${i === 0 ? ' active' : ''}"></span>`).join('');
+
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => showStep(0), 150);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   i18n.init();
   initTabs();
@@ -1016,8 +1413,23 @@ document.addEventListener('DOMContentLoaded', () => {
   initViewToggle();
   initThreeViewer();
   initHistory();
+  initOnboarding();
   loadCommunityDesigns();
   updatePrice();
+
+  // Handle payment return from VNPay
+  const urlParams = new URLSearchParams(window.location.search);
+  const paymentStatus = urlParams.get('payment');
+  if (paymentStatus === 'success') {
+    const orderId = urlParams.get('orderId');
+    showToast(`Thanh toán thành công! Mã đơn: ${orderId}`, 'success', 8000);
+  } else if (paymentStatus === 'failed') {
+    showToast(`Thanh toán thất bại (mã: ${urlParams.get('code') || 'unknown'}). Vui lòng thử lại.`, 'error', 8000);
+  }
+  if (paymentStatus) {
+    const cleanUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, '', cleanUrl);
+  }
 
   // Load design from URL params
   const params = new URLSearchParams(window.location.search);

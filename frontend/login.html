@@ -87,6 +87,26 @@
         <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 10px;" id="loginSubmitBtn">
           <span id="loginSubmitText" data-i18n="auth.modal.loginBtn">Đăng nhập</span>
         </button>
+
+        <!-- Social Login -->
+        <div class="social-divider"><span data-i18n="auth.modal.socialDivider">hoặc đăng nhập bằng</span></div>
+        <div class="social-buttons">
+          <button type="button" class="social-btn social-btn-google" id="googleLoginBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.57 5.57 0 0 1-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09A11.99 11.99 0 0 0 12 24z"/>
+              <path fill="#FBBC05" d="M5.27 14.29A7.2 7.2 0 0 1 4.89 12c0-.8.14-1.57.38-2.29V6.62H1.29a11.99 11.99 0 0 0 0 10.76l3.98-3.09z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"/>
+            </svg>
+            <span data-i18n="auth.modal.googleBtn">Google</span>
+          </button>
+          <button type="button" class="social-btn social-btn-facebook" id="facebookLoginBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.7 4.53-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.89v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/>
+            </svg>
+            <span data-i18n="auth.modal.facebookBtn">Facebook</span>
+          </button>
+        </div>
       </form>
 
       <!-- Toggle Link -->
@@ -152,6 +172,17 @@
   </main>
 
   <!-- Scripts -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    // ====== CẤU HÌNH ĐĂNG NHẬP MẠNG XÃ HỘI ======
+    // Google: tạo OAuth 2.0 Client ID tại https://console.cloud.google.com/apis/credentials
+    // - Thêm "http://localhost:3000" vào Authorized JavaScript origins
+    // - Điền Client ID vào googleClientId bên dưới (cùng giá trị GOOGLE_CLIENT_ID trong backend/.env)
+    window.BLANKUP_SOCIAL = {
+      googleClientId: '116646431316-5kkndeufqeikrqer21492rkm0k6bi4ih.apps.googleusercontent.com',
+      facebookAppId: '',
+    };
+  </script>
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/login.js"></script>

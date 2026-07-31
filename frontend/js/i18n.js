@@ -202,6 +202,9 @@ const translations = {
     'auth.modal.hasAccount': 'Đã có tài khoản?',
     'auth.modal.switchToRegister': 'Đăng ký ngay',
     'auth.modal.loading': 'Đang xử lý...',
+    'auth.modal.socialDivider': 'hoặc đăng nhập bằng',
+    'auth.modal.googleBtn': 'Google',
+    'auth.modal.facebookBtn': 'Facebook',
 
     // Admin Dashboard
     'admin.title': 'Bảng điều khiển Admin',
@@ -439,6 +442,9 @@ const translations = {
     'auth.modal.hasAccount': 'Already have an account?',
     'auth.modal.switchToRegister': 'Register now',
     'auth.modal.loading': 'Processing...',
+    'auth.modal.socialDivider': 'or continue with',
+    'auth.modal.googleBtn': 'Google',
+    'auth.modal.facebookBtn': 'Facebook',
 
     // Admin Dashboard
     'admin.title': 'Admin Dashboard',

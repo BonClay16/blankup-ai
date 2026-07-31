@@ -5,15 +5,18 @@
  */
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { getPool, sql } = require('../db');
 const { sendMail } = require('../service/mailer');
+const { verifyGoogleIdToken } = require('../services/google-auth.service');
+const { signToken, verifyToken } = require('../services/jwt.service');
 
 const router = express.Router();
 
 const OTP_EXPIRY_MINUTES = 2;
 
 // ---------------------------------------------------------------------------
-// Helper: authenticate middleware (extracts user from mock token)
+// Helper: authenticate middleware (accepts JWT or legacy mock token)
 // ---------------------------------------------------------------------------
 async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -22,11 +25,22 @@ async function authenticate(req, res, next) {
   }
 
   const token = authHeader.split(' ')[1];
-  if (!token.startsWith('mock-token-')) {
-    return res.status(401).json({ success: false, error: 'Invalid authentication token.' });
-  }
+  let userId = null;
 
-  const userId = token.replace('mock-token-', '');
+  if (token.startsWith('mock-token-')) {
+    // Legacy dev token — kept for backward compatibility
+    userId = token.replace('mock-token-', '');
+  } else {
+    try {
+      const decoded = verifyToken(token);
+      if (!decoded || !decoded.userId) {
+        return res.status(401).json({ success: false, error: 'Invalid authentication token.' });
+      }
+      userId = decoded.userId;
+    } catch (err) {
+      return res.status(401).json({ success: false, error: 'Invalid or expired authentication token.' });
+    }
+  }
 
   try {
     const pool = getPool();
@@ -297,7 +311,7 @@ router.post('/login', async (req, res) => {
         role: user.role,
         provider: user.provider,
       },
-      token: 'mock-token-' + user.id,
+      token: signToken(user),
       message: 'Đăng nhập thành công!',
     });
   } catch (err) {
@@ -308,23 +322,39 @@ router.post('/login', async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/auth/social  (Google / Facebook login)
+// Google: verifies the id_token server-side. Facebook: client-provided profile.
 // ---------------------------------------------------------------------------
 router.post('/social', async (req, res) => {
   try {
-    const { provider, providerId, email, fullName, avatar } = req.body;
+    const { provider, providerId, idToken, email, fullName, avatar } = req.body;
 
-    if (!provider || !providerId || !fullName) {
-      return res.status(400).json({
-        success: false,
-        error: 'Thiếu thông tin đăng nhập mạng xã hội.',
-      });
-    }
-
-    if (!['google', 'facebook'].includes(provider)) {
+    if (!provider || !['google', 'facebook'].includes(provider)) {
       return res.status(400).json({
         success: false,
         error: 'Provider không hợp lệ. Chỉ hỗ trợ google hoặc facebook.',
       });
+    }
+
+    let socialProfile = null;
+
+    if (provider === 'google') {
+      // Server-side verification of the Google ID Token
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!idToken) {
+        return res.status(400).json({ success: false, error: 'Thiếu id_token từ Google.' });
+      }
+      try {
+        socialProfile = await verifyGoogleIdToken(idToken, clientId);
+      } catch (verifyErr) {
+        console.error('[Auth] Google token verification failed:', verifyErr.message);
+        return res.status(401).json({ success: false, error: 'ID token của Google không hợp lệ hoặc đã hết hạn.' });
+      }
+    } else {
+      // Facebook — profile provided by the client (full FB SDK flow later)
+      if (!providerId || !fullName) {
+        return res.status(400).json({ success: false, error: 'Thiếu thông tin đăng nhập Facebook.' });
+      }
+      socialProfile = { providerId, email, fullName, avatar };
     }
 
     const pool = getPool();
@@ -332,7 +362,7 @@ router.post('/social', async (req, res) => {
     // Check if this social account already exists
     const existing = await pool.request()
       .input('provider', sql.NVarChar, provider)
-      .input('providerId', sql.NVarChar, providerId)
+      .input('providerId', sql.NVarChar, socialProfile.providerId)
       .query('SELECT id, username, fullName, email, avatar, provider, role FROM Users WHERE provider = @provider AND providerId = @providerId');
 
     let user;
@@ -342,29 +372,29 @@ router.post('/social', async (req, res) => {
       user = existing.recordset[0];
       await pool.request()
         .input('id', sql.NVarChar, user.id)
-        .input('fullName', sql.NVarChar, fullName)
-        .input('avatar', sql.NVarChar, avatar || null)
-        .input('email', sql.NVarChar, email || null)
+        .input('fullName', sql.NVarChar, socialProfile.fullName)
+        .input('avatar', sql.NVarChar, socialProfile.avatar || null)
+        .input('email', sql.NVarChar, socialProfile.email || null)
         .query('UPDATE Users SET fullName = @fullName, avatar = @avatar, email = @email WHERE id = @id');
 
-      user.fullName = fullName;
-      user.avatar = avatar;
-      user.email = email;
+      user.fullName = socialProfile.fullName;
+      user.avatar = socialProfile.avatar;
+      user.email = socialProfile.email;
 
-      console.log(`[Auth] Social login (returning user): ${provider} — ${fullName}`);
+      console.log(`[Auth] Social login (returning user): ${provider} — ${socialProfile.fullName}`);
     } else {
       // New social user — create account
       const newId = 'u-' + Date.now();
-      const username = `${provider}_${providerId.slice(0, 10)}`;
+      const username = `${provider}_${socialProfile.providerId.slice(0, 10)}`;
 
       await pool.request()
         .input('id', sql.NVarChar, newId)
         .input('username', sql.NVarChar, username)
-        .input('fullName', sql.NVarChar, fullName)
-        .input('email', sql.NVarChar, email || null)
-        .input('avatar', sql.NVarChar, avatar || null)
+        .input('fullName', sql.NVarChar, socialProfile.fullName)
+        .input('email', sql.NVarChar, socialProfile.email || null)
+        .input('avatar', sql.NVarChar, socialProfile.avatar || null)
         .input('provider', sql.NVarChar, provider)
-        .input('providerId', sql.NVarChar, providerId)
+        .input('providerId', sql.NVarChar, socialProfile.providerId)
         .input('role', sql.NVarChar, 'user')
         .query(`
           INSERT INTO Users (id, username, fullName, email, avatar, provider, providerId, role)
@@ -374,14 +404,14 @@ router.post('/social', async (req, res) => {
       user = {
         id: newId,
         username,
-        fullName,
-        email,
-        avatar,
+        fullName: socialProfile.fullName,
+        email: socialProfile.email,
+        avatar: socialProfile.avatar,
         provider,
         role: 'user',
       };
 
-      console.log(`[Auth] Social login (new user): ${provider} — ${fullName}`);
+      console.log(`[Auth] Social login (new user): ${provider} — ${socialProfile.fullName}`);
     }
 
     res.json({
@@ -395,7 +425,7 @@ router.post('/social', async (req, res) => {
         role: user.role,
         provider: user.provider || provider,
       },
-      token: 'mock-token-' + user.id,
+      token: signToken(user),
       message: 'Đăng nhập thành công!',
     });
   } catch (err) {
@@ -539,6 +569,87 @@ router.get('/me', authenticate, (req, res) => {
       provider: req.user.provider,
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/auth/me  (Update profile and/or password)
+// ---------------------------------------------------------------------------
+router.patch('/me', authenticate, async (req, res) => {
+  try {
+    const { username, fullName, email, currentPassword, newPassword } = req.body;
+    const pool = getPool();
+
+    // Load full current record (includes password hash)
+    const current = await pool.request()
+      .input('id', sql.NVarChar, req.user.id)
+      .query('SELECT id, username, fullName, email, avatar, provider, role, password, createdAt FROM Users WHERE id = @id');
+    if (current.recordset.length === 0) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản.' });
+    }
+    const dbUser = current.recordset[0];
+
+    // Username uniqueness (only when changed)
+    const newUsername = (username && username.trim()) || dbUser.username;
+    if (newUsername !== dbUser.username) {
+      const exists = await pool.request()
+        .input('username', sql.NVarChar, newUsername)
+        .input('id', sql.NVarChar, req.user.id)
+        .query('SELECT id FROM Users WHERE username = @username AND id <> @id');
+      if (exists.recordset.length > 0) {
+        return res.status(400).json({ success: false, error: 'Tên đăng nhập đã được sử dụng.' });
+      }
+    }
+
+    // Full name is required
+    const newFullName = (fullName && fullName.trim()) || dbUser.fullName;
+    if (!newFullName) {
+      return res.status(400).json({ success: false, error: 'Họ và tên là bắt buộc.' });
+    }
+
+    const newEmail = (email && email.trim()) || dbUser.email || null;
+
+    // Password change (only when newPassword is provided)
+    let finalPassword = dbUser.password;
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, error: 'Vui lòng nhập mật khẩu hiện tại.' });
+      }
+      if (String(newPassword).length < 6) {
+        return res.status(400).json({ success: false, error: 'Mật khẩu mới cần ít nhất 6 ký tự.' });
+      }
+      const stored = dbUser.password || '';
+      const passwordOk = stored === currentPassword || (stored.startsWith('$2') && bcrypt.compareSync(currentPassword, stored));
+      if (!passwordOk) {
+        return res.status(400).json({ success: false, error: 'Mật khẩu hiện tại không đúng.' });
+      }
+      finalPassword = bcrypt.hashSync(String(newPassword), 10);
+    }
+
+    await pool.request()
+      .input('id', sql.NVarChar, req.user.id)
+      .input('username', sql.NVarChar, newUsername)
+      .input('fullName', sql.NVarChar, newFullName)
+      .input('email', sql.NVarChar, newEmail)
+      .input('password', sql.NVarChar, finalPassword)
+      .query('UPDATE Users SET username = @username, fullName = @fullName, email = @email, password = @password WHERE id = @id');
+
+    res.json({
+      success: true,
+      user: {
+        id: req.user.id,
+        username: newUsername,
+        fullName: newFullName,
+        email: newEmail,
+        avatar: dbUser.avatar,
+        role: dbUser.role,
+        provider: dbUser.provider,
+        createdAt: dbUser.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error('[Auth] PATCH /me error:', err.message);
+    res.status(500).json({ success: false, error: 'Cập nhật thất bại.' });
+  }
 });
 
 module.exports = {

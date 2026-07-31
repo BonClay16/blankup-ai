@@ -88,6 +88,7 @@ router.post('/', (req, res) => {
     const basePrice = PRODUCT_PRICES[productType.toLowerCase()] || 250000;
 
     // --- Build order --------------------------------------------------------
+    const isOnlinePayment = payment === 'VNPAY';
     const order = {
       orderId: 'BU-' + Date.now().toString(36).toUpperCase(),
       designUrl: designUrl || null,
@@ -103,7 +104,8 @@ router.post('/', (req, res) => {
         note: customer.note || '',
       },
       payment: payment || 'COD',
-      status: 'pending',
+      paymentStatus: isOnlinePayment ? 'pending' : undefined,
+      status: isOnlinePayment ? 'awaiting_payment' : 'pending',
       userId: userId || null,
       authorName: authorName || 'Guest',
       createdAt: new Date().toISOString(),
@@ -123,6 +125,38 @@ router.post('/', (req, res) => {
   } catch (err) {
     console.error('[Orders] Error creating order:', err.message);
     res.status(500).json({ success: false, error: 'Failed to create order' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/orders/me
+// Retrieve current user's own orders (authenticated)
+// ---------------------------------------------------------------------------
+router.get('/me', authenticate, (req, res) => {
+  try {
+    const orders = readOrders()
+      .filter(o => o.userId === req.user.id)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const totalSpend = orders.reduce((sum, o) => {
+      const total = Number(o.finalPrice != null ? o.finalPrice : (o.price || 0) * (o.quantity || 1));
+      return sum + (o.status === 'cancelled' ? 0 : total);
+    }, 0);
+
+    res.json({
+      success: true,
+      count: orders.length,
+      data: orders,
+      summary: {
+        totalOrders: orders.length,
+        pendingOrders: orders.filter(o => ['pending', 'awaiting_payment'].includes(o.status)).length,
+        completedOrders: orders.filter(o => ['completed', 'delivered', 'shipped'].includes(o.status)).length,
+        totalSpend,
+      },
+    });
+  } catch (err) {
+    console.error('[Orders] Error fetching my orders:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch orders' });
   }
 });
 
@@ -150,6 +184,58 @@ router.get('/:id', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// PUT /api/orders/:id/payment
+// Admin manually confirms/fails a bank-transfer payment
+// ---------------------------------------------------------------------------
+router.put('/:id/payment', authenticate, (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
+    }
+
+    const { paymentStatus, receivedAmount, note } = req.body;
+    const allowedStatuses = ['paid', 'underpaid', 'failed', 'pending', 'awaiting_transfer'];
+
+    if (!paymentStatus || !allowedStatuses.includes(paymentStatus)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid paymentStatus. Must be one of: ${allowedStatuses.join(', ')}`,
+      });
+    }
+
+    const orders = readOrders();
+    const orderIndex = orders.findIndex(o => o.orderId === req.params.id);
+
+    if (orderIndex === -1) {
+      return res.status(404).json({ success: false, error: `Order with id "${req.params.id}" not found` });
+    }
+
+    const order = orders[orderIndex];
+    order.paymentStatus = paymentStatus;
+    if (receivedAmount != null) order.receivedAmount = Number(receivedAmount);
+    if (note) order.paymentNote = note;
+
+    if (paymentStatus === 'paid') {
+      order.status = 'processing';
+      order.paidAt = new Date().toISOString();
+    } else if (paymentStatus === 'underpaid') {
+      order.status = 'pending';
+    } else if (paymentStatus === 'failed') {
+      order.status = 'payment_failed';
+    }
+
+    writeOrders(orders);
+
+    console.log(`[Orders] Order ${req.params.id} payment status updated to: ${paymentStatus}`);
+
+    res.json({ success: true, message: 'Cập nhật thanh toán thành công!', data: order });
+  } catch (err) {
+    console.error('[Orders] Error updating payment:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to update payment' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // PUT /api/orders/:id/status
 // Update order status (Admin only)
 // ---------------------------------------------------------------------------
@@ -160,7 +246,7 @@ router.put('/:id/status', authenticate, (req, res) => {
     }
 
     const { status } = req.body;
-    const allowedStatuses = ['pending', 'completed', 'cancelled'];
+    const allowedStatuses = ['pending', 'awaiting_payment', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'payment_failed'];
 
     if (!status || !allowedStatuses.includes(status)) {
       return res.status(400).json({

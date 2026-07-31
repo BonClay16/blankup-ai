@@ -258,22 +258,75 @@ async function loadGallery() {
     designs = getFallbackDesigns();
   }
 
+  const userId = (typeof auth !== 'undefined' && auth.user?.id) || localStorage.getItem('guest_id') || '';
+
   grid.innerHTML = designs.map((d, i) => {
     const url = d.frontDesignUrl || d.designUrl || '';
     const prompt = d.prompt || 'AI Design';
     const author = d.author || 'Community';
     const badge = i < 3 ? 'Trending' : '';
-    return `<div class="gallery-card anim-on-scroll" onclick="window.location.href='studio.html'">
-      <img class="gallery-card-img" src="${escapeAttr(url)}" alt="${escapeAttr(prompt)}" loading="lazy">
-      ${badge ? `<span class="gallery-card-badge">${badge}</span>` : ''}
+    const did = d.designId || '';
+    const liked = d.likedBy?.includes(userId);
+    return `<div class="gallery-card anim-on-scroll">
+      <a href="studio.html" class="gallery-card-link">
+        <img class="gallery-card-img" src="${escapeAttr(url)}" alt="${escapeAttr(prompt)}" loading="lazy">
+        ${badge ? `<span class="gallery-card-badge">${badge}</span>` : ''}
+      </a>
       <div class="gallery-card-info">
         <div class="gallery-card-prompt">"${escapeHtml(prompt)}"</div>
-        <div class="gallery-card-meta"><span>${escapeHtml(author)}</span><span>${d.likes || 0} ♥</span></div>
+        <div class="gallery-card-meta">
+          <span>${escapeHtml(author)}</span>
+          <button class="gallery-card-like ${liked ? 'liked' : ''}" data-id="${escapeAttr(did)}" data-likes="${d.likes || 0}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <span>${d.likes || 0}</span>
+          </button>
+        </div>
       </div>
     </div>`;
   }).join('');
 
+  grid.querySelectorAll('.gallery-card-like').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const designId = btn.dataset.id;
+      if (!designId) return;
+      try {
+        const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/like`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          btn.classList.toggle('liked', data.liked);
+          const heart = btn.querySelector('svg');
+          if (heart) heart.setAttribute('fill', data.liked ? 'currentColor' : 'none');
+          const label = btn.querySelector('span');
+          if (label) label.textContent = data.likes;
+        }
+      } catch { /* */ }
+    });
+  });
+
   initScrollAnimations();
+}
+
+function generateFallbackThumb(style, prompt) {
+  const palette = {
+    streetwear: ['#111827', '#ff2d55', '#00f0ff'],
+    minimalist: ['#f5f2ed', '#17140f', '#b43e12'],
+    vintage: ['#f3e9d2', '#8a5a2b', '#5c4033'],
+    anime: ['#1a1a2e', '#e94560', '#ffcce0'],
+    geometric: ['#0f172a', '#8b5cf6', '#22d3ee'],
+    typography: ['#ffffff', '#17140f', '#b43e12'],
+    abstract: ['#12002e', '#ff6b00', '#00e5ff'],
+    watercolor: ['#2d1b12', '#c96f3a', '#ffd9a0'],
+  };
+  const c = palette[style] || palette.abstract;
+  const words = String(prompt || 'BLANKUP').split(/\s+/).slice(0, 3);
+  const lines = words.map((w, i) => `<text x="512" y="${440 + i * 56}" text-anchor="middle" font-family="Fraunces,serif" font-size="44" font-weight="700" fill="${c[2]}" opacity="0.95">${escapeHtml(w)}</text>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="${c[0]}" rx="24"/><circle cx="512" cy="340" r="150" fill="${c[1]}" opacity="0.22"/><circle cx="512" cy="340" r="95" fill="${c[1]}" opacity="0.32"/><circle cx="512" cy="340" r="45" fill="${c[1]}" opacity="0.5"/>${lines}</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
 function getFallbackDesigns() {
@@ -286,7 +339,7 @@ function getFallbackDesigns() {
     { prompt: 'Typography nghệ thuật', style: 'typography', author: 'Đức M.', likes: 145 },
     { prompt: 'Mèo cyberpunk', style: 'abstract', author: 'Linh K.', likes: 267 },
     { prompt: 'Vietnamese coffee art', style: 'watercolor', author: 'Hải P.', likes: 178 },
-  ];
+  ].map((d, i) => ({ ...d, designId: 'demo-' + (i + 1), frontDesignUrl: generateFallbackThumb(d.style, d.prompt) }));
 }
 
 /* ============================================================

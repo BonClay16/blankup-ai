@@ -75,6 +75,7 @@ app.use('/api/contact', require('./routes/contact'));
 app.use('/api/ai-design', require('./routes/ai-design'));
 app.use('/api/auth', require('./routes/auth').router);
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/payment', require('./routes/payment'));
 
 // ---------------------------------------------------------------------------
 // SPA fallback – serve index.html for any non-API, non-static request

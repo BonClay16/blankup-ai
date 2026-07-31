@@ -422,6 +422,118 @@
   transform: translateY(0) scale(0.98);
 }
 
+/* Auth user menu / login button injected by auth.js into .nav-actions */
+.home-page .nav-actions .user-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 999px;
+  background: var(--hp-glass);
+  border: 1px solid var(--hp-border);
+  color: var(--hp-text);
+  cursor: pointer;
+  transition: var(--hp-transition);
+}
+
+.home-page .nav-actions .user-menu-trigger:hover {
+  border-color: var(--hp-accent);
+  background: var(--hp-glass-hover);
+}
+
+.home-page .nav-actions .user-name-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--hp-text);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-page .nav-actions .user-trigger-label {
+  color: var(--hp-text-tertiary);
+}
+
+.home-page .nav-actions .avatar-circle {
+  width: 30px;
+  height: 30px;
+  background: var(--hp-gradient);
+  color: #fff;
+  font-weight: 700;
+}
+
+.home-page .nav-actions .chevron-down {
+  color: var(--hp-text-tertiary);
+  font-size: 0.7rem;
+}
+
+.home-page .nav-actions .btn-ghost {
+  border-color: var(--hp-border);
+  color: var(--hp-text);
+  background: var(--hp-glass);
+}
+
+.home-page .nav-actions .btn-ghost:hover {
+  border-color: var(--hp-accent);
+  color: var(--hp-accent);
+  background: var(--hp-glass-hover);
+}
+
+.home-page .nav-actions .user-dropdown {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: 0;
+  width: 250px;
+  background: #1c1915;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--hp-radius);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  padding: 10px;
+  z-index: 1100;
+}
+
+[data-theme="light"] .home-page .nav-actions .user-dropdown {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+
+.home-page .nav-actions .user-dropdown-header strong {
+  color: var(--hp-text);
+}
+
+.home-page .nav-actions .user-dropdown-header span {
+  color: var(--hp-text-tertiary);
+}
+
+.home-page .nav-actions .dropdown-item {
+  color: var(--hp-text-secondary);
+}
+
+.home-page .nav-actions .dropdown-item:hover {
+  background: var(--hp-card-hover);
+  color: var(--hp-text);
+}
+
+.home-page .nav-actions .dropdown-item-icon {
+  color: var(--hp-text-tertiary);
+  border-color: var(--hp-border-strong);
+}
+
+.home-page .nav-actions .dropdown-item.logout-btn {
+  color: #ff6b6b;
+}
+
+.home-page .nav-actions .dropdown-item.logout-btn:hover {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+}
+
+.home-page .nav-actions .user-dropdown hr {
+  border-color: var(--hp-border);
+}
+
 .nav-burger {
   display: none;
   flex-direction: column;
@@ -1252,9 +1364,14 @@
   overflow: hidden;
   border: 1px solid var(--hp-border);
   background: var(--hp-card);
-  cursor: pointer;
   transition: var(--hp-transition);
   position: relative;
+}
+
+.gallery-card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
 }
 
 .gallery-card:hover {
@@ -1292,8 +1409,30 @@
 .gallery-card-meta {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 0.75rem;
   color: var(--hp-text-muted);
+}
+
+.gallery-card-like {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--hp-text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--hp-radius-sm, 4px);
+  transition: all 0.2s ease;
+  font-size: 0.75rem;
+}
+.gallery-card-like:hover {
+  color: #e25555;
+  background: rgba(226, 85, 85, 0.08);
+}
+.gallery-card-like.liked {
+  color: #e25555;
 }
 
 .gallery-card-badge {
@@ -1788,6 +1927,19 @@
   .hero-float-card { display: none; }
   .hero-mockup-card { max-width: 300px; }
   .stats-inner { padding: 24px; }
+}
+
+@media (max-width: 480px) {
+  .home-page .nav-actions .user-trigger-copy {
+    display: none;
+  }
+  .home-page .nav-actions .user-menu-trigger {
+    padding: 4px;
+  }
+  .home-page .nav-actions .btn-ghost {
+    padding: 8px 12px;
+    font-size: 0.68rem;
+  }
 }
 
 /* ============================================================

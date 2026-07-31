@@ -171,7 +171,7 @@ class AuthManager {
   updateNavbar() {
     if (window.location.pathname.includes('login.html')) return;
 
-    const navbarActions = document.querySelector('.navbar-actions');
+    const navbarActions = document.querySelector('.navbar-actions') || document.querySelector('.nav-actions');
     if (!navbarActions) return;
 
     document.getElementById('navLoginBtn')?.remove();

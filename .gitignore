@@ -10,3 +10,4 @@ backend/*.log
 # Only the optimized web model is needed by the app.
 frontend/assets/models/tshirt.glb
 frontend/assets/models/tshirt-optimized.glb
+.superdesign

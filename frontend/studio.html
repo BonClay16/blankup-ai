@@ -8,7 +8,7 @@
   <meta name="description" content="Tạo thiết kế áo thun độc nhất với AI. Viết prompt hoặc upload ảnh để AI thiết kế cho bạn.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/studio.css?v=v2">
 </head>
@@ -40,6 +40,13 @@
       </div>
     </div>
   </nav>
+
+  <!-- ====== TRIAL BANNER (hidden by default) ====== -->
+  <div class="trial-banner" id="trialBanner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4"/><circle cx="12" cy="12" r="10"/><path d="M12 16h.01"/></svg>
+    <span>Bạn đang dùng thử — <strong>1 lần tạo miễn phí</strong></span>
+    <a href="/login.html?redirect=studio.html" class="trial-banner-cta">Đăng ký để dùng không giới hạn →</a>
+  </div>
 
   <!-- ====== MAIN STUDIO ====== -->
   <main class="studio-main">
@@ -239,6 +246,9 @@
             </button>
           </div>
           <div class="canvas-controls-right">
+            <button class="canvas-ctrl-btn" id="removeWhiteBgBtn" title="Xóa nền trắng khỏi thiết kế">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>
+            </button>
             <button class="canvas-ctrl-btn" id="resetViewBtn" title="Reset vị trí">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             </button>
@@ -430,6 +440,13 @@
                   <small>Quét QR từ app ngân hàng.</small>
                 </span>
               </button>
+              <button type="button" class="payment-method-option" data-payment-method="VNPAY">
+                <span class="payment-method-icon">VN</span>
+                <span>
+                  <strong>VNPay</strong>
+                  <small>Thanh toán online qua thẻ/ứng dụng.</small>
+                </span>
+              </button>
             </div>
           </div>
 
@@ -501,14 +518,54 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
+  <!-- ====== AI GENERATION PROGRESS ====== -->
+  <div class="gen-progress-overlay" id="genProgressOverlay">
+    <div class="gen-progress-card">
+      <div class="gen-progress-icon" id="genProgressIcon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div class="gen-progress-title" id="genProgressTitle">AI đang sáng tạo...</div>
+      <div class="gen-progress-bar">
+        <div class="gen-progress-fill" id="genProgressFill"></div>
+      </div>
+      <div class="gen-progress-bottom">
+        <span class="gen-progress-message" id="genProgressMessage">Đang khởi tạo...</span>
+        <span class="gen-progress-percent" id="genProgressPercent">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== ONBOARDING OVERLAY ====== -->
+  <div class="onboarding-overlay" id="onboardingOverlay" style="display:none;">
+    <div class="onboarding-backdrop"></div>
+    <div class="onboarding-tooltip" id="onboardingTooltip"></div>
+    <div class="onboarding-dots" id="onboardingDots"></div>
+    <div class="onboarding-actions">
+      <button class="onboarding-btn-skip" id="onboardingSkip">Bỏ qua</button>
+      <button class="onboarding-btn-prev" id="onboardingPrev" style="display:none;">Quay lại</button>
+      <button class="onboarding-btn-next" id="onboardingNext">Tiếp theo</button>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
   <script>
     (function() {
       if (!auth.isLoggedIn()) {
-        document.getElementById('authRequiredModal').style.display = 'flex';
-        document.body.style.overflow = 'hidden';
+        const used = localStorage.getItem('blankup_guest_trial_used') === 'true';
+        if (used) {
+          /* Trial already consumed → block with auth modal */
+          document.getElementById('authRequiredModal').style.display = 'flex';
+          document.body.style.overflow = 'hidden';
+        } else {
+          /* Guest trial mode: show banner, enable limited studio */
+          const banner = document.getElementById('trialBanner');
+          if (banner) banner.classList.add('active');
+          document.documentElement.dataset.trial = 'true';
+        }
+      } else {
+        document.documentElement.dataset.trial = 'false';
       }
     })();
   </script>
