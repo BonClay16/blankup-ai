@@ -209,8 +209,10 @@ function initCounters() {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         const el = entry.target;
+        if (el.dataset.animated === 'true') return;
         const target = parseInt(el.dataset.count);
         animateCounter(el, target);
+        el.dataset.animated = 'true';
         observer.unobserve(el);
       }
     });
@@ -238,8 +240,223 @@ function animateCounter(el, target) {
 }
 
 /* ============================================================
+   SCROLL PROGRESS BAR
+   ============================================================ */
+function initScrollProgress() {
+  const bar = document.getElementById('scrollProgress');
+  if (!bar) return;
+
+  function update() {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = max > 0 ? Math.min(window.scrollY / max, 1) : 0;
+    bar.style.transform = `scaleX(${progress})`;
+  }
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(() => { update(); ticking = false; });
+      ticking = true;
+    }
+  }, { passive: true });
+  update();
+}
+
+/* ============================================================
+   HERO ARTWORK — auto-rotate through community designs
+   ============================================================ */
+async function initHeroArtworkCycle() {
+  const img = document.getElementById('heroArtImg');
+  if (!img) return;
+  const motionOK = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let pool = [];
+  try {
+    const resp = await fetch(`${API_BASE}/ai-design/gallery`);
+    if (resp.ok) {
+      const result = await resp.json();
+      pool = (result.data || []).map(d => d.frontDesignUrl || d.designUrl).filter(Boolean);
+    }
+  } catch { /* */ }
+
+  if (!pool.length) {
+    pool = getFallbackDesigns().map(d => d.frontDesignUrl).filter(Boolean);
+  }
+  if (!pool.length) return;
+
+  img.src = pool[0];
+  if (!motionOK) return;
+
+  let i = 1;
+  setInterval(() => {
+    img.classList.add('crossfade-out');
+    setTimeout(() => {
+      img.src = pool[i % pool.length];
+      img.classList.remove('crossfade-out');
+    }, 500);
+    i++;
+  }, 4500);
+}
+
+/* ============================================================
+   HERO PARALLAX (scroll-based, desktop only)
+   ============================================================ */
+function initHeroParallax() {
+  const visual = document.querySelector('.hero-visual');
+  if (!visual) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (window.innerWidth <= 1024) return;
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (y < window.innerHeight) {
+          visual.style.marginTop = (y * 0.1) + 'px';
+        }
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
+/* ============================================================
+   GALLERY CARD — 3D tilt on hover (desktop only)
+   ============================================================ */
+function initGalleryTilt() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+  document.querySelectorAll('.gallery-card').forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      const rotateY = (x - 0.5) * 8;
+      const rotateX = (0.5 - y) * 8;
+      card.style.transform = `perspective(800px) translateY(-6px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = '';
+    });
+  });
+}
+
+/* ============================================================
+   LIVE STATS (real numbers from backend, fallback to defaults)
+   ============================================================ */
+let recentOrdersPool = [];
+
+async function loadStats() {
+  const counterDesigns = document.querySelector('.stat-item [data-count="10000"]');
+  const counterCustomers = document.querySelector('.stat-item [data-count="5000"]');
+
+  try {
+    const resp = await fetch(`${API_BASE}/stats`);
+    if (!resp.ok) throw new Error('Failed');
+    const result = await resp.json();
+    if (!result.success) throw new Error('Failed');
+
+    recentOrdersPool = result.recentOrders || [];
+
+    if (counterDesigns) counterDesigns.dataset.count = String(Math.max(result.totalDesigns || 0, 1));
+    if (counterCustomers) counterCustomers.dataset.count = String(Math.max(result.totalCustomers || 0, 1));
+    if (result.totalOrders) {
+      document.querySelectorAll('[data-count-orders]').forEach(el => {
+        el.textContent = result.totalOrders.toLocaleString('vi-VN');
+      });
+    }
+  } catch {
+    /* keep default hardcoded numbers */
+  }
+
+  initCounters();
+  initRecentOrderToasts();
+}
+
+/* ============================================================
+   SOCIAL PROOF — recent order toasts
+   ============================================================ */
+function extractCity(address) {
+  const parts = String(address || '').split(',').map(s => s.trim()).filter(Boolean);
+  const last = parts[parts.length - 1] || '';
+  return last.replace(/^\d+[\s.-]*/, '') || 'Việt Nam';
+}
+
+function formatTimeAgo(iso) {
+  const then = new Date(iso).getTime();
+  if (!iso || isNaN(then)) return 'gần đây';
+  const mins = Math.max(1, Math.round((Date.now() - then) / 60000));
+  if (mins < 60) return mins + ' phút trước';
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours + ' giờ trước';
+  return Math.round(hours / 24) + ' ngày trước';
+}
+
+function initRecentOrderToasts() {
+  const toast = document.getElementById('orderToast');
+  if (!toast) return;
+  let index = 0;
+
+  function showNext() {
+    if (document.hidden || !recentOrdersPool.length) return;
+    const order = recentOrdersPool[index % recentOrdersPool.length];
+    index++;
+
+    const firstName = String(order.name || 'Khách hàng').trim().split(/\s+/)[0];
+    const city = extractCity(order.address);
+    const qty = order.quantity || 1;
+    const label = qty > 1 ? qty + ' áo' : '1 áo';
+    const timeAgo = formatTimeAgo(order.createdAt);
+
+    toast.innerHTML = `
+      <div class="order-toast-avatar">✓</div>
+      <div class="order-toast-body">
+        <div class="order-toast-title"><strong>${escapeHtml(firstName)}</strong> ở ${escapeHtml(city)} vừa đặt <strong>${label}</strong></div>
+        <div class="order-toast-time">${escapeHtml(timeAgo)}</div>
+      </div>
+      <button class="order-toast-close" aria-label="Đóng">×</button>
+    `;
+    toast.classList.add('visible');
+    toast.querySelector('.order-toast-close').addEventListener('click', hide);
+
+    clearTimeout(showNext._t);
+    showNext._t = setTimeout(hide, 6000);
+    scheduleNext();
+  }
+
+  function hide() {
+    toast.classList.remove('visible');
+  }
+
+  function scheduleNext() {
+    clearTimeout(showNext._t);
+    showNext._t = setTimeout(showNext, 25000);
+  }
+
+  if (recentOrdersPool.length) {
+    scheduleNext();
+  }
+}
+
+/* ============================================================
    GALLERY
    ============================================================ */
+const STYLE_LABELS = {
+  minimalist: 'Minimalist',
+  streetwear: 'Streetwear',
+  vintage: 'Vintage',
+  abstract: 'Abstract',
+  anime: 'Anime',
+  ai3d: 'AI 3D',
+  watercolor: 'Watercolor',
+  geometric: 'Geometric',
+  typography: 'Typography',
+  'reference remix': 'Remix ảnh',
+};
+
 async function loadGallery() {
   const grid = document.getElementById('galleryGrid');
   if (!grid) return;
@@ -249,16 +466,43 @@ async function loadGallery() {
     const resp = await fetch(`${API_BASE}/ai-design/gallery`);
     if (!resp.ok) throw new Error('Failed');
     const result = await resp.json();
-    designs = (result.data || []).slice(0, 8);
+    designs = (result.data || []).slice(0, 24);
   } catch {
     designs = getFallbackDesigns();
   }
 
   if (!designs.length) {
     designs = getFallbackDesigns();
+  } else if (designs.length < 8) {
+    const fallbacks = getFallbackDesigns();
+    const existingIds = new Set(designs.map(d => d.designId));
+    designs = [...designs, ...fallbacks.filter(d => !existingIds.has(d.designId))].slice(0, 24);
   }
 
   const userId = (typeof auth !== 'undefined' && auth.user?.id) || localStorage.getItem('guest_id') || '';
+
+  renderGalleryFilters(designs);
+  renderGalleryGrid(designs, userId);
+  initGalleryEvents(designs, userId);
+  initGalleryTilt();
+  initScrollAnimations();
+}
+
+function renderGalleryFilters(designs) {
+  const filters = document.getElementById('galleryFilters');
+  if (!filters) return;
+
+  const styles = ['all', ...new Set(designs.map(d => (d.style || '').toLowerCase()).filter(Boolean))];
+  filters.innerHTML = styles.map(s => `
+    <button class="gallery-filter-chip ${s === 'all' ? 'active' : ''}" data-style="${escapeAttr(s)}">
+      ${s === 'all' ? 'Tất cả' : (STYLE_LABELS[s] || s)}
+    </button>
+  `).join('');
+}
+
+function renderGalleryGrid(designs, userId) {
+  const grid = document.getElementById('galleryGrid');
+  if (!grid) return;
 
   grid.innerHTML = designs.map((d, i) => {
     const url = d.frontDesignUrl || d.designUrl || '';
@@ -267,11 +511,19 @@ async function loadGallery() {
     const badge = i < 3 ? 'Trending' : '';
     const did = d.designId || '';
     const liked = d.likedBy?.includes(userId);
-    return `<div class="gallery-card anim-on-scroll">
-      <a href="studio.html" class="gallery-card-link">
-        <img class="gallery-card-img" src="${escapeAttr(url)}" alt="${escapeAttr(prompt)}" loading="lazy">
-        ${badge ? `<span class="gallery-card-badge">${badge}</span>` : ''}
-      </a>
+    const style = (d.style || '').toLowerCase();
+    const useUrl = `studio.html?designUrl=${encodeURIComponent(url)}&prompt=${encodeURIComponent(prompt)}&style=${encodeURIComponent(style || 'abstract')}&author=${encodeURIComponent(author)}`;
+    return `<div class="gallery-card anim-on-scroll" data-style="${escapeAttr(style)}">
+      <div class="gallery-card-media">
+        <a href="${escapeAttr(useUrl)}" class="gallery-card-link" title="Dùng thiết kế này">
+          <img class="gallery-card-img" src="${escapeAttr(url)}" alt="${escapeAttr(prompt)}" loading="lazy">
+          ${badge ? `<span class="gallery-card-badge">${badge}</span>` : ''}
+        </a>
+        <a href="${escapeAttr(useUrl)}" class="gallery-card-use">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Dùng thiết kế này
+        </a>
+      </div>
       <div class="gallery-card-info">
         <div class="gallery-card-prompt">"${escapeHtml(prompt)}"</div>
         <div class="gallery-card-meta">
@@ -284,6 +536,24 @@ async function loadGallery() {
       </div>
     </div>`;
   }).join('');
+}
+
+function initGalleryEvents(designs, userId) {
+  const filters = document.getElementById('galleryFilters');
+  const grid = document.getElementById('galleryGrid');
+  if (!filters || !grid) return;
+
+  filters.querySelectorAll('.gallery-filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      filters.querySelectorAll('.gallery-filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const style = chip.dataset.style;
+      grid.querySelectorAll('.gallery-card').forEach(card => {
+        const match = style === 'all' || card.dataset.style === style;
+        card.style.display = match ? '' : 'none';
+      });
+    });
+  });
 
   grid.querySelectorAll('.gallery-card-like').forEach(btn => {
     btn.addEventListener('click', async (e) => {
@@ -307,8 +577,6 @@ async function loadGallery() {
       } catch { /* */ }
     });
   });
-
-  initScrollAnimations();
 }
 
 function generateFallbackThumb(style, prompt) {
@@ -380,5 +648,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initScrollAnimations();
   initCounters();
   initLang();
+  initScrollProgress();
+  initHeroParallax();
+  initHeroArtworkCycle();
+  loadStats();
   loadGallery();
 });

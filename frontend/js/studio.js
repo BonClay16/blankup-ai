@@ -1444,6 +1444,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 300);
   }
+
+  // Prefill prompt + style from URL (e.g. homepage collection cards)
+  const promptParam = params.get('prompt');
+  if (promptParam && !designUrl) {
+    setTimeout(() => {
+      const input = document.getElementById('promptInput');
+      if (input) {
+        input.value = promptParam;
+        input.focus();
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      const styleParam = (params.get('style') || '').toLowerCase();
+      if (styleParam) {
+        const chip = document.querySelector(`.style-chip[data-style="${styleParam}"]`);
+        if (chip) {
+          document.querySelectorAll('.style-chip').forEach(b => b.classList.remove('active'));
+          chip.classList.add('active');
+          state.selectedStyle = styleParam;
+        }
+      }
+      showToast('Đã tải sẵn ý tưởng — bấm "Tạo thiết kế" để bắt đầu!', 'info', 5000);
+    }, 300);
+  }
 });
 
 i18n.onChange?.(() => loadCommunityDesigns());

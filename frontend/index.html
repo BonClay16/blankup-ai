@@ -54,6 +54,9 @@
     </div>
   </nav>
 
+  <!-- ====== SCROLL PROGRESS BAR ====== -->
+  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+
   <!-- ====== HERO ====== -->
   <section class="hero" id="hero">
     <div class="hero-bg">
@@ -129,13 +132,7 @@
                 </span>
               </div>
               <div class="hero-mockup-result" id="heroArtwork">
-                <svg viewBox="0 0 200 200" class="hero-mockup-svg">
-                  <rect width="200" height="200" fill="#111827" rx="12"/>
-                  <circle cx="100" cy="90" r="40" fill="#ff5e00" opacity="0.2"/>
-                  <circle cx="100" cy="90" r="25" fill="#ff5e00" opacity="0.35"/>
-                  <circle cx="100" cy="90" r="12" fill="#ff5e00" opacity="0.6"/>
-                  <text x="100" y="150" text-anchor="middle" font-family="Archivo" font-size="11" fill="#ff5e00" font-weight="700">BLANKUP</text>
-                </svg>
+                <img id="heroArtImg" src="" alt="AI Design mẫu" loading="eager">
               </div>
             </div>
             <div class="hero-mockup-footer">
@@ -182,6 +179,64 @@
       <div class="stat-item">
         <div class="stat-value">99<span class="stat-accent">%</span></div>
         <div class="stat-label">Hài lòng</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== TRUST BADGES ====== -->
+  <section class="trust-badges">
+    <div class="container">
+      <div class="trust-badges-inner">
+        <div class="trust-badge-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--hp-accent)" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          <div>
+            <strong>Freeship toàn quốc</strong>
+            <span>Miễn phí giao hàng đơn từ 2 áo</span>
+          </div>
+        </div>
+        <div class="trust-badge-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--hp-accent)" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          <div>
+            <strong>In chất lượng cao</strong>
+            <span>In chuyển nhiệt bền màu 100%</span>
+          </div>
+        </div>
+        <div class="trust-badge-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--hp-accent)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <div>
+            <strong>Đổi trả 7 ngày</strong>
+            <span>Kiểm tra áo trước khi thanh toán</span>
+          </div>
+        </div>
+        <div class="trust-badge-item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--hp-accent)" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <div>
+            <strong>Thanh toán linh hoạt</strong>
+            <span>COD, chuyển khoản hoặc VNPay</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== MARQUEE STRIP ====== -->
+  <section class="marquee-strip" aria-hidden="true">
+    <div class="marquee-track">
+      <div class="marquee-group">
+        <span>AI DESIGN STUDIO</span><span class="marquee-star">✦</span>
+        <span>CUSTOM T-SHIRT</span><span class="marquee-star">✦</span>
+        <span>3D PREVIEW</span><span class="marquee-star">✦</span>
+        <span>COD TOÀN QUỐC</span><span class="marquee-star">✦</span>
+        <span>IN CHẤT LƯỢNG CAO</span><span class="marquee-star">✦</span>
+        <span>IDEAS MADE WEARABLE</span><span class="marquee-star">✦</span>
+      </div>
+      <div class="marquee-group">
+        <span>AI DESIGN STUDIO</span><span class="marquee-star">✦</span>
+        <span>CUSTOM T-SHIRT</span><span class="marquee-star">✦</span>
+        <span>3D PREVIEW</span><span class="marquee-star">✦</span>
+        <span>COD TOÀN QUỐC</span><span class="marquee-star">✦</span>
+        <span>IN CHẤT LƯỢNG CAO</span><span class="marquee-star">✦</span>
+        <span>IDEAS MADE WEARABLE</span><span class="marquee-star">✦</span>
       </div>
     </div>
   </section>
@@ -292,6 +347,10 @@
         <p class="section-subtitle">Hàng ngàn ý tưởng đã thành hình — khám phá và lấy cảm hứng từ cộng đồng Blankup</p>
       </div>
 
+      <div class="gallery-filters" id="galleryFilters">
+        <!-- Populated dynamically by home.js -->
+      </div>
+
       <div class="gallery-grid" id="galleryGrid">
         <!-- Loaded dynamically -->
       </div>
@@ -305,13 +364,75 @@
     </div>
   </section>
 
+  <!-- ====== COLLECTIONS ====== -->
+  <section class="collections" id="collections">
+    <div class="section-bloom"></div>
+    <div class="container">
+      <div class="section-header anim-on-scroll">
+        <div class="section-meta">
+          <span class="section-number">04</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">Bộ sưu tập</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Khám phá</span><br><span class="text-gradient">theo chủ đề</span></h2>
+        <p class="section-subtitle">Chọn một chủ đề — Blankup mở studio với ý tưởng và phong cách được chuẩn bị sẵn</p>
+      </div>
+
+      <div class="collections-grid">
+        <a class="collection-card anim-on-scroll" href="studio.html?prompt=M%E1%BB%99t%20con%20r%E1%BB%93ng%20Vi%E1%BB%87t%20Nam%20phong%20c%C3%A1ch%20cyberpunk%2C%20%C3%A9o%20c%C3%A0nh%20neon%20%C4%91%E1%BB%8F&style=streetwear">
+          <div class="collection-art collection-art-dragon"></div>
+          <div class="collection-overlay"></div>
+          <div class="collection-info">
+            <span class="collection-tag">Streetwear</span>
+            <h3>Rồng Việt Nam</h3>
+            <p>Rồng cuộn mình giữa neon — huyền thoại và hiện đại</p>
+            <span class="collection-cta">Tạo ngay →</span>
+          </div>
+        </a>
+
+        <a class="collection-card anim-on-scroll" style="animation-delay:0.1s" href="studio.html?prompt=Nh%C3%A2n%20v%E1%BA%ADt%20anime%20n%C4%83ng%20l%C6%B0%E1%BB%A3ng%20chibi%20d%E1%BB%85%20th%C6%B0%C6%A1ng%2C%20phong%20c%C3%A1ch%20Nh%E1%BA%ADt%20B%E1%BA%A3n&style=anime">
+          <div class="collection-art collection-art-anime"></div>
+          <div class="collection-overlay"></div>
+          <div class="collection-info">
+            <span class="collection-tag">Anime</span>
+            <h3>Anime & Chibi</h3>
+            <p>Nhân vật hoạt hình bùng nổ cá tính trên từng đường kim</p>
+            <span class="collection-cta">Tạo ngay →</span>
+          </div>
+        </a>
+
+        <a class="collection-card anim-on-scroll" style="animation-delay:0.2s" href="studio.html?prompt=B%E1%BB%A9c%20tranh%20ph%E1%BB%91%20c%E1%BB%95%20H%E1%BB%99i%20An%20phong%20c%C3%A1ch%20vintage%2C%20m%C3%A0u%20n%C3%A2u%20tr%E1%BA%A7m%20%E1%BA%A5m&style=vintage">
+          <div class="collection-art collection-art-vintage"></div>
+          <div class="collection-overlay"></div>
+          <div class="collection-info">
+            <span class="collection-tag">Vintage</span>
+            <h3>Hoài niệm Việt</h3>
+            <p>Phố cổ, hoa sen và những mảnh ký ức xưa cũ</p>
+            <span class="collection-cta">Tạo ngay →</span>
+          </div>
+        </a>
+
+        <a class="collection-card anim-on-scroll" style="animation-delay:0.3s" href="studio.html?prompt=Hoa%20sen%20k%E1%BA%BFt%20h%E1%BB%A3p%20s%C3%B3ng%20n%C6%B0%E1%BB%9Bc%2C%20minimalist%20hi%E1%BB%87n%20%C4%91%E1%BA%A1i&style=minimalist">
+          <div class="collection-art collection-art-minimal"></div>
+          <div class="collection-overlay"></div>
+          <div class="collection-info">
+            <span class="collection-tag">Minimalist</span>
+            <h3>Thanh lịch tối giản</h3>
+            <p>Đường nét sạch sẽ, thông điệp rõ ràng — sang trọng nhẹ nhàng</p>
+            <span class="collection-cta">Tạo ngay →</span>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
   <!-- ====== STUDIO PREVIEW ====== -->
   <section class="studio-preview" id="studio">
     <div class="section-bloom"></div>
     <div class="container">
       <div class="studio-preview-content anim-on-scroll">
         <div class="section-meta" style="justify-content:flex-start;">
-          <span class="section-number">04</span>
+          <span class="section-number">05</span>
           <span class="section-meta-divider"></span>
           <span class="section-badge">AI Studio</span>
         </div>
@@ -384,7 +505,7 @@
     <div class="container">
       <div class="section-header anim-on-scroll">
         <div class="section-meta">
-          <span class="section-number">05</span>
+          <span class="section-number">06</span>
           <span class="section-meta-divider"></span>
           <span class="section-badge">Đánh giá</span>
         </div>
@@ -430,6 +551,67 @@
     </div>
   </section>
 
+  <!-- ====== FAQ ====== -->
+  <section class="faq" id="faq">
+    <div class="section-bloom"></div>
+    <div class="container">
+      <div class="section-header anim-on-scroll">
+        <div class="section-meta">
+          <span class="section-number">07</span>
+          <span class="section-meta-divider"></span>
+          <span class="section-badge">Hỏi đáp</span>
+        </div>
+        <h2 class="section-title"><span class="section-title-em">Câu hỏi</span><br><span class="text-gradient">thường gặp</span></h2>
+        <p class="section-subtitle">Mọi thắc mắc trước khi bạn đặt chiếc áo đầu tiên</p>
+      </div>
+
+      <div class="faq-list anim-on-scroll">
+        <details class="faq-item">
+          <summary>
+            Áo được in bằng công nghệ gì? Có bền màu không?
+            <span class="faq-icon"></span>
+          </summary>
+          <p>Chúng mình dùng công nghệ in chuyển nhiệt cao cấp lên vải 100% cotton — hình sắc nét, không nứt nẻ và bền màu sau nhiều lần giặt nếu bảo quản đúng cách (lộn trái áo khi giặt).</p>
+        </details>
+        <details class="faq-item">
+          <summary>
+            Tôi chưa biết thiết kế — dùng AI có khó không?
+            <span class="faq-icon"></span>
+          </summary>
+          <p>Rất đơn giản! Chỉ cần mô tả ý tưởng bằng tiếng Việt (ví dụ: "con mèo mặc áo samurai phong cách anime"), chọn phong cách, bấm Tạo. AI sẽ cho bạn artwork độc nhất trong vài giây.</p>
+        </details>
+        <details class="faq-item">
+          <summary>
+            Giao hàng mất bao lâu? Phí vận chuyển thế nào?
+            <span class="faq-icon"></span>
+          </summary>
+          <p>Thời gian sản xuất 2-3 ngày làm việc, giao hàng 1-3 ngày tùy khu vực. Miễn phí vận chuyển cho đơn từ 2 áo trở lên; đơn 1 áo tính phí theo đơn vị vận chuyển.</p>
+        </details>
+        <details class="faq-item">
+          <summary>
+            Tôi có thể kiểm tra áo trước khi trả tiền không?
+            <span class="faq-icon"></span>
+          </summary>
+          <p>Có! Blankup hỗ trợ COD (thanh toán khi nhận hàng) toàn quốc — bạn được mở hàng, kiểm tra chất lượng in và size trước khi thanh toán cho shipper.</p>
+        </details>
+        <details class="faq-item">
+          <summary>
+            Áo sai size hoặc không ưng ý thì sao?
+            <span class="faq-icon"></span>
+          </summary>
+          <p>Bạn được đổi trả trong 7 ngày kể từ khi nhận hàng nếu áo bị lỗi in, sai size hoặc sai thiết kế so với đơn đặt. Liên hệ qua fanpage hoặc hotline để được hỗ trợ hoàn toàn miễn phí.</p>
+        </details>
+        <details class="faq-item">
+          <summary>
+            Design của tôi có thuộc về tôi không?
+            <span class="faq-icon"></span>
+          </summary>
+          <p>Hoàn toàn! Artwork bạn tạo là của riêng bạn. Bạn có thể tải file về, đặt in lại bất cứ lúc nào, và tùy chọn chia sẻ lên cộng đồng hoặc giữ riêng tư.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <!-- ====== CTA SECTION ====== -->
   <section class="cta-section">
     <div class="cta-bg">
@@ -465,6 +647,9 @@
     </div>
   </section>
 
+  <!-- ====== SOCIAL PROOF TOAST ====== -->
+  <div class="order-toast" id="orderToast" role="status" aria-live="polite"></div>
+
   <!-- ====== FOOTER ====== -->
   <footer class="footer">
     <div class="container">
@@ -492,9 +677,10 @@
         <div>
           <h4>Hỗ trợ</h4>
           <ul>
-            <li><a href="#">FAQ</a></li>
-            <li><a href="#">Giao hàng</a></li>
-            <li><a href="#">Đổi trả</a></li>
+            <li><a href="#faq">FAQ</a></li>
+            <li><a href="#collections">Bộ sưu tập</a></li>
+            <li><a href="#gallery">Giao hàng</a></li>
+            <li><a href="#faq">Đổi trả</a></li>
             <li><a href="#contact">Liên hệ</a></li>
           </ul>
         </div>
