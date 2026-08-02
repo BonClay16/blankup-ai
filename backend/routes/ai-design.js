@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { authenticate } = require('./auth');
 
 const router = express.Router();
 const designsFilePath = path.join(__dirname, '../data/designs.json');
@@ -653,6 +654,28 @@ function writeDesigns(data) {
   }
 }
 
+const commentsFilePath = path.join(__dirname, '../data/comments.json');
+
+function readComments() {
+  try {
+    if (!fs.existsSync(commentsFilePath)) return [];
+    return JSON.parse(fs.readFileSync(commentsFilePath, 'utf8'));
+  } catch (err) {
+    console.error('Error reading comments:', err);
+    return [];
+  }
+}
+
+function writeComments(data) {
+  try {
+    fs.writeFileSync(commentsFilePath, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Error writing comments:', err);
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/ai-design/generate
 // Mock AI design generation from text prompt
@@ -823,7 +846,7 @@ router.post('/generate-from-image', upload.single('image'), async (req, res) => 
 router.post('/:id/share', (req, res) => {
   try {
     const designId = decodeURIComponent(req.params.id);
-    const { designUrl, frontDesignUrl, backDesignUrl, prompt, style, author } = req.body;
+    const { designUrl, frontDesignUrl, backDesignUrl, prompt, style, author, userId, authorUsername } = req.body;
 
     if (!designUrl) {
       return res.status(400).json({ success: false, error: 'designUrl is required' });
@@ -835,6 +858,8 @@ router.post('/:id/share', (req, res) => {
     if (existing) {
       existing.isShared = true;
       existing.sharedAt = new Date().toISOString();
+      if (userId && !existing.userId) existing.userId = userId;
+      if (authorUsername && !existing.authorUsername) existing.authorUsername = authorUsername;
       writeDesigns(designs);
     } else {
       designs.push({
@@ -842,6 +867,8 @@ router.post('/:id/share', (req, res) => {
         prompt: prompt || '',
         style: style || 'abstract',
         author: author || 'Community',
+        userId: userId || null,
+        authorUsername: authorUsername || null,
         designUrl,
         frontDesignUrl: frontDesignUrl || designUrl,
         backDesignUrl: backDesignUrl || '',
@@ -894,16 +921,84 @@ router.post('/:id/like', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/ai-design/:id/comments — Danh sách comment của thiết kế
+// POST /api/ai-design/:id/comments — Thêm comment (cần JWT)
+// ---------------------------------------------------------------------------
+router.get('/:id/comments', (req, res) => {
+  try {
+    const designId = decodeURIComponent(req.params.id);
+    const comments = readComments()
+      .filter(c => c.designId === designId)
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json({ success: true, data: comments });
+  } catch (err) {
+    console.error('[AI-Design] List comments error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to list comments' });
+  }
+});
+
+router.post('/:id/comments', authenticate, (req, res) => {
+  try {
+    const designId = decodeURIComponent(req.params.id);
+    const { text } = req.body;
+
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, error: 'Nội dung bình luận không được để trống.' });
+    }
+
+    const author = (req.user && req.user.id) ? {
+      userId: req.user.id,
+      authorName: req.user.fullName || req.user.username || 'Khách',
+      authorUsername: req.user.username,
+      authorAvatar: req.user.avatar || '',
+    } : null;
+
+    if (!author) {
+      return res.status(401).json({ success: false, error: 'Vui lòng đăng nhập để bình luận.' });
+    }
+
+    const designs = readDesigns();
+    if (!designs.some(d => d.designId === designId)) {
+      return res.status(404).json({ success: false, error: 'Thiết kế không tồn tại.' });
+    }
+
+    const comment = {
+      id: 'c-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      designId,
+      ...author,
+      text: String(text).trim().slice(0, 500),
+      createdAt: new Date().toISOString(),
+    };
+
+    const comments = readComments();
+    comments.push(comment);
+    writeComments(comments);
+
+    console.log(`[AI-Design] Comment added on ${designId} by ${comment.authorName}`);
+    res.status(201).json({ success: true, message: 'Đã thêm bình luận.', data: comment });
+  } catch (err) {
+    console.error('[AI-Design] Add comment error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to add comment' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/ai-design/gallery
 // Return sample designs with their SVG thumbnails
 // ---------------------------------------------------------------------------
 router.get('/gallery', (_req, res) => {
   try {
     const designs = readDesigns();
+    const comments = readComments();
+    const commentCountByDesign = comments.reduce((acc, c) => {
+      acc[c.designId] = (acc[c.designId] || 0) + 1;
+      return acc;
+    }, {});
     const galleryWithImages = designs.map((d) => ({
       ...d,
       designUrl: d.designUrl || (d.sourceImage ? getFromImageSvg() : getDesignSvg(d.style)),
       productMockupUrl: d.productMockupUrl || null,
+      commentCount: commentCountByDesign[d.designId] || 0,
     }));
     // Sort: newest first
     const sortedGallery = [...galleryWithImages].reverse();

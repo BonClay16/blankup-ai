@@ -2,19 +2,10 @@
 const API_BASE = window.location.origin + '/api';
 
 /* ============================================================
-   TOAST NOTIFICATIONS
+   TOAST NOTIFICATIONS — intentionally disabled
    ============================================================ */
-function showToast(message, type = 'info', duration = 4200) {
-  if (!message) return;
-  const container = document.getElementById('toastContainer');
-  if (!container) return;
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<span>${message}</span><button type="button" class="toast-close" aria-label="Close">✕</button>`;
-  container.appendChild(toast);
-  const remove = () => { toast.style.opacity = '0'; toast.style.transform = 'translateX(24px)'; setTimeout(() => toast.remove(), 250); };
-  toast.querySelector('.toast-close').addEventListener('click', remove);
-  if (duration > 0) setTimeout(remove, duration);
+function showToast() {
+  /* Toasts removed globally. Keep signature for existing call sites. */
 }
 
 /* ============================================================
@@ -1129,7 +1120,7 @@ function initShareDesign() {
       const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(state.currentDesign.designId)}/share`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
-        body: JSON.stringify({ designUrl: state.currentDesign.designUrl, frontDesignUrl: getFrontDesignUrl(), backDesignUrl: getBackDesignUrl(), prompt: state.currentDesign.prompt, style: state.currentDesign.style, author: auth.user?.fullName || auth.user?.username || '' }),
+        body: JSON.stringify({ designUrl: state.currentDesign.designUrl, frontDesignUrl: getFrontDesignUrl(), backDesignUrl: getBackDesignUrl(), prompt: state.currentDesign.prompt, style: state.currentDesign.style, author: auth.user?.fullName || auth.user?.username || '', userId: auth.user?.id || null, authorUsername: auth.user?.username || null }),
       });
       const result = await resp.json();
       if (!resp.ok || result.success === false) throw new Error(result.error || 'Share failed');

@@ -200,10 +200,11 @@ router.post('/register', async (req, res) => {
     }
 
     const newId = 'u-' + Date.now();
+    const hashedPassword = bcrypt.hashSync(password, 10);
     await pool.request()
       .input('id', sql.NVarChar, newId)
       .input('username', sql.NVarChar, normalizedUsername)
-      .input('password', sql.NVarChar, password)
+      .input('password', sql.NVarChar, hashedPassword)
       .input('fullName', sql.NVarChar, fullName.trim())
       .input('email', sql.NVarChar, email || null)
       .input('phone', sql.NVarChar, phone || null)
@@ -271,21 +272,25 @@ router.post('/login', async (req, res) => {
     }
 
     const user = result.recordset[0];
-    if (user.password !== password) {
+    const passwordOk = user.password && user.password.startsWith('$2')
+      ? bcrypt.compareSync(password, user.password)
+      : user.password === password;
+    if (!passwordOk) {
       return res.status(401).json({
         success: false,
         error: 'Tên đăng nhập hoặc mật khẩu không đúng.',
       });
     }
 
-    // Check verification status
+    // Check verification status (system admin bypasses the gate)
+    const isSystemAdmin = user.role === 'admin';
     const hasEmail = !!user.email;
     const hasPhone = !!user.phone;
     const emailOk = !hasEmail || user.emailVerified;
     const phoneOk = !hasPhone || user.phoneVerified;
     const isVerified = emailOk && phoneOk;
 
-    if (!isVerified) {
+    if (!isVerified && !isSystemAdmin) {
       const needs = [];
       if (hasEmail && !user.emailVerified) needs.push('email');
       if (hasPhone && !user.phoneVerified) needs.push('phone');
@@ -556,19 +561,72 @@ router.post('/verify', async (req, res) => {
 // ---------------------------------------------------------------------------
 // GET /api/auth/me  (Check current session)
 // ---------------------------------------------------------------------------
-router.get('/me', authenticate, (req, res) => {
-  res.json({
-    success: true,
-    user: {
-      id: req.user.id,
-      username: req.user.username,
-      fullName: req.user.fullName,
-      email: req.user.email,
-      avatar: req.user.avatar,
-      role: req.user.role,
-      provider: req.user.provider,
-    },
-  });
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const pool = getPool();
+    const creditResult = await pool.request()
+      .input('userId', sql.NVarChar, req.user.id)
+      .query(`
+        SELECT a.userId, a.displayPlanId, a.highestPlanRank, a.highCredits, a.bonusLowCredits,
+               a.dailyFreeLowCreditsUsed, a.dailyFreeResetDate,
+               p.name AS planName, p.dailyFreeLowCredits AS planDailyFree,
+               p.outputQuality AS planQuality
+        FROM UserAiAccounts a
+        LEFT JOIN AiPlans p ON p.id = a.displayPlanId
+        WHERE a.userId = @userId
+      `);
+
+    let credits = null;
+    if (creditResult.recordset.length > 0) {
+      const c = creditResult.recordset[0];
+      credits = {
+        planId: c.displayPlanId,
+        planName: c.planName || 'Free',
+        planQuality: c.planQuality || 'low',
+        highCredits: Number(c.highCredits) || 0,
+        lowCredits: Number(c.bonusLowCredits) || 0,
+        dailyFreeLimit: Number(c.planDailyFree) || 0,
+        dailyFreeUsed: Number(c.dailyFreeLowCreditsUsed) || 0,
+        dailyFreeResetDate: c.dailyFreeResetDate,
+      };
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: req.user.id,
+        username: req.user.username,
+        fullName: req.user.fullName,
+        email: req.user.email,
+        avatar: req.user.avatar,
+        role: req.user.role,
+        provider: req.user.provider,
+      },
+      credits,
+    });
+  } catch (err) {
+    console.error('[Auth] /me error:', err.message);
+    res.status(500).json({ success: false, error: 'Không thể tải thông tin tài khoản.' });
+  }
+});
+
+// GET /api/auth/me/credits-ledger — lịch sử credit của chính người dùng
+router.get('/me/credits-ledger', authenticate, async (req, res) => {
+  try {
+    const pool = getPool();
+    const result = await pool.request()
+      .input('userId', sql.NVarChar, req.user.id)
+      .query(`
+        SELECT TOP 50 id, creditType, quality, amount, balanceAfter, reason, note, createdAt
+        FROM AiCreditLedger
+        WHERE userId = @userId
+        ORDER BY createdAt DESC
+      `);
+    res.json({ success: true, data: result.recordset });
+  } catch (err) {
+    console.error('[Auth] credits-ledger error:', err.message);
+    res.status(500).json({ success: false, error: 'Không thể tải lịch sử credit.' });
+  }
 });
 
 // ---------------------------------------------------------------------------

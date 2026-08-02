@@ -12,12 +12,17 @@ const adminState = {
   orders: [],
   users: [],
   designs: [],
+  vouchers: [],
+  plans: [],
+  credits: [],
   currentTab: 'overview',
   orderFilter: 'all',
   paymentFilter: 'all',
   orderSearch: '',
   designVisibilityFilter: 'all',
   userSearch: '',
+  voucherSearch: '',
+  creditsSearch: '',
   orderUserFilter: null,
   orderUserFilterLabel: '',
   selectedPreviewOrder: null,
@@ -25,22 +30,42 @@ const adminState = {
   previewShirtColor: '#ffffff',
 };
 
+const t = (key, fallback, params) => {
+  let text = fallback;
+  if (window.i18n && typeof window.i18n.t === 'function') {
+    const translated = window.i18n.t(key);
+    if (translated && translated !== key) text = translated;
+  }
+  if (params && typeof text === 'string') {
+    for (const [name, value] of Object.entries(params)) {
+      text = text.split(`{${name}}`).join(String(value ?? ''));
+    }
+  }
+  return text;
+};
+
 const STATUS_META = {
-  pending: { label: 'Đang xử lý', cls: 'badge-pending' },
-  completed: { label: 'Hoàn thành', cls: 'badge-completed' },
-  cancelled: { label: 'Đã hủy', cls: 'badge-cancelled' },
+  pending: { label: () => t('admin.filter.pending', 'Đang xử lý'), cls: 'badge-pending' },
+  awaiting_payment: { label: () => t('admin.filter.awaitingPayment', 'Chờ thanh toán'), cls: 'badge-awaiting-payment' },
+  processing: { label: () => t('admin.filter.processing', 'Đang sản xuất'), cls: 'badge-processing' },
+  shipped: { label: () => t('admin.filter.shipped', 'Đã gửi hàng'), cls: 'badge-shipped' },
+  delivered: { label: () => t('admin.filter.delivered', 'Đã giao hàng'), cls: 'badge-delivered' },
+  completed: { label: () => t('admin.filter.completed', 'Hoàn thành'), cls: 'badge-completed' },
+  cancelled: { label: () => t('admin.filter.cancelled', 'Đã hủy'), cls: 'badge-cancelled' },
+  payment_failed: { label: () => t('admin.filter.paymentFailed', 'Thanh toán thất bại'), cls: 'badge-payment-failed' },
 };
 
 const PAYMENT_META = {
-  COD: { label: 'COD', cls: 'badge-cod' },
-  BANK_TRANSFER: { label: 'QR chuyển khoản', cls: 'badge-bank' },
+  COD: { label: () => t('admin.filter.payCod', 'COD'), cls: 'badge-cod' },
+  BANK_TRANSFER: { label: () => t('admin.filter.payBank', 'QR chuyển khoản'), cls: 'badge-bank' },
 };
 
 const PAYMENT_STATUS_META = {
-  cod_pending: { label: 'COD khi nhận hàng', cls: 'badge-muted' },
-  awaiting_transfer: { label: 'Chờ chuyển khoản', cls: 'badge-awaiting' },
-  paid: { label: 'Đã thanh toán', cls: 'badge-paid' },
-  underpaid: { label: 'Chuyển thiếu', cls: 'badge-underpaid' },
+  cod_pending: { label: () => t('admin.payStatus.codPending', 'COD khi nhận hàng'), cls: 'badge-muted' },
+  awaiting_transfer: { label: () => t('admin.payStatus.awaitingTransfer', 'Chờ chuyển khoản'), cls: 'badge-awaiting' },
+  paid: { label: () => t('admin.payStatus.paid', 'Đã thanh toán'), cls: 'badge-paid' },
+  underpaid: { label: () => t('admin.payStatus.underpaid', 'Chuyển thiếu'), cls: 'badge-underpaid' },
+  failed: { label: () => t('admin.payStatus.failed', 'Thanh toán thất bại'), cls: 'badge-payment-failed' },
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -56,20 +81,26 @@ document.addEventListener('DOMContentLoaded', () => {
   initUserFormModal();
   initRefreshActions();
   initExportActions();
+  initVoucherTools();
+  initPlanTools();
+  initCreditTools();
   loadDashboardData();
 });
 
 async function loadDashboardData() {
   setDashboardLoading(true);
   try {
-    const [statsResponse, ordersResponse, designsResponse] = await Promise.all([
+    const [statsResponse, ordersResponse, designsResponse, vouchersResponse, plansResponse, creditsResponse] = await Promise.all([
       fetch(`${API_ADMIN}/stats`, { headers: auth.getAuthHeaders() }),
       fetch(API_ORDERS, { headers: auth.getAuthHeaders() }),
       fetch(`${API_ADMIN}/designs`, { headers: auth.getAuthHeaders() }),
+      fetch(`${API_ADMIN}/vouchers`, { headers: auth.getAuthHeaders() }),
+      fetch(`${API_ADMIN}/plans`, { headers: auth.getAuthHeaders() }),
+      fetch(`${API_ADMIN}/credits`, { headers: auth.getAuthHeaders() }),
     ]);
 
-    if (!statsResponse.ok) throw new Error('Không thể tải thống kê admin.');
-    if (!ordersResponse.ok) throw new Error('Không thể tải danh sách đơn hàng.');
+    if (!statsResponse.ok) throw new Error(t('admin.err.stats', 'Không thể tải thống kê admin.'));
+    if (!ordersResponse.ok) throw new Error(t('admin.err.orders', 'Không thể tải danh sách đơn hàng.'));
 
     const statsData = await statsResponse.json();
     const ordersData = await ordersResponse.json();
@@ -85,12 +116,15 @@ async function loadDashboardData() {
     adminState.users = statsData.users || [];
     adminState.orders = ordersData.data || [];
     adminState.designs = designsData.data || [];
-    console.log('[Admin] Data loaded:', { users: adminState.users.length, orders: adminState.orders.length, designs: adminState.designs.length });
+    if (vouchersResponse.ok) adminState.vouchers = (await vouchersResponse.json()).data || [];
+    if (plansResponse.ok) adminState.plans = (await plansResponse.json()).data || [];
+    if (creditsResponse.ok) adminState.credits = (await creditsResponse.json()).data || [];
+    console.log('[Admin] Data loaded:', { users: adminState.users.length, orders: adminState.orders.length, designs: adminState.designs.length, vouchers: adminState.vouchers.length, plans: adminState.plans.length, credits: adminState.credits.length });
 
     renderDashboard();
   } catch (err) {
     console.error('Admin data error:', err);
-    showAdminToast(err.message || 'Không thể tải dữ liệu admin.', 'error');
+    showAdminToast(err.message || t('admin.err.data', 'Không thể tải dữ liệu admin.'), 'error');
   } finally {
     setDashboardLoading(false);
   }
@@ -101,6 +135,9 @@ function renderDashboard() {
   renderOrdersList();
   renderUsersList();
   renderDesignsGrid();
+  renderVouchersList();
+  renderPlansList();
+  renderCreditsList();
 }
 
 function setDashboardLoading(isLoading) {
@@ -108,7 +145,7 @@ function setDashboardLoading(isLoading) {
   const refreshBtn = document.getElementById('adminRefreshBtn');
   if (refreshBtn) {
     refreshBtn.disabled = Boolean(isLoading);
-    refreshBtn.textContent = isLoading ? 'Đang tải...' : 'Làm mới';
+    refreshBtn.textContent = isLoading ? t('admin.loading', 'Đang tải...') : t('admin.ledger.refresh', 'Làm mới');
   }
 }
 
@@ -180,6 +217,531 @@ function initDesignFilters() {
       renderDesignsGrid();
     });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Vouchers
+// ---------------------------------------------------------------------------
+
+function initVoucherTools() {
+  document.getElementById('voucherSearchInput')?.addEventListener('input', (e) => {
+    adminState.voucherSearch = e.target.value.trim().toLowerCase();
+    renderVouchersList();
+  });
+  document.getElementById('createVoucherBtn')?.addEventListener('click', () => openVoucherModal());
+  document.getElementById('voucherFormModalClose')?.addEventListener('click', () => document.getElementById('voucherFormModal')?.classList.remove('open'));
+  document.getElementById('voucherFormCancel')?.addEventListener('click', () => document.getElementById('voucherFormModal')?.classList.remove('open'));
+  document.getElementById('voucherForm')?.addEventListener('submit', saveVoucher);
+}
+
+const VOUCHER_STATUS_META = {
+  active: { label: () => t('admin.voucherStatus.active', 'Đang chạy'), cls: 'badge-completed' },
+  disabled: { label: () => t('admin.voucherStatus.disabled', 'Đã tắt'), cls: 'badge-muted' },
+  expired: { label: () => t('admin.voucherStatus.expired', 'Hết hạn'), cls: 'badge-cancelled' },
+};
+
+function renderVouchersList() {
+  const tbody = document.getElementById('vouchersTableBody');
+  const countEl = document.getElementById('vouchersResultCount');
+  if (!tbody) return;
+
+  const q = adminState.voucherSearch;
+  const list = adminState.vouchers.filter(v => {
+    if (!q) return true;
+    return (v.code || '').toLowerCase().includes(q) || (v.title || '').toLowerCase().includes(q);
+  });
+
+  countEl.textContent = `${list.length} voucher`;
+  if (list.length === 0) {
+    tbody.innerHTML = renderEmptyRow(8, q ? t('admin.empty.voucherSearch', 'Không tìm thấy voucher phù hợp.') : t('admin.empty.vouchers', 'Chưa có voucher nào. Bấm "+ Tạo voucher" để bắt đầu.'));
+    return;
+  }
+
+  const now = Date.now();
+  tbody.innerHTML = list.map(v => {
+    const statusMeta = VOUCHER_STATUS_META[v.status] || { label: () => v.status || 'N/A', cls: 'badge-muted' };
+    const autoExpired = v.expiresAt && new Date(v.expiresAt).getTime() < now && v.status === 'active';
+    const status = autoExpired ? VOUCHER_STATUS_META.expired : statusMeta;
+    const discount = v.discountType === 'percent'
+      ? `${Number(v.discountValue) || 0}%${v.maxDiscountAmount ? ` (${t('admin.voucherMax', 'tối đa')} ${formatMoney(v.maxDiscountAmount)})` : ''}`
+      : `${formatMoney(v.discountValue)}${v.minOrderAmount ? ` · ${t('admin.voucherMinOrder', 'đơn ≥')} ${formatMoney(v.minOrderAmount)}` : ''}`;
+    const applies = v.appliesTo === 'plan' ? t('admin.form.appliesPlan', 'Gói AI') : v.appliesTo === 'order' ? t('admin.voucherShirtOrder', 'Đơn áo') : t('admin.filter.all', 'Tất cả');
+    const period = `${v.startsAt ? formatDate(v.startsAt, false) : t('admin.voucherNow', 'Ngay')} → ${v.expiresAt ? formatDate(v.expiresAt, false) : t('admin.voucherForever', 'Vĩnh viễn')}`;
+    return `
+      <tr data-voucher-id="${escapeAttr(v.id)}">
+        <td><span class="order-code">${escapeHtml(v.code)}</span></td>
+        <td>
+          <div class="table-primary">${escapeHtml(v.title)}</div>
+          <div class="row-muted">${escapeHtml((v.description || '').slice(0, 80))}</div>
+        </td>
+        <td><div class="table-primary">${discount}</div></td>
+        <td><span class="badge badge-muted">${applies}</span></td>
+        <td><div class="row-muted">${period}</div></td>
+        <td><div class="table-primary">${Number(v.redemptionCount || v.usedCount || 0)}${v.totalUsageLimit ? `/${v.totalUsageLimit}` : ''}</div></td>
+        <td><span class="badge ${status.cls}">${status.label()}</span></td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-icon btn-view-action" data-action="edit-voucher" data-id="${escapeAttr(v.id)}" title="${escapeAttr(t('admin.actions.edit', 'Chỉnh sửa'))}">✎</button>
+            <button class="btn-icon ${v.status === 'active' ? 'btn-cancel-action' : 'btn-complete-action'}" data-action="toggle-voucher" data-id="${escapeAttr(v.id)}" title="${v.status === 'active' ? escapeAttr(t('admin.voucherOff', 'Tắt voucher')) : escapeAttr(t('admin.voucherOn', 'Bật voucher'))}">${v.status === 'active' ? '⏻' : '▶'}</button>
+            <button class="btn-icon btn-cancel-action" data-action="delete-voucher" data-id="${escapeAttr(v.id)}" title="${escapeAttr(t('admin.actions.delete', 'Xóa voucher'))}">🗑</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      const voucher = adminState.vouchers.find(v => v.id === id);
+      if (!voucher) return;
+
+      if (action === 'edit-voucher') openVoucherModal(voucher);
+      if (action === 'toggle-voucher') await updateVoucher(id, { status: voucher.status === 'active' ? 'disabled' : 'active' });
+      if (action === 'delete-voucher') {
+        if (!confirm(t('admin.confirm.deleteVoucher', 'Xóa voucher "{code}"?', { code: voucher.code }))) return;
+        await deleteVoucher(id);
+      }
+    });
+  });
+}
+
+function openVoucherModal(voucher) {
+  const modal = document.getElementById('voucherFormModal');
+  const form = document.getElementById('voucherForm');
+  if (!modal || !form) return;
+
+  document.getElementById('vf-edit-id').value = voucher?.id || '';
+  document.getElementById('voucherFormTitle').textContent = voucher ? t('admin.modal.editVoucher', 'Sửa voucher') : t('admin.modal.createVoucher', 'Tạo voucher mới');
+  document.getElementById('voucherFormSubmit').textContent = voucher ? t('admin.form.submitSave', 'Lưu thay đổi') : t('admin.form.submitCreate', 'Tạo voucher');
+  document.getElementById('vf-code').value = voucher?.code || '';
+  document.getElementById('vf-code').disabled = Boolean(voucher);
+  document.getElementById('vf-title').value = voucher?.title || '';
+  document.getElementById('vf-description').value = voucher?.description || '';
+  document.getElementById('vf-discount-type').value = voucher?.discountType || 'fixed';
+  document.getElementById('vf-discount-value').value = voucher?.discountValue ?? '';
+  document.getElementById('vf-max-discount').value = voucher?.maxDiscountAmount ?? '';
+  document.getElementById('vf-min-order').value = voucher?.minOrderAmount ?? 0;
+  document.getElementById('vf-applies-to').value = voucher?.appliesTo || 'all';
+  document.getElementById('vf-plan-codes').value = voucher?.eligiblePlanCodes || '';
+  document.getElementById('vf-bonus-high').value = voucher?.bonusHighCredits ?? 0;
+  document.getElementById('vf-bonus-low').value = voucher?.bonusLowCredits ?? 0;
+  document.getElementById('vf-per-user').value = voucher?.perUserLimit ?? 1;
+  document.getElementById('vf-total-usage').value = voucher?.totalUsageLimit ?? '';
+  document.getElementById('vf-starts-at').value = voucher?.startsAt ? toDatetimeLocal(voucher.startsAt) : '';
+  document.getElementById('vf-expires-at').value = voucher?.expiresAt ? toDatetimeLocal(voucher.expiresAt) : '';
+  document.getElementById('vf-internal-note').value = voucher?.internalNote || '';
+
+  modal.classList.add('open');
+}
+
+async function saveVoucher(event) {
+  event.preventDefault();
+  const editId = document.getElementById('vf-edit-id').value;
+  const payload = {
+    code: document.getElementById('vf-code').value.trim(),
+    title: document.getElementById('vf-title').value.trim(),
+    description: document.getElementById('vf-description').value.trim() || null,
+    discountType: document.getElementById('vf-discount-type').value,
+    discountValue: Number(document.getElementById('vf-discount-value').value) || 0,
+    maxDiscountAmount: document.getElementById('vf-max-discount').value ? Number(document.getElementById('vf-max-discount').value) : null,
+    minOrderAmount: Number(document.getElementById('vf-min-order').value) || 0,
+    appliesTo: document.getElementById('vf-applies-to').value,
+    eligiblePlanCodes: document.getElementById('vf-plan-codes').value.trim() || null,
+    bonusHighCredits: Number(document.getElementById('vf-bonus-high').value) || 0,
+    bonusLowCredits: Number(document.getElementById('vf-bonus-low').value) || 0,
+    perUserLimit: Number(document.getElementById('vf-per-user').value) || 1,
+    totalUsageLimit: document.getElementById('vf-total-usage').value ? Number(document.getElementById('vf-total-usage').value) : null,
+    startsAt: document.getElementById('vf-starts-at').value ? new Date(document.getElementById('vf-starts-at').value).toISOString() : null,
+    expiresAt: document.getElementById('vf-expires-at').value ? new Date(document.getElementById('vf-expires-at').value).toISOString() : null,
+    internalNote: document.getElementById('vf-internal-note').value.trim() || null,
+  };
+
+  try {
+    const url = editId ? `${API_ADMIN}/vouchers/${encodeURIComponent(editId)}` : `${API_ADMIN}/vouchers`;
+    const response = await fetch(url, {
+      method: editId ? 'PUT' : 'POST',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.voucherSave', 'Không thể lưu voucher.'));
+
+    document.getElementById('voucherFormModal')?.classList.remove('open');
+    showAdminToast(data.message || t('admin.toast.voucherSaved', 'Đã lưu voucher.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Voucher save error:', err);
+    showAdminToast(err.message || t('admin.err.voucherSave', 'Lỗi lưu voucher.'), 'error');
+  }
+}
+
+async function updateVoucher(id, patch) {
+  try {
+    const response = await fetch(`${API_ADMIN}/vouchers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify(patch),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.voucherUpdate', 'Không thể cập nhật voucher.'));
+    showAdminToast(data.message || t('admin.toast.voucherUpdated', 'Đã cập nhật voucher.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Voucher update error:', err);
+    showAdminToast(err.message || t('admin.err.voucherUpdate', 'Lỗi cập nhật voucher.'), 'error');
+  }
+}
+
+async function deleteVoucher(id) {
+  try {
+    const response = await fetch(`${API_ADMIN}/vouchers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: auth.getAuthHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.voucherDelete', 'Không thể xóa voucher.'));
+    showAdminToast(data.message || t('admin.toast.voucherDeleted', 'Đã xóa voucher.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Voucher delete error:', err);
+    showAdminToast(err.message || t('admin.err.voucherDelete', 'Lỗi xóa voucher.'), 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI Plans
+// ---------------------------------------------------------------------------
+
+function initPlanTools() {
+  document.getElementById('createPlanBtn')?.addEventListener('click', () => openPlanModal());
+  document.getElementById('planFormModalClose')?.addEventListener('click', () => document.getElementById('planFormModal')?.classList.remove('open'));
+  document.getElementById('planFormCancel')?.addEventListener('click', () => document.getElementById('planFormModal')?.classList.remove('open'));
+  document.getElementById('planForm')?.addEventListener('submit', savePlan);
+}
+
+function renderPlansList() {
+  const tbody = document.getElementById('plansTableBody');
+  if (!tbody) return;
+
+  if (adminState.plans.length === 0) {
+    tbody.innerHTML = renderEmptyRow(9, t('admin.empty.plans', 'Chưa có gói AI nào. Bấm "+ Tạo gói" để bắt đầu.'));
+    return;
+  }
+
+  tbody.innerHTML = adminState.plans.map(p => {
+    const status = p.isActive
+      ? { label: () => t('admin.planStatus.selling', 'Đang bán'), cls: 'badge-completed' }
+      : { label: () => t('admin.voucherStatus.disabled', 'Đã tắt'), cls: 'badge-muted' };
+    const credits = [];
+    if (Number(p.highCredits) > 0) credits.push(`High ${p.highCredits}`);
+    if (Number(p.bonusLowCredits) > 0) credits.push(`Low ${p.bonusLowCredits}`);
+    if (Number(p.dailyFreeLowCredits) > 0) credits.push(`${t('admin.planFreeDay', 'Free/ngày')} ${p.dailyFreeLowCredits}`);
+    const badge = p.isComebackOffer
+      ? '<span class="badge badge-shipped">Comeback</span>'
+      : p.isPaid ? `<span class="badge badge-paid">${escapeHtml(t('admin.planPaid', 'Trả phí'))}</span>` : `<span class="badge badge-muted">${escapeHtml(t('admin.planFree', 'Miễn phí'))}</span>`;
+    return `
+      <tr data-plan-id="${escapeAttr(p.id)}">
+        <td><span class="order-code">${escapeHtml(p.code)}</span></td>
+        <td>
+          <div class="table-primary">${escapeHtml(p.name)}</div>
+          <div class="row-muted">${escapeHtml((p.description || '').slice(0, 70))}</div>
+        </td>
+        <td><div class="table-primary">${formatMoney(p.priceVnd)}</div></td>
+        <td><div class="row-muted">${escapeHtml(credits.join(' · ') || t('admin.planNoCredits', 'Không có'))}</div></td>
+        <td><span class="badge badge-processing">${escapeHtml(p.outputQuality || 'low')}</span></td>
+        <td><div class="table-primary">${Number(p.planRank) || 0}</div></td>
+        <td><div class="table-primary">${Number(p.purchaseCount || 0)}</div></td>
+        <td><span class="badge ${status.cls}">${status.label()}</span> ${badge}</td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-icon btn-view-action" data-action="edit-plan" data-id="${escapeAttr(p.id)}" title="${escapeAttr(t('admin.actions.edit', 'Chỉnh sửa'))}">✎</button>
+            <button class="btn-icon ${p.isActive ? 'btn-cancel-action' : 'btn-complete-action'}" data-action="toggle-plan" data-id="${escapeAttr(p.id)}" title="${p.isActive ? escapeAttr(t('admin.planOff', 'Tắt gói')) : escapeAttr(t('admin.planOn', 'Bật gói'))}">${p.isActive ? '⏻' : '▶'}</button>
+            <button class="btn-icon btn-cancel-action" data-action="delete-plan" data-id="${escapeAttr(p.id)}" title="${escapeAttr(t('admin.actions.delete', 'Xóa gói'))}">🗑</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+      const plan = adminState.plans.find(p => p.id === id);
+      if (!plan) return;
+
+      if (action === 'edit-plan') openPlanModal(plan);
+      if (action === 'toggle-plan') await updatePlan(id, { isActive: plan.isActive ? 0 : 1 });
+      if (action === 'delete-plan') {
+        if (!confirm(t('admin.confirm.deletePlan', 'Xóa gói "{name}"?', { name: plan.name }))) return;
+        await deletePlan(id);
+      }
+    });
+  });
+}
+
+function openPlanModal(plan) {
+  const modal = document.getElementById('planFormModal');
+  if (!modal) return;
+
+  document.getElementById('pf-edit-id').value = plan?.id || '';
+  document.getElementById('planFormTitle').textContent = plan ? `${t('admin.modal.editPlan', 'Sửa gói')} ${plan.name}` : t('admin.modal.createPlan', 'Tạo gói AI mới');
+  document.getElementById('planFormSubmit').textContent = plan ? t('admin.form.submitSave', 'Lưu thay đổi') : t('admin.form.submitCreatePlan', 'Tạo gói');
+  document.getElementById('pf-code').value = plan?.code || '';
+  document.getElementById('pf-code').disabled = Boolean(plan);
+  document.getElementById('pf-name').value = plan?.name || '';
+  document.getElementById('pf-description').value = plan?.description || '';
+  document.getElementById('pf-price').value = plan?.priceVnd ?? 0;
+  document.getElementById('pf-high-credits').value = plan?.highCredits ?? 0;
+  document.getElementById('pf-bonus-low').value = plan?.bonusLowCredits ?? 0;
+  document.getElementById('pf-daily-free').value = plan?.dailyFreeLowCredits ?? 0;
+  document.getElementById('pf-quality').value = plan?.outputQuality || 'high';
+  document.getElementById('pf-rank').value = plan?.planRank ?? 0;
+  document.getElementById('pf-is-paid').checked = Boolean(plan?.isPaid);
+  document.getElementById('pf-is-comeback').checked = Boolean(plan?.isComebackOffer);
+  document.getElementById('pf-comeback-days').value = plan?.comebackWindowDays ?? '';
+
+  modal.classList.add('open');
+}
+
+async function savePlan(event) {
+  event.preventDefault();
+  const editId = document.getElementById('pf-edit-id').value;
+  const payload = {
+    code: document.getElementById('pf-code').value.trim(),
+    name: document.getElementById('pf-name').value.trim(),
+    description: document.getElementById('pf-description').value.trim() || null,
+    priceVnd: Number(document.getElementById('pf-price').value) || 0,
+    highCredits: Number(document.getElementById('pf-high-credits').value) || 0,
+    bonusLowCredits: Number(document.getElementById('pf-bonus-low').value) || 0,
+    dailyFreeLowCredits: Number(document.getElementById('pf-daily-free').value) || 0,
+    outputQuality: document.getElementById('pf-quality').value,
+    planRank: Number(document.getElementById('pf-rank').value) || 0,
+    isPaid: document.getElementById('pf-is-paid').checked ? 1 : 0,
+    isComebackOffer: document.getElementById('pf-is-comeback').checked ? 1 : 0,
+    comebackWindowDays: document.getElementById('pf-comeback-days').value ? Number(document.getElementById('pf-comeback-days').value) : null,
+  };
+
+  try {
+    const url = editId ? `${API_ADMIN}/plans/${encodeURIComponent(editId)}` : `${API_ADMIN}/plans`;
+    const response = await fetch(url, {
+      method: editId ? 'PUT' : 'POST',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.planSave', 'Không thể lưu gói.'));
+
+    document.getElementById('planFormModal')?.classList.remove('open');
+    showAdminToast(data.message || t('admin.toast.planSaved', 'Đã lưu gói.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Plan save error:', err);
+    showAdminToast(err.message || t('admin.err.planSave', 'Lỗi lưu gói.'), 'error');
+  }
+}
+
+async function updatePlan(id, patch) {
+  try {
+    const response = await fetch(`${API_ADMIN}/plans/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify(patch),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.planUpdate', 'Không thể cập nhật gói.'));
+    showAdminToast(data.message || t('admin.toast.planUpdated', 'Đã cập nhật gói.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Plan update error:', err);
+    showAdminToast(err.message || t('admin.err.planUpdate', 'Lỗi cập nhật gói.'), 'error');
+  }
+}
+
+async function deletePlan(id) {
+  try {
+    const response = await fetch(`${API_ADMIN}/plans/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: auth.getAuthHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.planDelete', 'Không thể xóa gói.'));
+    showAdminToast(data.message || t('admin.toast.planDeleted', 'Đã xóa gói.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Plan delete error:', err);
+    showAdminToast(err.message || t('admin.err.planDelete', 'Lỗi xóa gói.'), 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Credits
+// ---------------------------------------------------------------------------
+
+function initCreditTools() {
+  document.getElementById('creditsSearchInput')?.addEventListener('input', (e) => {
+    adminState.creditsSearch = e.target.value.trim().toLowerCase();
+    renderCreditsList();
+  });
+  document.getElementById('creditAdjustModalClose')?.addEventListener('click', () => document.getElementById('creditAdjustModal')?.classList.remove('open'));
+  document.getElementById('creditAdjustCancel')?.addEventListener('click', () => document.getElementById('creditAdjustModal')?.classList.remove('open'));
+  document.getElementById('creditAdjustForm')?.addEventListener('submit', saveCreditAdjust);
+  document.getElementById('ledgerRefreshBtn')?.addEventListener('click', () => {
+    const userId = document.getElementById('ca-user-id')?.value;
+    if (userId) loadLedger(userId);
+  });
+}
+
+function renderCreditsList() {
+  const tbody = document.getElementById('creditsTableBody');
+  const countEl = document.getElementById('creditsResultCount');
+  if (!tbody) return;
+
+  const q = adminState.creditsSearch;
+  const list = adminState.credits.filter(c => {
+    if (!q) return true;
+    return (c.username || '').toLowerCase().includes(q) || (c.fullName || '').toLowerCase().includes(q);
+  });
+
+  countEl.textContent = t('admin.count.accounts', '{n} tài khoản', { n: list.length });
+  if (list.length === 0) {
+    tbody.innerHTML = renderEmptyRow(6, q ? t('admin.empty.creditSearch', 'Không tìm thấy người dùng phù hợp.') : t('admin.empty.credits', 'Chưa có tài khoản credit nào.'));
+    return;
+  }
+
+  tbody.innerHTML = list.map(c => {
+    const today = new Date().toISOString().slice(0, 10);
+    const resetToday = c.dailyFreeResetDate && String(c.dailyFreeResetDate).slice(0, 10) === today;
+    const planName = adminState.plans.find(p => p.id === c.displayPlanId)?.name || c.displayPlanId || 'Free';
+    return `
+      <tr data-user-id="${escapeAttr(c.userId)}">
+        <td>
+          <div class="table-primary">${escapeHtml(c.fullName || c.username)}</div>
+          <div class="row-muted">@${escapeHtml(c.username || '')}${c.email ? ' · ' + escapeHtml(c.email) : ''}</div>
+        </td>
+        <td><span class="badge badge-paid">${escapeHtml(planName)}</span></td>
+        <td><div class="table-primary">${Number(c.highCredits) || 0}</div></td>
+        <td><div class="table-primary">${Number(c.bonusLowCredits) || 0}</div></td>
+        <td><div class="row-muted">${resetToday ? `${c.dailyFreeLowCreditsUsed}/${c.dailyFreeLowCreditsUsed + freeRemaining(c)}` : t('admin.resetToday', 'Đã reset')}</div></td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-icon btn-view-action" data-action="adjust-credit" data-id="${escapeAttr(c.userId)}" title="${escapeAttr(t('admin.actions.adjust', 'Điều chỉnh credit'))}">±</button>
+            <button class="btn-icon btn-copy-action" data-action="ledger-credit" data-id="${escapeAttr(c.userId)}" title="${escapeAttr(t('admin.actions.ledger', 'Xem lịch sử credit'))}">≣</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const action = btn.dataset.action;
+      const userId = btn.dataset.id;
+      const account = adminState.credits.find(c => c.userId === userId);
+      if (!account) return;
+      if (action === 'adjust-credit') openCreditAdjustModal(account);
+      if (action === 'ledger-credit') openCreditAdjustModal(account);
+    });
+  });
+}
+
+function freeRemaining(account) {
+  const plan = adminState.plans.find(p => p.id === account.displayPlanId);
+  const daily = Number(plan?.dailyFreeLowCredits) || 0;
+  const used = Number(account.dailyFreeLowCreditsUsed) || 0;
+  return Math.max(0, daily - used);
+}
+
+function openCreditAdjustModal(account) {
+  const modal = document.getElementById('creditAdjustModal');
+  if (!modal) return;
+
+  document.getElementById('ca-user-id').value = account.userId;
+  const planName = adminState.plans.find(p => p.id === account.displayPlanId)?.name || account.displayPlanId || 'Free';
+  document.getElementById('creditAdjustUserInfo').textContent = t('admin.ledger.customerInfo',
+    '{name} (@{username}) · Gói {plan} · High {high} · Low {low}',
+    { name: account.fullName || account.username, username: account.username, plan: planName, high: Number(account.highCredits) || 0, low: Number(account.bonusLowCredits) || 0 });
+  document.getElementById('ca-amount').value = 1;
+  document.getElementById('ca-note').value = '';
+
+  modal.classList.add('open');
+  loadLedger(account.userId);
+}
+
+async function loadLedger(userId) {
+  const tbody = document.getElementById('ledgerTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="empty-table">${escapeHtml(t('admin.loading', 'Đang tải...'))}</td></tr>`;
+
+  try {
+    const response = await fetch(`${API_ADMIN}/credits/${encodeURIComponent(userId)}/ledger`, { headers: auth.getAuthHeaders() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.ledger', 'Không thể tải lịch sử credit.'));
+
+    const rows = data.data || [];
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-table">${escapeHtml(t('admin.noTransactions', 'Chưa có giao dịch.'))}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td><div class="row-muted">${formatDate(r.createdAt)}</div></td>
+        <td><span class="badge ${r.creditType === 'high' ? 'badge-processing' : 'badge-awaiting'}">${escapeHtml(r.creditType)}</span></td>
+        <td class="${Number(r.amount) > 0 ? 'money-cell' : ''}" style="${Number(r.amount) < 0 ? 'color:#dc2626;font-weight:700;' : ''}">${Number(r.amount) > 0 ? '+' : ''}${Number(r.amount)}</td>
+        <td><div class="table-primary">${r.balanceAfter ?? '-'}</div></td>
+        <td><div class="row-muted">${escapeHtml(r.note || r.reason || '')}</div></td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Ledger error:', err);
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-table">${escapeHtml(t('admin.cantLoadLedger', 'Không thể tải lịch sử.'))}</td></tr>`;
+  }
+}
+
+async function saveCreditAdjust(event) {
+  event.preventDefault();
+  const payload = {
+    userId: document.getElementById('ca-user-id').value,
+    creditType: document.getElementById('ca-credit-type').value,
+    amount: Number(document.getElementById('ca-amount').value),
+    reason: document.getElementById('ca-reason').value,
+    note: document.getElementById('ca-note').value.trim() || null,
+  };
+  if (!payload.amount) {
+    showAdminToast(t('admin.adjustAmountZero', 'Số lượng phải khác 0.'), 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_ADMIN}/credits/adjust`, {
+      method: 'POST',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || t('admin.err.adjust', 'Không thể điều chỉnh credit.'));
+
+    showAdminToast(data.message || t('admin.toast.adjusted', 'Đã điều chỉnh credit.'));
+    await loadDashboardData();
+    loadLedger(payload.userId);
+    const account = adminState.credits.find(c => c.userId === payload.userId);
+    if (account) openCreditAdjustModal(account);
+  } catch (err) {
+    console.error('Credit adjust error:', err);
+    showAdminToast(err.message || t('admin.err.adjust', 'Lỗi điều chỉnh credit.'), 'error');
+  }
+}
+
+function toDatetimeLocal(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function initUserTools() {
@@ -299,7 +861,7 @@ function renderCategoryBreakdown(categories) {
   if (!list) return;
 
   const names = {
-    tshirt: 'Áo thun',
+    tshirt: t('admin.productTshirt', 'Áo thun'),
     oversize: 'Oversize',
     polo: 'Polo',
     hoodie: 'Hoodie',
@@ -311,7 +873,7 @@ function renderCategoryBreakdown(categories) {
       <div class="category-row">
         <div class="category-labels">
           <span class="cat-name">${escapeHtml(names[key] || key)}</span>
-          <span class="cat-count">${Number(cat.count || 0)} cái · ${formatMoney(cat.revenue || 0)}</span>
+          <span class="cat-count">${escapeHtml(t('admin.count.products', '{n} cái · {amount}', { n: Number(cat.count || 0), amount: formatMoney(cat.revenue || 0) }))}</span>
         </div>
         <div class="progress-bar-bg">
           <div class="progress-bar-fill" style="width:${pct}%"></div>
@@ -329,7 +891,7 @@ function renderRecentOrders() {
     .slice(0, 5);
   recentBody.innerHTML = recent.length
     ? recent.map(order => renderOrderRow(order, true)).join('')
-    : renderEmptyRow(8, 'Chưa có đơn hàng nào.');
+    : renderEmptyRow(8, t('admin.empty.orders', 'Chưa có đơn hàng nào.'));
   bindRowActions(recentBody);
 }
 
@@ -339,13 +901,13 @@ function renderOrdersList() {
   if (!tbody) return;
 
   const filteredOrders = getFilteredOrders();
-  if (countEl) countEl.textContent = `${filteredOrders.length}/${adminState.orders.length} đơn`;
+  if (countEl) countEl.textContent = t('admin.count.orders', '{a}/{b} đơn', { a: filteredOrders.length, b: adminState.orders.length });
 
   const filterChip = document.getElementById('orderUserFilterChip');
   if (filterChip) {
     if (adminState.orderUserFilter) {
       filterChip.style.display = 'inline-flex';
-      filterChip.querySelector('.filter-chip-label').textContent = `Khách: ${adminState.orderUserFilterLabel}`;
+      filterChip.querySelector('.filter-chip-label').textContent = `${t('admin.customer', 'Khách')}: ${adminState.orderUserFilterLabel}`;
     } else {
       filterChip.style.display = 'none';
     }
@@ -353,7 +915,7 @@ function renderOrdersList() {
 
   tbody.innerHTML = filteredOrders.length
     ? filteredOrders.map(order => renderOrderRow(order)).join('')
-    : renderEmptyRow(8, 'Không có đơn hàng nào khớp bộ lọc.');
+    : renderEmptyRow(8, t('admin.empty.orderFilter', 'Không có đơn hàng nào khớp bộ lọc.'));
   bindRowActions(tbody);
 }
 
@@ -382,24 +944,30 @@ function getFilteredOrders() {
 
 function renderOrderRow(order, compact = false) {
   const total = getOrderTotal(order);
-  const status = STATUS_META[order.status] || { label: order.status || 'N/A', cls: 'badge-muted' };
-  const payment = PAYMENT_META[order.payment] || { label: order.payment || 'N/A', cls: 'badge-muted' };
-  const paymentStatus = PAYMENT_STATUS_META[order.paymentStatus] || { label: order.paymentStatus || 'Chưa rõ', cls: 'badge-muted' };
+  const status = STATUS_META[order.status] || { label: () => order.status || 'N/A', cls: 'badge-muted' };
+  const payment = PAYMENT_META[order.payment] || { label: () => order.payment || 'N/A', cls: 'badge-muted' };
+  const paymentStatus = PAYMENT_STATUS_META[order.paymentStatus] || { label: () => order.paymentStatus || t('admin.notPaid', 'Chưa rõ'), cls: 'badge-muted' };
   const dateStr = formatDate(order.createdAt);
-  const paidAt = order.paidAt ? `<div class="row-muted">Thanh toán: ${formatDate(order.paidAt)}</div>` : '';
+  const paidAt = order.paidAt ? `<div class="row-muted">${escapeHtml(t('admin.paidAt', 'Thanh toán: {date}', { date: formatDate(order.paidAt) }))}</div>` : '';
   const transferLine = order.transferContent ? `<div class="row-muted">${escapeHtml(order.transferContent)}</div>` : '';
-  const customerNote = order.customer?.note ? `<div class="row-muted">Ghi chú: ${escapeHtml(order.customer.note)}</div>` : '';
-  const completeActionHtml = order.status === 'pending'
-    ? `<button class="btn-icon btn-complete-action" data-action="complete" data-id="${escapeAttr(order.orderId)}" title="Đánh dấu hoàn thành">✓</button>`
+  const customerNote = order.customer?.note ? `<div class="row-muted">${escapeHtml(t('admin.customerNote', 'Ghi chú: {note}', { note: order.customer.note }))}</div>` : '';
+  const completeActionHtml = order.status === 'pending' || order.status === 'delivered'
+    ? `<button class="btn-icon btn-complete-action" data-action="complete" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.complete', 'Đánh dấu hoàn thành'))}">✓</button>`
     : '';
   const cancelActionHtml = order.status === 'pending'
-    ? `<button class="btn-icon btn-cancel-action" data-action="cancel" data-id="${escapeAttr(order.orderId)}" title="Hủy đơn">×</button>`
+    ? `<button class="btn-icon btn-cancel-action" data-action="cancel" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.cancel', 'Hủy đơn'))}">×</button>`
+    : '';
+  const shipActionHtml = order.status === 'processing'
+    ? `<button class="btn-icon btn-ship-action" data-action="ship" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.ship2', 'Chuyển sang đã gửi hàng'))}">🚚</button>`
+    : '';
+  const deliverActionHtml = order.status === 'shipped'
+    ? `<button class="btn-icon btn-deliver-action" data-action="deliver" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.deliver2', 'Chuyển sang đã giao hàng'))}">📦</button>`
     : '';
   const markPaidActionHtml = order.payment === 'BANK_TRANSFER' && order.paymentStatus !== 'paid'
-    ? `<button class="btn-icon btn-paid-action" data-action="mark-paid" data-id="${escapeAttr(order.orderId)}" title="Xác nhận đã nhận tiền">₫</button>`
+    ? `<button class="btn-icon btn-paid-action" data-action="mark-paid" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.markPaid', 'Xác nhận đã nhận tiền'))}">₫</button>`
     : '';
   const copyActionHtml = order.transferContent
-    ? `<button class="btn-icon btn-copy-action" data-action="copy-transfer" data-id="${escapeAttr(order.orderId)}" title="Copy nội dung chuyển khoản">⧉</button>`
+    ? `<button class="btn-icon btn-copy-action" data-action="copy-transfer" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.copyTransfer', 'Copy nội dung chuyển khoản'))}">⧉</button>`
     : '';
 
   return `
@@ -409,8 +977,8 @@ function renderOrderRow(order, compact = false) {
         ${transferLine}
       </td>
       <td>
-        <div class="table-primary">${escapeHtml(order.customer?.name || 'Khách lẻ')}</div>
-        <div class="row-muted">${escapeHtml(order.customer?.phone || 'Không có SĐT')}</div>
+        <div class="table-primary">${escapeHtml(order.customer?.name || t('admin.customerUnknown', 'Khách lẻ'))}</div>
+        <div class="row-muted">${escapeHtml(order.customer?.phone || t('admin.noPhone', 'Không có SĐT'))}</div>
         ${compact ? '' : `<div class="row-muted address-line">${escapeHtml(order.customer?.address || '')}</div>`}
         ${compact ? '' : customerNote}
       </td>
@@ -420,22 +988,24 @@ function renderOrderRow(order, compact = false) {
       </td>
       <td>
         <div class="money-cell">${formatMoney(total)}</div>
-        <div class="row-muted">${formatMoney(order.price || 0)}/áo</div>
+        <div class="row-muted">${formatMoney(order.price || 0)}${escapeHtml(t('admin.perShirt', '/áo'))}</div>
       </td>
       <td>
-        <span class="badge ${payment.cls}">${payment.label}</span>
-        <span class="badge ${paymentStatus.cls}">${paymentStatus.label}</span>
+        <span class="badge ${payment.cls}">${payment.label()}</span>
+        <span class="badge ${paymentStatus.cls}">${paymentStatus.label()}</span>
       </td>
-      <td><span class="badge ${status.cls}">${status.label}</span></td>
+      <td><span class="badge ${status.cls}">${status.label()}</span></td>
       <td>
         <div class="table-primary">${dateStr}</div>
         ${paidAt}
       </td>
       <td>
         <div class="action-buttons">
-          <button class="btn-icon btn-view-action" data-action="preview" data-id="${escapeAttr(order.orderId)}" title="Xem chi tiết">👁</button>
+          <button class="btn-icon btn-view-action" data-action="preview" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.preview', 'Xem chi tiết'))}">👁</button>
           ${copyActionHtml}
           ${markPaidActionHtml}
+          ${shipActionHtml}
+          ${deliverActionHtml}
           ${completeActionHtml}
           ${cancelActionHtml}
         </div>
@@ -451,9 +1021,11 @@ function bindRowActions(container) {
       const action = btn.dataset.action;
       const orderId = btn.dataset.id;
       if (action === 'complete') updateOrderStatus(orderId, 'completed');
+      if (action === 'ship') updateOrderStatus(orderId, 'shipped');
+      if (action === 'deliver') updateOrderStatus(orderId, 'delivered');
       if (action === 'mark-paid') markOrderPaid(orderId);
       if (action === 'copy-transfer') copyTransferContent(orderId);
-      if (action === 'cancel' && confirm('Bạn chắc chắn muốn hủy đơn hàng này?')) {
+      if (action === 'cancel' && confirm(t('admin.confirm.cancelOrder', 'Bạn chắc chắn muốn hủy đơn hàng này?'))) {
         updateOrderStatus(orderId, 'cancelled');
       }
       if (action === 'preview') openPreviewModal(orderId);
@@ -464,7 +1036,7 @@ function bindRowActions(container) {
 async function markOrderPaid(orderId) {
   const order = adminState.orders.find(item => item.orderId === orderId);
   if (!order) return;
-  if (!confirm(`Xác nhận đã nhận ${formatMoney(getOrderTotal(order))} cho đơn ${orderId}?`)) return;
+  if (!confirm(t('admin.confirm.markPaid', 'Xác nhận đã nhận {amount} cho đơn {orderId}?', { amount: formatMoney(getOrderTotal(order)), orderId }))) return;
 
   try {
     const response = await fetch(`${API_ORDERS}/${encodeURIComponent(orderId)}/payment`, {
@@ -478,13 +1050,13 @@ async function markOrderPaid(orderId) {
     });
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error || 'Không thể xác nhận thanh toán.');
+      throw new Error(err.error || t('admin.err.markPaid', 'Không thể xác nhận thanh toán.'));
     }
-    showAdminToast('Đã xác nhận thanh toán.');
+    showAdminToast(t('admin.toast.markedPaid', 'Đã xác nhận thanh toán.'));
     await loadDashboardData();
   } catch (err) {
     console.error('Payment update error:', err);
-    showAdminToast(err.message || 'Không thể xác nhận thanh toán.', 'error');
+    showAdminToast(err.message || t('admin.err.markPaid', 'Không thể xác nhận thanh toán.'), 'error');
   }
 }
 
@@ -493,9 +1065,9 @@ async function copyTransferContent(orderId) {
   const content = order?.transferContent || orderId;
   try {
     await navigator.clipboard.writeText(content);
-    showAdminToast(`Đã copy: ${content}`);
+    showAdminToast(t('admin.toast.copied', 'Đã copy: {content}', { content }));
   } catch (err) {
-    showAdminToast('Không thể copy nội dung chuyển khoản.', 'error');
+    showAdminToast(t('admin.err.copy', 'Không thể copy nội dung chuyển khoản.'), 'error');
   }
 }
 
@@ -542,7 +1114,7 @@ function exportOrdersCsv() {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  showAdminToast(`Đã xuất ${rows.length} đơn hàng.`);
+  showAdminToast(t('admin.toast.exported', 'Đã xuất {count} đơn hàng.', { count: rows.length }));
 }
 
 function csvCell(value) {
@@ -563,7 +1135,7 @@ function renderUsersList() {
       );
 
   const countEl = document.getElementById('usersResultCount');
-  if (countEl) countEl.textContent = `${filtered.length}/${adminState.users.length} người dùng`;
+  if (countEl) countEl.textContent = t('admin.count.users', '{a}/{b} người dùng', { a: filtered.length, b: adminState.users.length });
 
   tbody.innerHTML = filtered.length
     ? filtered.map(user => {
@@ -574,7 +1146,7 @@ function renderUsersList() {
         <td><span class="table-primary">@${escapeHtml(user.username)}</span></td>
         <td><span class="table-primary">${escapeHtml(user.fullName)}</span></td>
         <td>
-          <select class="admin-select user-role-select" data-user-id="${escapeAttr(user.id)}" data-current-role="${escapeAttr(user.role)}" ${isCurrentUser ? 'disabled title="Không thể đổi vai trò của chính mình"' : ''}>
+          <select class="admin-select user-role-select" data-user-id="${escapeAttr(user.id)}" data-current-role="${escapeAttr(user.role)}" ${isCurrentUser ? `disabled title="${escapeAttr(t('admin.actions.roleLocked', 'Không thể đổi vai trò của chính mình'))}"` : ''}>
             <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
             <option value="admin" ${isAdmin ? 'selected' : ''}>Admin</option>
           </select>
@@ -584,15 +1156,15 @@ function renderUsersList() {
         <td><span class="money-cell">${formatMoney(user.totalSpend || 0)}</span></td>
         <td>
           <div class="action-buttons">
-            <button class="btn-icon btn-view-action" data-user-detail-id="${escapeAttr(user.id)}" title="Xem chi tiết">👁</button>
-            <button class="btn-icon btn-view-action" data-user-edit-id="${escapeAttr(user.id)}" title="Chỉnh sửa">✎</button>
-            <button class="btn-icon btn-view-action" data-user-id="${escapeAttr(user.id)}" data-user-label="${escapeAttr(user.fullName || user.username)}" title="Xem đơn hàng">📋</button>
-            ${!isCurrentUser && !isAdmin ? `<button class="btn-icon btn-cancel-action" data-user-delete-id="${escapeAttr(user.id)}" data-user-delete-name="${escapeAttr(user.username)}" title="Xóa tài khoản">×</button>` : ''}
+            <button class="btn-icon btn-view-action" data-user-detail-id="${escapeAttr(user.id)}" title="${escapeAttr(t('admin.actions.preview', 'Xem chi tiết'))}">👁</button>
+            <button class="btn-icon btn-view-action" data-user-edit-id="${escapeAttr(user.id)}" title="${escapeAttr(t('admin.actions.edit', 'Chỉnh sửa'))}">✎</button>
+            <button class="btn-icon btn-view-action" data-user-id="${escapeAttr(user.id)}" data-user-label="${escapeAttr(user.fullName || user.username)}" title="${escapeAttr(t('admin.actions.viewOrders', 'Xem đơn hàng'))}">📋</button>
+            ${!isCurrentUser && !isAdmin ? `<button class="btn-icon btn-cancel-action" data-user-delete-id="${escapeAttr(user.id)}" data-user-delete-name="${escapeAttr(user.username)}" title="${escapeAttr(t('admin.actions.deleteUser', 'Xóa tài khoản'))}">×</button>` : ''}
           </div>
         </td>
       </tr>
     `}).join('')
-    : renderEmptyRow(7, search ? 'Không tìm thấy người dùng khớp.' : 'Chưa có tài khoản người dùng.');
+    : renderEmptyRow(7, search ? t('admin.empty.userSearch', 'Không tìm thấy người dùng khớp.') : t('admin.empty.users', 'Chưa có tài khoản người dùng.'));
 
   tbody.querySelectorAll('[data-user-id]:not([data-user-detail-id]):not([data-user-delete-id])').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -636,22 +1208,22 @@ function renderDesignsGrid() {
   });
 
   const countEl = document.getElementById('designsResultCount');
-  if (countEl) countEl.textContent = `${filtered.length}/${adminState.designs.length} thiết kế`;
+  if (countEl) countEl.textContent = t('admin.count.designs', '{a}/{b} thiết kế', { a: filtered.length, b: adminState.designs.length });
 
   if (!filtered.length) {
-    grid.innerHTML = `<div class="empty-state">${adminState.designs.length ? 'Không có thiết kế nào khớp bộ lọc.' : 'Chưa có thiết kế AI nào được tạo.'}</div>`;
+    grid.innerHTML = `<div class="empty-state">${adminState.designs.length ? escapeHtml(t('admin.empty.designFilter', 'Không có thiết kế nào khớp bộ lọc.')) : escapeHtml(t('admin.empty.designs', 'Chưa có thiết kế AI nào được tạo.'))}</div>`;
     return;
   }
 
   grid.innerHTML = filtered.map(design => {
-    const prompt = design.prompt || design.promptEn || 'Không có prompt';
+    const prompt = design.prompt || design.promptEn || t('admin.noPrompt', 'Không có prompt');
     const previewUrl = design.designUrl || design.frontDesignUrl || '';
     const isHidden = design.isShared === false;
     return `
       <article class="design-item-card ${isHidden ? 'is-hidden' : ''}">
         <div class="design-card-preview">
-          ${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr(prompt)}">` : '<span>Không có ảnh</span>'}
-          <span class="design-visibility-badge ${isHidden ? 'badge-muted' : 'badge-completed'}">${isHidden ? 'Đã ẩn' : 'Công khai'}</span>
+          ${previewUrl ? `<img src="${escapeAttr(previewUrl)}" alt="${escapeAttr(prompt)}">` : `<span>${escapeHtml(t('admin.noImage', 'Không có ảnh'))}</span>`}
+          <span class="design-visibility-badge ${isHidden ? 'badge-muted' : 'badge-completed'}">${isHidden ? escapeHtml(t('admin.visibility.hidden', 'Đã ẩn')) : escapeHtml(t('admin.visibility.public', 'Công khai'))}</span>
         </div>
         <div class="design-card-details">
           <div class="design-card-prompt">"${escapeHtml(prompt)}"</div>
@@ -660,7 +1232,7 @@ function renderDesignsGrid() {
             <span>${formatDate(design.createdAt || design.updatedAt || Date.now(), false)}</span>
           </div>
           <button class="btn btn-secondary btn-sm design-visibility-toggle" data-design-id="${escapeAttr(design.id)}" data-next-visible="${isHidden ? 'true' : 'false'}">
-            ${isHidden ? 'Hiện lại trên thư viện' : 'Ẩn khỏi thư viện'}
+            ${isHidden ? escapeHtml(t('admin.designShow', 'Hiện lại trên thư viện')) : escapeHtml(t('admin.designHide', 'Ẩn khỏi thư viện'))}
           </button>
         </div>
       </article>
@@ -681,14 +1253,14 @@ async function toggleDesignVisibility(designId, nextIsShared) {
     });
     const result = await response.json();
     if (!response.ok || result.success === false) {
-      throw new Error(result.error || 'Không thể cập nhật trạng thái thiết kế.');
+      throw new Error(result.error || t('admin.err.designToggle', 'Không thể cập nhật trạng thái thiết kế.'));
     }
     const index = adminState.designs.findIndex(d => d.id === designId);
     if (index !== -1) adminState.designs[index] = result.data;
     renderDesignsGrid();
-    showAdminToast(nextIsShared ? 'Đã hiện lại thiết kế trên thư viện.' : 'Đã ẩn thiết kế khỏi thư viện.');
+    showAdminToast(nextIsShared ? t('admin.toast.designShown', 'Đã hiện lại thiết kế trên thư viện.') : t('admin.toast.designHidden', 'Đã ẩn thiết kế khỏi thư viện.'));
   } catch (err) {
-    showAdminToast(err.message || 'Không thể cập nhật trạng thái thiết kế.', 'error');
+    showAdminToast(err.message || t('admin.err.designToggle', 'Không thể cập nhật trạng thái thiết kế.'), 'error');
   }
 }
 
@@ -702,14 +1274,14 @@ async function updateOrderStatus(orderId, newStatus) {
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error || 'Không thể cập nhật đơn hàng.');
+      throw new Error(err.error || t('admin.err.orderUpdate', 'Không thể cập nhật đơn hàng.'));
     }
 
-    showAdminToast(newStatus === 'completed' ? 'Đã đánh dấu hoàn thành.' : 'Đã cập nhật đơn hàng.');
+    showAdminToast(newStatus === 'completed' ? t('admin.toast.orderCompleted', 'Đã đánh dấu hoàn thành.') : t('admin.toast.orderUpdated', 'Đã cập nhật đơn hàng.'));
     await loadDashboardData();
   } catch (err) {
     console.error('Order status error:', err);
-    showAdminToast(err.message || 'Lỗi cập nhật đơn hàng.', 'error');
+    showAdminToast(err.message || t('admin.err.orderUpdate', 'Lỗi cập nhật đơn hàng.'), 'error');
   }
 }
 
@@ -722,16 +1294,17 @@ function openPreviewModal(orderId) {
   adminState.previewShirtColor = order.color || '#ffffff';
 
   setText('prev-order-id', order.orderId);
-  setText('prev-customer-name', order.customer?.name || 'Khách lẻ');
-  setText('prev-customer-contact', order.customer?.phone || 'Không có SĐT');
-  setText('prev-customer-address', order.customer?.address || 'Không có địa chỉ');
-  setText('prev-customer-note', order.customer?.note || 'Không có ghi chú');
-  setText('prev-product-details', `${getProductName(order.productType)} (${order.size || 'N/A'}) · ${formatMoney(order.price || 0)}/áo`);
-  setText('prev-quantity', `${Number(order.quantity || 1)} áo · ${formatMoney(getOrderTotal(order))}`);
+  setText('prev-customer-name', order.customer?.name || t('admin.customerUnknown', 'Khách lẻ'));
+  setText('prev-customer-contact', order.customer?.phone || t('admin.noPhone', 'Không có SĐT'));
+  setText('prev-customer-address', order.customer?.address || t('admin.noAddress', 'Không có địa chỉ'));
+  setText('prev-customer-note', order.customer?.note || t('admin.noNote', 'Không có ghi chú'));
+  setText('prev-product-details', `${getProductName(order.productType)} (${order.size || 'N/A'}) · ${formatMoney(order.price || 0)}${t('admin.perShirt', '/áo')}`);
+  setText('prev-quantity', `${Number(order.quantity || 1)} ${t('admin.shirtUnit', 'áo')} · ${formatMoney(getOrderTotal(order))}`);
   setText('prev-author', order.authorName || 'Guest');
-  setText('prev-payment', `${PAYMENT_META[order.payment]?.label || order.payment || 'N/A'} · ${PAYMENT_STATUS_META[order.paymentStatus]?.label || order.paymentStatus || 'N/A'}`);
-  setText('prev-transfer-content', order.transferContent || 'Không có');
-  setText('prev-paid-at', order.paidAt ? formatDate(order.paidAt) : 'Chưa thanh toán');
+  setText('prev-payment', `${(PAYMENT_META[order.payment]?.label || (() => order.payment || 'N/A'))()} · ${(PAYMENT_STATUS_META[order.paymentStatus]?.label || (() => order.paymentStatus || 'N/A'))()}`);
+  setText('prev-transfer-content', order.transferContent || t('admin.noValue', 'Không có'));
+  setText('prev-paid-at', order.paidAt ? formatDate(order.paidAt) : t('admin.notPaid', 'Chưa thanh toán'));
+  populateStatusSelect(document.getElementById('prev-status-select'), order.status);
 
   syncAdminPreviewSideButtons();
   renderAdminPreviewDesign();
@@ -771,8 +1344,8 @@ function renderAdminPreviewDesign() {
 
   if (overlay) {
     overlay.innerHTML = designUrl
-      ? `<img src="${escapeAttr(designUrl)}" alt="Thiết kế in áo">`
-      : '<span class="row-muted">Không có thiết kế</span>';
+      ? `<img src="${escapeAttr(designUrl)}" alt="${escapeAttr(t('admin.designThumb', 'Thiết kế in áo'))}">`
+      : `<span class="row-muted">${escapeHtml(t('admin.noDesign', 'Không có thiết kế'))}</span>`;
   }
 
   if (dlLink) {
@@ -808,6 +1381,42 @@ function initPreviewModalClose() {
   modal?.addEventListener('click', (event) => {
     if (event.target === modal) modal.classList.remove('open');
   });
+  document.getElementById('prev-status-save')?.addEventListener('click', savePreviewStatus);
+}
+
+function populateStatusSelect(selectEl, currentStatus) {
+  if (!selectEl) return;
+  selectEl.innerHTML = Object.entries(STATUS_META)
+    .map(([value, meta]) => `<option value="${value}" ${value === currentStatus ? 'selected' : ''}>${escapeHtml(meta.label())}</option>`)
+    .join('');
+}
+
+async function savePreviewStatus() {
+  const order = adminState.selectedPreviewOrder;
+  const selectEl = document.getElementById('prev-status-select');
+  if (!order || !selectEl) return;
+  const newStatus = selectEl.value;
+  if (newStatus === order.status) return;
+
+  try {
+    const response = await fetch(`${API_ORDERS}/${encodeURIComponent(order.orderId)}/status`, {
+      method: 'PUT',
+      headers: auth.getAuthHeaders(),
+      body: JSON.stringify({ status: newStatus }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || t('admin.err.orderUpdate', 'Không thể cập nhật đơn hàng.'));
+    }
+
+    order.status = newStatus;
+    showAdminToast(t('admin.toast.orderUpdated', 'Đã cập nhật trạng thái đơn hàng.'));
+    await loadDashboardData();
+  } catch (err) {
+    console.error('Order status error:', err);
+    showAdminToast(err.message || t('admin.err.orderUpdate', 'Lỗi cập nhật đơn hàng.'), 'error');
+  }
 }
 
 function updateAdminMockupColor() {
@@ -857,7 +1466,7 @@ function getProductName(type) {
     oversize: 'Oversize',
     polo: 'Polo',
     hoodie: 'Hoodie',
-  }[type] || type || 'Sản phẩm';
+  }[type] || type || t('admin.product', 'Sản phẩm');
 }
 
 function formatMoney(value) {
@@ -882,13 +1491,8 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
-function showAdminToast(message, type = 'success') {
-  const toast = document.getElementById('adminToast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.className = `admin-toast show ${type}`;
-  clearTimeout(showAdminToast.timer);
-  showAdminToast.timer = setTimeout(() => toast.classList.remove('show'), 3000);
+function showAdminToast() {
+  /* Toasts removed globally. Keep signature for existing call sites. */
 }
 
 function escapeHtml(value) {
@@ -940,20 +1544,20 @@ async function updateUserRole(userId, newRole) {
     });
     const result = await response.json();
     if (!response.ok || result.success === false) {
-      throw new Error(result.error || 'Không thể cập nhật vai trò.');
+      throw new Error(result.error || t('admin.err.role', 'Không thể cập nhật vai trò.'));
     }
     const userIndex = adminState.users.findIndex(u => u.id === userId);
     if (userIndex !== -1) adminState.users[userIndex].role = newRole;
     renderUsersList();
-    showAdminToast(`Đã đổi vai trò thành ${newRole}.`);
+    showAdminToast(t('admin.toast.roleChanged', 'Đã đổi vai trò thành {role}.', { role: newRole }));
   } catch (err) {
-    showAdminToast(err.message || 'Lỗi cập nhật vai trò.', 'error');
+    showAdminToast(err.message || t('admin.err.role', 'Lỗi cập nhật vai trò.'), 'error');
     renderUsersList();
   }
 }
 
 async function confirmDeleteUser(userId, username) {
-  if (!confirm(`Bạn chắc chắn muốn xóa tài khoản "@${username}"?\nHành động này không thể hoàn tác.`)) return;
+  if (!confirm(t('admin.confirm.deleteUser', 'Bạn chắc chắn muốn xóa tài khoản "@{name}"?\nHành động này không thể hoàn tác.', { name: username }))) return;
 
   try {
     const response = await fetch(`${API_ADMIN}/users/${encodeURIComponent(userId)}`, {
@@ -962,13 +1566,13 @@ async function confirmDeleteUser(userId, username) {
     });
     const result = await response.json();
     if (!response.ok || result.success === false) {
-      throw new Error(result.error || 'Không thể xóa tài khoản.');
+      throw new Error(result.error || t('admin.err.deleteUser', 'Không thể xóa tài khoản.'));
     }
     adminState.users = adminState.users.filter(u => u.id !== userId);
     renderUsersList();
-    showAdminToast(`Đã xóa tài khoản @${username}.`);
+    showAdminToast(t('admin.toast.userDeleted', 'Đã xóa tài khoản @{name}.', { name: username }));
   } catch (err) {
-    showAdminToast(err.message || 'Lỗi xóa tài khoản.', 'error');
+    showAdminToast(err.message || t('admin.err.deleteUser', 'Lỗi xóa tài khoản.'), 'error');
   }
 }
 
@@ -976,7 +1580,7 @@ async function openUserDetailModal(userId) {
   const modal = document.getElementById('userDetailModal');
   if (!modal) return;
 
-  setText('ud-username', 'Đang tải...');
+  setText('ud-username', t('admin.loading', 'Đang tải...'));
   setText('ud-fullname', '');
   setText('ud-email', '');
   setText('ud-role', '');
@@ -984,20 +1588,20 @@ async function openUserDetailModal(userId) {
   setText('ud-registered', '');
   setText('ud-orders-count', '');
   setText('ud-total-spend', '');
-  document.getElementById('ud-recent-orders').innerHTML = '<tr><td colspan="5" class="empty-table">Đang tải...</td></tr>';
+  document.getElementById('ud-recent-orders').innerHTML = `<tr><td colspan="5" class="empty-table">${escapeHtml(t('admin.loading', 'Đang tải...'))}</td></tr>`;
   modal.classList.add('open');
 
   try {
     const response = await fetch(`${API_ADMIN}/users/${encodeURIComponent(userId)}`, {
       headers: auth.getAuthHeaders(),
     });
-    if (!response.ok) throw new Error('Không thể tải thông tin người dùng.');
+    if (!response.ok) throw new Error(t('admin.err.userDetail', 'Không thể tải thông tin người dùng.'));
     const result = await response.json();
     const user = result.data;
 
     setText('ud-username', `@${user.username}`);
     setText('ud-fullname', user.fullName || 'N/A');
-    setText('ud-email', user.email || 'Chưa cập nhật');
+    setText('ud-email', user.email || t('admin.notUpdated', 'Chưa cập nhật'));
     setText('ud-role', user.role === 'admin' ? 'Admin' : 'User');
     setText('ud-provider', user.provider || 'local');
     setText('ud-registered', formatDate(user.createdAt, true));
@@ -1008,21 +1612,21 @@ async function openUserDetailModal(userId) {
     if (recentBody) {
       if (user.recentOrders && user.recentOrders.length) {
         recentBody.innerHTML = user.recentOrders.map(o => {
-          const status = STATUS_META[o.status] || { label: o.status || 'N/A', cls: 'badge-muted' };
+          const status = STATUS_META[o.status] || { label: () => o.status || 'N/A', cls: 'badge-muted' };
           return `<tr>
             <td>${escapeHtml(o.orderId)}</td>
             <td>${escapeHtml(o.productType || 'N/A')}</td>
             <td><span class="money-cell">${formatMoney(getOrderTotal(o))}</span></td>
-            <td><span class="badge ${status.cls}">${status.label}</span></td>
+            <td><span class="badge ${status.cls}">${status.label()}</span></td>
             <td>${formatDate(o.createdAt, false)}</td>
           </tr>`;
         }).join('');
       } else {
-        recentBody.innerHTML = renderEmptyRow(5, 'Chưa có đơn hàng.');
+        recentBody.innerHTML = renderEmptyRow(5, t('admin.empty.orders', 'Chưa có đơn hàng.'));
       }
     }
   } catch (err) {
-    showAdminToast(err.message || 'Lỗi tải thông tin người dùng.', 'error');
+    showAdminToast(err.message || t('admin.err.userDetail', 'Lỗi tải thông tin người dùng.'), 'error');
     modal.classList.remove('open');
   }
 }
@@ -1065,8 +1669,8 @@ function openUserFormModal(userData = null) {
   const roleField = document.getElementById('uf-role');
 
   if (userData) {
-    title.textContent = 'Chỉnh sửa tài khoản';
-    submitBtn.textContent = 'Lưu thay đổi';
+    title.textContent = t('admin.editAccount', 'Chỉnh sửa tài khoản');
+    submitBtn.textContent = t('admin.form.submitSave', 'Lưu thay đổi');
     editIdField.value = userData.id || '';
     usernameField.value = userData.username || '';
     usernameField.disabled = true;
@@ -1076,8 +1680,8 @@ function openUserFormModal(userData = null) {
     emailField.value = userData.email || '';
     roleField.value = userData.role || 'user';
   } else {
-    title.textContent = 'Tạo tài khoản mới';
-    submitBtn.textContent = 'Tạo tài khoản';
+    title.textContent = t('admin.createAccount', 'Tạo tài khoản mới');
+    submitBtn.textContent = t('admin.actions.create', 'Tạo tài khoản');
     editIdField.value = '';
     usernameField.value = '';
     usernameField.disabled = false;
@@ -1108,7 +1712,7 @@ async function handleUserFormSubmit() {
         body: JSON.stringify({ fullName, email, role }),
       });
       const result = await response.json();
-      if (!response.ok || result.success === false) throw new Error(result.error || 'Không thể cập nhật.');
+      if (!response.ok || result.success === false) throw new Error(result.error || t('admin.err.accountUpdate', 'Không thể cập nhật.'));
 
       const idx = adminState.users.findIndex(u => u.id === editId);
       if (idx !== -1) {
@@ -1118,13 +1722,13 @@ async function handleUserFormSubmit() {
       }
       renderUsersList();
       document.getElementById('userFormModal')?.classList.remove('open');
-      showAdminToast('Đã cập nhật tài khoản.');
+      showAdminToast(t('admin.toast.accountUpdated', 'Đã cập nhật tài khoản.'));
     } catch (err) {
-      showAdminToast(err.message || 'Lỗi cập nhật tài khoản.', 'error');
+      showAdminToast(err.message || t('admin.err.accountUpdate', 'Lỗi cập nhật tài khoản.'), 'error');
     }
   } else {
     if (!username || !password || !fullName) {
-      showAdminToast('Vui lòng điền đầy đủ thông tin bắt buộc.', 'error');
+      showAdminToast(t('admin.fillRequired', 'Vui lòng điền đầy đủ thông tin bắt buộc.'), 'error');
       return;
     }
     try {
@@ -1134,14 +1738,14 @@ async function handleUserFormSubmit() {
         body: JSON.stringify({ username, password, fullName, email, role }),
       });
       const result = await response.json();
-      if (!response.ok || result.success === false) throw new Error(result.error || 'Không thể tạo tài khoản.');
+      if (!response.ok || result.success === false) throw new Error(result.error || t('admin.err.accountCreate', 'Không thể tạo tài khoản.'));
 
       adminState.users.push(result.data);
       renderUsersList();
       document.getElementById('userFormModal')?.classList.remove('open');
-      showAdminToast(`Đã tạo tài khoản @${username}.`);
+      showAdminToast(t('admin.toast.accountCreated', 'Đã tạo tài khoản @{name}.', { name: username }));
     } catch (err) {
-      showAdminToast(err.message || 'Lỗi tạo tài khoản.', 'error');
+      showAdminToast(err.message || t('admin.err.accountCreate', 'Lỗi tạo tài khoản.'), 'error');
     }
   }
 }

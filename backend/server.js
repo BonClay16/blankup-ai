@@ -74,7 +74,9 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/contact', require('./routes/contact'));
 app.use('/api/ai-design', require('./routes/ai-design'));
 app.use('/api/auth', require('./routes/auth').router);
+app.use('/api/users', require('./routes/users'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/admin', require('./routes/admin-commerce'));
 app.use('/api/payment', require('./routes/payment'));
 app.use('/api/stats', require('./routes/stats'));
 

@@ -109,11 +109,11 @@ router.get('/stats', authenticate, async (req, res) => {
           categories.tshirt.revenue += orderTotal;
           categories.tshirt.count += order.quantity;
         }
-      } else if (order.status === 'pending') {
-        pendingCount++;
-        pendingRevenue += orderTotal;
       } else if (order.status === 'cancelled') {
         cancelledCount++;
+      } else {
+        pendingCount++;
+        pendingRevenue += orderTotal;
       }
     });
 

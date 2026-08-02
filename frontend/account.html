@@ -65,6 +65,7 @@
         <button class="account-tab active" data-tab="profile">Hồ sơ</button>
         <button class="account-tab" data-tab="security">Bảo mật</button>
         <button class="account-tab" data-tab="orders">Đơn hàng của tôi</button>
+        <button class="account-tab" data-tab="credits">Credits AI</button>
       </div>
 
       <!-- Profile tab -->
@@ -154,6 +155,35 @@
         </div>
         <div id="ordersListContainer">
           <div class="account-loading">Đang tải đơn hàng...</div>
+        </div>
+      </div>
+
+      <!-- Credits tab -->
+      <div class="account-panel" id="panel-credits">
+        <div class="account-orders-summary" id="creditsSummary" style="display:none;">
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="creditHigh">0</div>
+            <div class="account-summary-label">High credit</div>
+          </div>
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="creditLow">0</div>
+            <div class="account-summary-label">Low credit</div>
+          </div>
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="creditDaily">0/0</div>
+            <div class="account-summary-label">Miễn phí hôm nay</div>
+          </div>
+          <div class="account-summary-stat">
+            <div class="account-summary-value" id="creditPlan">Free</div>
+            <div class="account-summary-label">Gói hiện tại</div>
+          </div>
+        </div>
+        <div class="account-card">
+          <div class="account-card-title">Lịch sử credit</div>
+          <div class="account-card-desc">Mỗi lần tạo thiết kế sẽ trừ credit tương ứng với chất lượng output.</div>
+          <div class="account-credit-list" id="creditLedgerList">
+            <div class="account-loading">Đang tải lịch sử...</div>
+          </div>
         </div>
       </div>
     </div>

@@ -55,6 +55,14 @@ body.admin-theme textarea:focus {
   box-shadow: 0 0 0 3px rgba(180, 62, 18, 0.15) !important;
 }
 
+.vf-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #423d34);
+}
+
 /* Dashboard Wrapper Layout */
 .admin-wrapper {
   display: grid;
@@ -518,6 +526,36 @@ body.admin-theme textarea:focus {
   border: 1px solid #fecaca;
 }
 
+.badge-awaiting-payment {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.badge-processing {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-shipped {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+.badge-delivered {
+  background: #ccfbf1;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.badge-payment-failed {
+  background: #ffe4e6;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+}
+
 /* Filters Bar */
 .filter-bar {
   margin-bottom: 24px;
@@ -593,6 +631,16 @@ body.admin-theme textarea:focus {
 .btn-icon.btn-cancel-action:hover {
   background: #ef4444;
   border-color: #ef4444;
+}
+
+.btn-icon.btn-ship-action:hover {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+
+.btn-icon.btn-deliver-action:hover {
+  background: #0d9488;
+  border-color: #0d9488;
 }
 
 /* AI Designs Gallery grid styling */
@@ -970,35 +1018,6 @@ body.admin-theme textarea:focus {
 
 .status-indicator.awaiting .indicator-dot {
   background-color: var(--accent);
-}
-
-.admin-toast {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 2000;
-  min-width: 240px;
-  max-width: 360px;
-  padding: 13px 16px;
-  border-radius: 12px;
-  background: #17140f;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 10px 28px rgba(23, 20, 15, 0.18);
-  transform: translateY(12px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.admin-toast.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.admin-toast.error {
-  background: #b91c1c;
 }
 
 .admin-loading .dashboard-card,

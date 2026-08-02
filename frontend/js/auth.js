@@ -1,7 +1,7 @@
 // frontend/js/auth.js
 // Immediate Theme Initialization (prevents page flicker)
 (function() {
-  const currentTheme = localStorage.getItem('blankup_theme') || 'light';
+  const currentTheme = localStorage.getItem('blankup_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', currentTheme);
 })();
 
@@ -127,12 +127,41 @@ class AuthManager {
   }
 
   init() {
+    // Initialize i18n first (binds language toggles + applies translations to static DOM)
+    if (window.i18n && typeof window.i18n.init === 'function') {
+      window.i18n.init();
+    }
     this.initThemeToggle();
+    this.bindMobileNavToggle();
     this.updateNavbar();
 
     if (this.isLoggedIn()) {
       this.checkSession();
     }
+  }
+
+  bindMobileNavToggle() {
+    // Homepage handles its own burger (home.js) — skip it here
+    if (document.body.classList.contains('home-page')) return;
+    if (document.getElementById('studioApp')) return;
+
+    const burger = document.getElementById('navToggle');
+    const menu = document.getElementById('navMenu');
+    if (!burger || !menu) return;
+    if (burger.dataset.navBound === '1') return;
+    burger.dataset.navBound = '1';
+
+    burger.addEventListener('click', () => {
+      menu.classList.toggle('open');
+      burger.classList.toggle('active');
+    });
+
+    menu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        menu.classList.remove('open');
+        burger.classList.remove('active');
+      });
+    });
   }
 
   initThemeToggle() {
@@ -195,7 +224,7 @@ class AuthManager {
     const safeRole = this.escapeHtml(this.user.role || 'user');
     const initials = this.escapeHtml(this.getInitials());
     const adminItemHtml = this.isAdmin()
-      ? `<a href="admin.html" class="dropdown-item"><span class="dropdown-item-icon">AD</span><span>Admin Dashboard</span></a>`
+      ? `<a href="admin.html" class="dropdown-item"><span class="dropdown-item-icon">AD</span><span data-i18n="userMenu.adminDashboard">Admin Dashboard</span></a>`
       : '';
 
     const menuHtml = `
@@ -203,7 +232,7 @@ class AuthManager {
         <button class="user-menu-trigger" id="userMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false">
           <span class="avatar-circle">${initials}</span>
           <span class="user-trigger-copy">
-            <span class="user-trigger-label">Đang đăng nhập</span>
+            <span class="user-trigger-label" data-i18n="userMenu.loggedIn">Đang đăng nhập</span>
             <span class="user-name-text">${safeName}</span>
           </span>
           <span class="chevron-down">▾</span>
@@ -217,12 +246,12 @@ class AuthManager {
             </div>
           </div>
           <hr>
-          <a href="studio.html" class="dropdown-item"><span class="dropdown-item-icon">AI</span><span>AI Design Studio</span></a>
+          <a href="studio.html" class="dropdown-item"><span class="dropdown-item-icon">AI</span><span data-i18n="userMenu.studio">AI Design Studio</span></a>
           ${adminItemHtml}
-          <a href="account.html" class="dropdown-item"><span class="dropdown-item-icon">ID</span><span>Tài khoản của tôi</span></a>
-          <a href="account.html#orders" class="dropdown-item"><span class="dropdown-item-icon">ĐH</span><span>Đơn hàng của tôi</span></a>
+          <a href="account.html" class="dropdown-item"><span class="dropdown-item-icon">ID</span><span data-i18n="userMenu.myAccount">Tài khoản của tôi</span></a>
+          <a href="account.html#orders" class="dropdown-item"><span class="dropdown-item-icon">ĐH</span><span data-i18n="userMenu.myOrders">Đơn hàng của tôi</span></a>
           <hr>
-          <button class="dropdown-item" id="navSwitchAccountBtn" type="button"><span class="dropdown-item-icon">IN</span><span>Đăng nhập tài khoản khác</span></button>
+          <button class="dropdown-item" id="navSwitchAccountBtn" type="button"><span class="dropdown-item-icon">IN</span><span data-i18n="userMenu.switchAccount">Đăng nhập tài khoản khác</span></button>
           <button class="dropdown-item logout-btn" id="navLogoutBtn" type="button"><span class="dropdown-item-icon">OUT</span><span data-i18n="nav.logout">Đăng xuất</span></button>
         </div>
       </div>

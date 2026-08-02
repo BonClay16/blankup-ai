@@ -301,6 +301,47 @@
 .account-badge.status-completed { color: var(--success); border-color: var(--success); }
 .account-badge.status-cancelled { color: var(--error); border-color: var(--error); }
 
+/* ---------- Credits AI tab ---------- */
+.account-credit-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-glass, #e7e2d6);
+}
+.account-credit-row:last-child { border-bottom: none; }
+
+.account-credit-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+.account-credit-icon.credit-in {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+.account-credit-icon.credit-out {
+  background: rgba(180, 62, 18, 0.12);
+  color: var(--rust, #b43e12);
+  border: 1px solid rgba(180, 62, 18, 0.25);
+}
+
+.account-credit-info { flex: 1; min-width: 0; }
+.account-credit-title { font-weight: 700; font-size: 0.92rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account-credit-note { font-weight: 400; font-size: 0.8rem; color: var(--text-muted); }
+.account-credit-date { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+
+.account-credit-amount { font-weight: 800; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.account-credit-amount.credit-in-text { color: #16a34a; }
+.account-credit-amount.credit-out-text { color: var(--rust, #b43e12); }
+
 .account-empty {
   text-align: center;
   padding: 60px 20px;
@@ -391,47 +432,4 @@
   .account-summary-stat:last-child {
     border-bottom: none;
   }
-}
-
-/* ---------- Toast (mirrors studio.css) ---------- */
-.toast-container {
-  position: fixed;
-  top: 92px;
-  right: 20px;
-  z-index: 3000;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 360px;
-  pointer-events: none;
-}
-.toast {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: #fff;
-  border: 1px solid var(--card-border);
-  border-left: 3px solid var(--text-muted);
-  border-radius: var(--radius-buttons, 8px);
-  padding: 12px 14px;
-  font-size: 0.88rem;
-  color: var(--text-heading);
-  box-shadow: 0 6px 20px rgba(23, 20, 15, 0.12);
-  opacity: 0;
-  transform: translateX(16px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  pointer-events: auto;
-}
-.toast.show { opacity: 1; transform: translateX(0); }
-.toast-success { border-left-color: var(--success); }
-.toast-error { border-left-color: var(--error); }
-.toast-warning { border-left-color: var(--warning); }
-.toast-msg { flex: 1; line-height: 1.45; white-space: pre-line; }
-.toast-close {
-  background: none; border: none; cursor: pointer;
-  color: var(--text-muted); font-size: 0.8rem; line-height: 1; padding: 2px; flex-shrink: 0;
-}
-.toast-close:hover { color: var(--text-heading); }
-@media (max-width: 480px) {
-  .toast-container { left: 12px; right: 12px; max-width: none; top: 80px; }
 }

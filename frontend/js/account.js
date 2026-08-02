@@ -1,29 +1,9 @@
 // frontend/js/account.js
 const API_BASE = window.location.origin + '/api';
 
-/* ---------- Toast (same pattern as studio.js) ---------- */
-let toastContainerEl = null;
-function getToastContainer() {
-  if (toastContainerEl && document.body.contains(toastContainerEl)) return toastContainerEl;
-  toastContainerEl = document.createElement('div');
-  toastContainerEl.className = 'toast-container';
-  toastContainerEl.setAttribute('aria-live', 'polite');
-  document.body.appendChild(toastContainerEl);
-  return toastContainerEl;
-}
-
-function showToast(message, type = 'info', duration = 4200) {
-  if (!message) return;
-  const container = getToastContainer();
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<span class="toast-msg"></span><button type="button" class="toast-close" aria-label="Close">✕</button>`;
-  toast.querySelector('.toast-msg').textContent = message;
-  container.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add('show'));
-  const remove = () => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 220); };
-  toast.querySelector('.toast-close').addEventListener('click', remove);
-  if (duration > 0) setTimeout(remove, duration);
+/* ---------- Toast — intentionally disabled (no corner popups) ---------- */
+function showToast() {
+  /* Toasts removed globally. Keep signature for existing call sites. */
 }
 
 function escapeHtml(str) {
@@ -45,9 +25,16 @@ function formatDate(dateStr) {
 
 const STATUS_META = {
   pending: { label: 'Đang xử lý', cls: 'status-pending' },
+  awaiting_payment: { label: 'Chờ thanh toán', cls: 'status-pending' },
+  processing: { label: 'Đang sản xuất', cls: 'status-pending' },
+  shipped: { label: 'Đã gửi hàng', cls: 'status-pending' },
+  delivered: { label: 'Đã giao hàng', cls: 'status-pending' },
   completed: { label: 'Hoàn thành', cls: 'status-completed' },
   cancelled: { label: 'Đã hủy', cls: 'status-cancelled' },
+  payment_failed: { label: 'Thanh toán thất bại', cls: 'status-cancelled' },
 };
+
+let currentCredits = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
@@ -65,9 +52,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Credits tab: render summary instantly from /auth/me data, fetch ledger lazily
+  let creditsLoaded = false;
+  document.querySelector('.account-tab[data-tab="credits"]')?.addEventListener('click', () => {
+    renderCreditsSummary();
+    if (!creditsLoaded) {
+      creditsLoaded = true;
+      loadCreditLedger();
+    }
+  });
+
   // Deep-link support: account.html#orders opens directly on the orders tab
   if (window.location.hash === '#orders') {
     document.querySelector('.account-tab[data-tab="orders"]')?.click();
+  }
+  if (window.location.hash === '#credits') {
+    document.querySelector('.account-tab[data-tab="credits"]')?.click();
   }
 });
 
@@ -89,6 +89,7 @@ async function loadProfile() {
     if (!response.ok || result.success === false) throw new Error(result.error || 'Không thể tải hồ sơ.');
 
     const user = result.user;
+    currentCredits = result.credits || null;
     document.getElementById('accountGreetName').textContent = user.fullName || user.username;
     document.getElementById('profileUsername').value = user.username || '';
     document.getElementById('profileFullName').value = user.fullName || '';
@@ -259,5 +260,65 @@ async function loadOrders() {
   } catch (err) {
     container.innerHTML = `<div class="account-empty">Không thể tải đơn hàng. Vui lòng thử lại sau.</div>`;
     showToast(err.message || 'Không thể tải đơn hàng.', 'error');
+  }
+}
+
+/* ---------- Credits AI ---------- */
+
+function renderCreditsSummary() {
+  const summaryEl = document.getElementById('creditsSummary');
+  if (!summaryEl) return;
+
+  if (!currentCredits) {
+    summaryEl.style.display = 'none';
+    const list = document.getElementById('creditLedgerList');
+    if (list) list.innerHTML = `<div class="account-empty">Không có thông tin credit cho tài khoản này.</div>`;
+    return;
+  }
+
+  summaryEl.style.display = 'grid';
+  document.getElementById('creditHigh').textContent = currentCredits.highCredits ?? 0;
+  document.getElementById('creditLow').textContent = currentCredits.lowCredits ?? 0;
+  document.getElementById('creditDaily').textContent = `${currentCredits.dailyFreeUsed ?? 0}/${currentCredits.dailyFreeLimit ?? 0}`;
+  document.getElementById('creditPlan').textContent = currentCredits.planName || 'Free';
+}
+
+async function loadCreditLedger() {
+  const container = document.getElementById('creditLedgerList');
+  if (!container) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/auth/me/credits-ledger`, { headers: auth.getAuthHeaders() });
+    const result = await response.json();
+    if (!response.ok || result.success === false) throw new Error(result.error || 'Không thể tải lịch sử credit.');
+
+    const rows = result.data || [];
+    if (rows.length === 0) {
+      container.innerHTML = `
+        <div class="account-empty">
+          <p class="account-empty-title">Chưa có giao dịch credit</p>
+          <p class="account-empty-desc">Credit sẽ được cộng khi bạn nâng gói hoặc nhận ưu đãi, và trừ khi tạo thiết kế.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = rows.map(row => {
+      const amount = Number(row.amount) || 0;
+      const typeLabel = row.creditType === 'high' ? 'High' : 'Low';
+      return `
+        <article class="account-credit-row">
+          <div class="account-credit-icon ${amount > 0 ? 'credit-in' : 'credit-out'}">${amount > 0 ? '+' : '−'}</div>
+          <div class="account-credit-info">
+            <div class="account-credit-title">
+              ${amount > 0 ? 'Nhận credit' : 'Dùng credit'} · ${escapeHtml(typeLabel)}
+              <span class="account-credit-note">${escapeHtml(row.note || '')}</span>
+            </div>
+            <div class="account-credit-date">${formatDate(row.createdAt)}</div>
+          </div>
+          <div class="account-credit-amount ${amount > 0 ? 'credit-in-text' : 'credit-out-text'}">${amount > 0 ? '+' : ''}${amount}</div>
+        </article>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="account-empty">Không thể tải lịch sử credit. Vui lòng thử lại sau.</div>`;
   }
 }

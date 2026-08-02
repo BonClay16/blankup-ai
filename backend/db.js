@@ -106,7 +106,10 @@ async function initDatabase() {
     // 3. Create tables
     await createTables();
 
-    // 4. Ensure required demo users exist
+    // 4. Upgrade plaintext passwords to bcrypt hashes
+    await migrateLegacyPasswords();
+
+    // 5. Ensure required demo users exist
     await seedAdminUser();
     await seedAiCommerce();
 
@@ -343,6 +346,24 @@ async function createTables() {
   console.log('[DB] Table "VerificationCodes" ready.');
 
   await seedAiCommerce();
+}
+
+async function migrateLegacyPasswords() {
+  try {
+    const result = await pool.request().query("SELECT id, password FROM Users WHERE password IS NOT NULL AND password NOT LIKE '$2%'");
+    let migrated = 0;
+    for (const user of result.recordset) {
+      const hash = bcrypt.hashSync(user.password, 10);
+      await pool.request()
+        .input('id', sql.NVarChar, user.id)
+        .input('password', sql.NVarChar, hash)
+        .query('UPDATE Users SET password = @password WHERE id = @id');
+      migrated += 1;
+    }
+    if (migrated > 0) console.log(`[DB] Migrated ${migrated} plaintext password(s) to bcrypt.`);
+  } catch (err) {
+    console.error('[DB] Password migration failed:', err.message);
+  }
 }
 
 async function seedAiCommerce() {

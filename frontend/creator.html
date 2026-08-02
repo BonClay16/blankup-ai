@@ -1,0 +1,122 @@
+<!-- frontend/creator.html -->
+<!DOCTYPE html>
+<html lang="vi" data-lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creator - Blankup</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/creator.css">
+</head>
+<body>
+  <nav class="navbar scrolled" id="navbar">
+    <div class="container">
+      <a href="/" class="navbar-logo">
+        <svg class="logo-icon" viewBox="0 0 38 38" fill="none">
+          <rect width="38" height="38" rx="4" fill="#b43e12"/>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.92"/>
+          <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
+        </svg>
+        <span>BLANK<span class="logo-highlight">UP</span></span>
+      </a>
+
+      <div class="navbar-actions">
+        <div class="lang-toggle" id="langToggle">
+          <span class="lang-vi active" data-lang="vi">VI</span>
+          <span class="lang-en" data-lang="en">EN</span>
+        </div>
+        <a href="/" class="btn btn-ghost btn-sm">← Trang chủ</a>
+        <a href="/studio.html" class="btn btn-secondary btn-sm">Vào studio</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="creator-page section">
+    <div class="container">
+      <div id="creatorLoading" class="creator-loading">Đang tải hồ sơ...</div>
+
+      <div id="creatorContent" style="display:none;">
+        <div class="creator-card">
+          <div class="creator-header">
+            <div class="creator-avatar" id="creatorAvatar">?</div>
+            <div class="creator-heading">
+              <h1 class="creator-name" id="creatorName">—</h1>
+              <div class="creator-meta">
+                <span class="creator-username" id="creatorUsername">@—</span>
+                <span class="creator-join" id="creatorJoin">—</span>
+                <span class="creator-provider-badge" id="creatorProvider"></span>
+              </div>
+            </div>
+            <div class="creator-actions">
+              <button class="btn btn-primary" id="creatorFollowBtn" style="display:none;">Theo dõi</button>
+              <span class="creator-self-badge" id="creatorSelfBadge" style="display:none;">Đây là bạn</span>
+              <a href="/studio.html" class="btn btn-secondary" id="creatorGoStudio" style="display:none;">Vào studio</a>
+            </div>
+          </div>
+
+          <div class="creator-stats">
+            <button class="creator-stat" data-stat="designs">
+              <strong id="statDesigns">0</strong>
+              <span>Thiết kế</span>
+            </button>
+            <button class="creator-stat" data-stat="followers">
+              <strong id="statFollowers">0</strong>
+              <span>Người theo dõi</span>
+            </button>
+            <button class="creator-stat" data-stat="following">
+              <strong id="statFollowing">0</strong>
+              <span>Đang theo dõi</span>
+            </button>
+            <div class="creator-stat">
+              <strong id="statLikes">0</strong>
+              <span>Lượt thích</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="creator-section-title">
+          <h2>Bộ sưu tập thiết kế</h2>
+          <span id="creatorDesignsCount">0 thiết kế</span>
+        </div>
+        <div class="creator-designs-grid" id="creatorDesignsGrid">
+          <div class="creator-loading">Đang tải thiết kế...</div>
+        </div>
+      </div>
+
+      <div id="creatorEmpty" class="creator-empty" style="display:none;">
+        <h2>Không tìm thấy creator</h2>
+        <p>Người dùng này không tồn tại hoặc hồ sơ đã bị xóa.</p>
+        <a href="/" class="btn btn-primary">Về trang chủ</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Followers/Following Modal -->
+  <div class="modal-overlay" id="creatorListModal">
+    <div class="modal creator-list-modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="creatorListTitle">Người theo dõi</h3>
+        <button class="modal-close" id="creatorListClose">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="creatorListContent" class="creator-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer" id="footer">
+    <div class="container">
+      <div class="footer-bottom" style="border-top:none; padding-top:0;">
+        <span>© 2024 Blankup. Mọi quyền được bảo lưu.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/i18n.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/creator.js"></script>
+</body>
+</html>

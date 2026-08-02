@@ -11,3 +11,6 @@ backend/*.log
 frontend/assets/models/tshirt.glb
 frontend/assets/models/tshirt-optimized.glb
 .superdesign
+
+# Local agent config
+.claude/

@@ -1918,63 +1918,6 @@
 .auth-modal-link:hover { color: var(--s-text-secondary); }
 
 /* ============================================================
-   TOAST — Premium notifications
-   ============================================================ */
-.toast-container {
-  position: fixed;
-  top: calc(var(--s-nav-height) + var(--s-space-4));
-  right: var(--s-space-5);
-  z-index: 2000;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.toast {
-  display: flex;
-  align-items: center;
-  gap: var(--s-space-3);
-  padding: var(--s-space-3) var(--s-space-4);
-  background: var(--s-glass-bg);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
-  border: 1px solid var(--s-glass-border);
-  border-radius: var(--s-radius-md);
-  box-shadow: var(--s-shadow-lg);
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--s-text);
-  pointer-events: auto;
-  animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  max-width: 380px;
-  transition: all 0.3s ease;
-}
-
-.toast:hover {
-  box-shadow: var(--s-shadow-xl);
-  transform: translateX(-4px);
-}
-
-.toast.toast-success { border-left: 3px solid #10b981; }
-.toast.toast-error { border-left: 3px solid #ef4444; }
-.toast.toast-warning { border-left: 3px solid #f59e0b; }
-.toast.toast-info { border-left: 3px solid #3b82f6; }
-
-.toast-close {
-  background: none;
-  border: none;
-  color: var(--s-text-muted);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px;
-  transition: var(--s-transition-fast);
-  flex-shrink: 0;
-}
-
-.toast-close:hover { color: var(--s-text); }
-
-/* ============================================================
    AI GENERATING OVERLAY
    ============================================================ */
 .canvas-viewer.is-generating::after {
