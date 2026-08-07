@@ -34,6 +34,8 @@ const state = {
   customText: '',
   printPlacement: { x: 0, y: -12, scale: 1 },
   textPlacement: { x: 0, y: 18, scale: 1 },
+  sidePrintPlacement: { front: null, back: null },
+  sideTextPlacement: { front: null, back: null },
   compositeDesignUrls: { front: null, back: null },
   compositeCacheKey: '',
   interactionMode: 'position',
@@ -58,10 +60,86 @@ function getPreparedDesignUrl(side = state.currentView) {
 }
 function getSideCustomText(side = state.currentView) {
   const key = side === 'back' ? 'back' : 'front';
-  return state.customTextSides?.[key] || state.currentDesign?.customTextSides?.[key] || state.customText || '';
+  const perSide = state.customTextSides?.[key];
+  if (perSide) return perSide;
+  const fromDesign = state.currentDesign?.customTextSides?.[key];
+  if (fromDesign) return fromDesign;
+  const hasAnyPerSide = !!(state.customTextSides?.front || state.customTextSides?.back || state.currentDesign?.customTextSides?.front || state.currentDesign?.customTextSides?.back);
+  if (!hasAnyPerSide) return state.customText || '';
+  return '';
+}
+function sideKey(side = state.currentView) { return side === 'back' ? 'back' : 'front'; }
+function hasBackDesign() { return !!(state.preparedDesignUrls.back || getBackDesignUrl()); }
+function hasBackContent() { return hasBackDesign() || !!getSideCustomText('back'); }
+function getSidePrintPlacement(side = state.currentView) {
+  const k = sideKey(side);
+  const stored = state.sidePrintPlacement?.[k];
+  if (stored) return stored;
+  return { ...(k === 'back' ? PRINT_POSITION_PRESETS.back : PRINT_POSITION_PRESETS.chest) };
+}
+function getSideTextPlacement(side = state.currentView) {
+  const k = sideKey(side);
+  const stored = state.sideTextPlacement?.[k];
+  if (stored) return stored;
+  return { x: 0, y: k === 'back' ? 16 : 18, scale: 1 };
+}
+function commitActivePlacements() {
+  const k = sideKey();
+  state.sidePrintPlacement[k] = { ...state.printPlacement };
+  state.sideTextPlacement[k] = { ...state.textPlacement };
+  state.compositeCacheKey = '';
+}
+function loadPlacementsForSide(side) {
+  state.printPlacement = { ...getSidePrintPlacement(side) };
+  state.textPlacement = { ...getSideTextPlacement(side) };
+}
+function syncCustomTextInputs() {
+  const v = getSideCustomText();
+  document.querySelectorAll('#customTextInput, #customTextInputImage').forEach(o => { if (o) o.value = v; });
+}
+function updateSideBadge() {
+  const badge = document.getElementById('viewerSideBadge');
+  if (badge) {
+    const back = state.currentView === 'back';
+    badge.textContent = back ? 'MẶT SAU' : 'MẶT TRƯỚC';
+    badge.classList.toggle('is-back', back);
+  }
+  const tag = document.getElementById('placementSideTag');
+  if (tag) {
+    const back = state.currentView === 'back';
+    tag.textContent = back ? 'mặt sau' : 'mặt trước';
+    tag.classList.toggle('is-back', back);
+  }
+}
+function updateBackDesignControls() {
+  const box = document.getElementById('backDesignControls');
+  if (!box) return;
+  if (state.currentView !== 'back') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const status = document.getElementById('backDesignStatus');
+  const gen = document.getElementById('backGenerateBtn');
+  const clear = document.getElementById('backClearBtn');
+  const has = hasBackDesign();
+  if (status) status.textContent = has ? 'Đã có mẫu in. Bạn có thể chỉnh vị trí, hoặc bỏ để áo sau trơn.' : 'Chưa có mẫu cho mặt sau — tạo từ prompt hiện tại';
+  if (gen) gen.style.display = has ? 'none' : '';
+  if (clear) clear.style.display = has ? '' : 'none';
+}
+function initBackDesignControls() {
+  document.getElementById('backGenerateBtn')?.addEventListener('click', () => generateFromPrompt('back'));
+  document.getElementById('backClearBtn')?.addEventListener('click', () => {
+    state.preparedDesignUrls.back = null;
+    if (state.currentDesign) state.currentDesign.backDesignUrl = '';
+    state.compositeCacheKey = '';
+    updateDesignOverlayForSide();
+    applyCurrentDesignToViewer();
+    updateBackDesignControls();
+  });
+  syncCustomTextInputs();
+  updateSideBadge();
+  updateBackDesignControls();
 }
 function getCompositeCacheKey(designs) {
-  return JSON.stringify({ designs, customText: state.customText, customTextSides: state.customTextSides, printPlacement: state.printPlacement, textPlacement: state.textPlacement });
+  return JSON.stringify({ designs, customText: state.customText, customTextSides: state.customTextSides, sidePrintPlacement: state.sidePrintPlacement, sideTextPlacement: state.sideTextPlacement });
 }
 
 /* ============================================================
@@ -233,8 +311,8 @@ async function buildCompositePrintUrl(designUrl, side = state.currentView) {
   const size = 1024;
   const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, size, size);
-  const ip = state.printPlacement || { x: 0, y: -12, scale: 1 };
-  const tp = state.textPlacement || { x: 0, y: 18, scale: 1 };
+  const ip = getSidePrintPlacement(side);
+  const tp = getSideTextPlacement(side);
 
   if (designUrl) {
     try {
@@ -278,6 +356,13 @@ async function getCompositeDesignsForViewer(designs) {
 function updateDesignOverlayForSide() {
   const overlay = document.getElementById('mockupDesign');
   if (!overlay) return;
+  if (state.currentView === 'back' && !hasBackContent()) {
+    state.printDesignUrl = '';
+    overlay.innerHTML = '';
+    updateOverlayPlacement();
+    updateThreeTexture();
+    return;
+  }
   const activeUrl = getPreparedDesignUrl();
   const activeText = getSideCustomText();
   if (!activeUrl && !activeText) return;
@@ -334,17 +419,203 @@ function setInteractionMode(mode = 'position') {
 function setActivePlacementLayer(layer = 'image') { state.activePlacementLayer = layer === 'text' ? 'text' : 'image'; updateOverlayPlacement(); }
 
 /* ============================================================
+   PRINT PRESETS (vị trí & kích thước in)
+   ============================================================ */
+const PRINT_POSITION_PRESETS = {
+  chest:      { x: 0,   y: -12, scale: 1,    label: 'Giữa ngực' },
+  'chest-left':  { x: -30, y: -16, scale: 0.85, label: 'Ngực trái' },
+  'chest-right': { x: 30,  y: -16, scale: 0.85, label: 'Ngực phải' },
+  back:       { x: 0,   y: -26, scale: 1.1,  label: 'Lưng trên' },
+  stomach:    { x: 0,   y: 14,  scale: 0.9,  label: 'Bụng' },
+};
+
+const PRINT_SIZE_PRESETS = {
+  small:  { scale: 0.8,  label: 'Nhỏ' },
+  medium: { scale: 1,    label: 'Trung bình' },
+  large:  { scale: 1.3,  label: 'Lớn' },
+  xl:     { scale: 1.6,  label: 'Rất lớn' },
+};
+
+function applyPrintPositionPreset(key) {
+  const preset = PRINT_POSITION_PRESETS[key];
+  if (!preset) return;
+  state.printPlacement = { x: preset.x, y: preset.y, scale: preset.scale };
+  commitActivePlacements();
+  syncPlacementInputs();
+  updateOverlayPlacement();
+  applyCurrentDesignToViewer();
+  syncPresetChips();
+}
+
+function applyPrintSizePreset(key) {
+  const preset = PRINT_SIZE_PRESETS[key];
+  if (!preset) return;
+  if (!state.printPlacement) state.printPlacement = { ...PRINT_POSITION_PRESETS.chest };
+  state.printPlacement.scale = preset.scale;
+  commitActivePlacements();
+  syncPlacementInputs();
+  updateOverlayPlacement();
+  applyCurrentDesignToViewer();
+  syncPresetChips();
+}
+
+function syncPresetChips() {
+  const ip = state.printPlacement || { x: 0, y: -12, scale: 1 };
+  let posKey = '';
+  for (const [k, v] of Object.entries(PRINT_POSITION_PRESETS)) {
+    if (Math.abs(v.x - ip.x) <= 3 && Math.abs(v.y - ip.y) <= 3 && Math.abs(v.scale - ip.scale) <= 0.08) { posKey = k; break; }
+  }
+  document.querySelectorAll('#printPositionPresets .placement-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', posKey === btn.dataset.pp);
+  });
+
+  let sizeKey = '';
+  for (const [k, v] of Object.entries(PRINT_SIZE_PRESETS)) {
+    if (Math.abs(v.scale - ip.scale) <= 0.08) { sizeKey = k; break; }
+  }
+  document.querySelectorAll('#printSizePresets .placement-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', sizeKey === btn.dataset.ps);
+  });
+}
+
+function initPrintPresets() {
+  document.querySelectorAll('#printPositionPresets .placement-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyPrintPositionPreset(btn.dataset.pp));
+  });
+  document.querySelectorAll('#printSizePresets .placement-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyPrintSizePreset(btn.dataset.ps));
+  });
+}
+
+function getPrintPositionLabel(side = state.currentView) {
+  const ip = getSidePrintPlacement(side);
+  for (const [k, v] of Object.entries(PRINT_POSITION_PRESETS)) {
+    if (Math.abs(v.x - ip.x) <= 3 && Math.abs(v.y - ip.y) <= 3 && Math.abs(v.scale - ip.scale) <= 0.08) return v.label;
+  }
+  return 'Tùy chỉnh';
+}
+
+function getPrintSizeLabel(side = state.currentView) {
+  const ip = getSidePrintPlacement(side);
+  for (const [k, v] of Object.entries(PRINT_SIZE_PRESETS)) {
+    if (Math.abs(v.scale - ip.scale) <= 0.08) return v.label;
+  }
+  return `~${Math.round(ip.scale * 100)}%`;
+}
+
+/* ============================================================
+   PRINT PREVIEW (In / Lưu PDF)
+   ============================================================ */
+function buildMockupSvg(hex) {
+  const c = hex || '#ffffff', light = isLightColor(c);
+  const sc = light ? '#ddd' : 'rgba(255,255,255,0.2)';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${lightenColor(c, 10)}"/><stop offset="100%" stop-color="${darkenColor(c, 10)}"/></linearGradient></defs><path d="M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z" fill="url(#g)" stroke="${sc}" stroke-width="1"/><ellipse cx="150" cy="52" rx="30" ry="15" fill="none" stroke="${sc}" stroke-width="1"/></svg>`;
+}
+
+function buildPrintSheetMockup(printUrl) {
+  return new Promise(async (resolve) => {
+    const w = 600, h = 720;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    const shirt = new Image();
+    shirt.crossOrigin = 'anonymous';
+    shirt.onload = async () => {
+      ctx.drawImage(shirt, 0, 0, w, h);
+      if (printUrl) {
+        try {
+          const print = await loadImageForCanvas(printUrl);
+          if (print) {
+            const side = Math.min(w * 0.86, h * 0.78);
+            ctx.drawImage(print, (w - side) / 2, (h * 0.42) - side / 2, side, side);
+          }
+        } catch (e) { console.warn('Print sheet composite error:', e); }
+      }
+      resolve(canvas.toDataURL('image/png'));
+    };
+    shirt.onerror = () => resolve('');
+    shirt.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(buildMockupSvg(state.selectedColor));
+  });
+}
+
+async function openPrintPreview() {
+  const modal = document.getElementById('printPreviewModal');
+  if (!modal) return;
+  if (!state.currentDesign && !getActiveDesignUrl()) return;
+
+  commitActivePlacements();
+  const frontUrl = getPreparedDesignUrl('front');
+  const hasBack = hasBackContent();
+  if (!frontUrl && !hasBack) return;
+
+  document.getElementById('printSheetDate').textContent = new Date().toLocaleString('vi-VN');
+
+  const product = PRODUCT_LABELS[state.selectedProductType] || 'T-Shirt Custom AI';
+  const price = PRODUCT_PRICES[state.selectedProductType] || 250000;
+  const colorNames = { '#ffffff': 'Trắng', '#000000': 'Đen', '#1e293b': 'Navy', '#6b7280': 'Xám', '#dc2626': 'Đỏ', '#2563eb': 'Xanh', '#059669': 'Xanh lá' };
+  document.getElementById('psProduct').textContent = product;
+  document.getElementById('psColor').textContent = colorNames[state.selectedColor] || state.selectedColor;
+  document.getElementById('psSize').textContent = state.selectedSize;
+  document.getElementById('psQty').textContent = state.quantity;
+  document.getElementById('psPosition').textContent = getPrintPositionLabel('front');
+  document.getElementById('psPrintSize').textContent = getPrintSizeLabel('front');
+  const backRow = document.getElementById('psPositionBackRow');
+  if (backRow) {
+    backRow.style.display = hasBack ? '' : 'none';
+    const lbl = document.getElementById('psPositionBack');
+    if (lbl) lbl.textContent = hasBack ? `${getPrintPositionLabel('back')} · ${getPrintSizeLabel('back')}` : '';
+  }
+  document.getElementById('psTotal').textContent = formatPrice(price * state.quantity);
+
+  const thumb = document.getElementById('printSheetDesign');
+  thumb.src = frontUrl;
+
+  const composite = frontUrl ? await buildCompositePrintUrl(frontUrl, 'front') : null;
+  const frontSheet = await buildPrintSheetMockup(composite);
+  document.getElementById('printSheetMockup').src = frontSheet;
+
+  const backBox = document.getElementById('printSheetBack');
+  if (hasBack && backBox) {
+    const backComposite = await buildCompositePrintUrl(getPreparedDesignUrl('back'), 'back');
+    const backSheet = await buildPrintSheetMockup(backComposite);
+    backBox.querySelector('img').src = backSheet;
+    backBox.style.display = '';
+  } else if (backBox) {
+    backBox.style.display = 'none';
+  }
+  if (backBox) {
+    const cap = backBox.querySelector('.print-mockup-caption');
+    if (cap) cap.textContent = hasBackContent() ? 'Mặt sau' : 'Mặt sau (trống)';
+  }
+
+  modal.classList.add('active');
+  document.body.classList.add('print-preview-open');
+}
+
+function closePrintPreview() {
+  const modal = document.getElementById('printPreviewModal');
+  if (modal) modal.classList.remove('active');
+  document.body.classList.remove('print-preview-open');
+}
+
+function initPrintPreview() {
+  document.getElementById('printPreviewBtn')?.addEventListener('click', openPrintPreview);
+  document.getElementById('printPdfBtn')?.addEventListener('click', () => window.print());
+  document.getElementById('printPreviewClose')?.addEventListener('click', closePrintPreview);
+  const modal = document.getElementById('printPreviewModal');
+  modal?.addEventListener('click', e => { if (e.target === modal) closePrintPreview(); });
+}
+
+/* ============================================================
    MOCKUP SVG & COLOR
    ============================================================ */
 function updateMockupColor() {
   const mockup = document.getElementById('mockupTshirt');
   if (!mockup) return;
-  const c = state.selectedColor, light = isLightColor(c);
-  const sc = light ? '#ddd' : 'rgba(255,255,255,0.2)';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 360"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${lightenColor(c, 10)}"/><stop offset="100%" stop-color="${darkenColor(c, 10)}"/></linearGradient></defs><path d="M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z" fill="url(#g)" stroke="${sc}" stroke-width="1"/><ellipse cx="150" cy="52" rx="30" ry="15" fill="none" stroke="${sc}" stroke-width="1"/></svg>`;
-  mockup.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  mockup.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(buildMockupSvg(state.selectedColor));
   updateThreeTexture();
-  try { window.tshirt360Viewer?.setColor?.(c); } catch (e) { /* */ }
+  try { window.tshirt360Viewer?.setColor?.(state.selectedColor); } catch (e) { /* */ }
 }
 
 /* ============================================================
@@ -365,7 +636,7 @@ function generateMockDesign(style, prompt) {
 /* ============================================================
    SHOW DESIGN ON MOCKUP
    ============================================================ */
-async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlank) {
+async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlank, targetSide) {
   const viewer = document.getElementById('canvasViewer');
   const empty = document.getElementById('canvasEmpty');
   if (viewer) viewer.style.display = 'flex';
@@ -374,12 +645,18 @@ async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlan
   state.preparedDesignUrls = { front: null, back: null };
   if (designUrl) state.preparedDesignUrls.front = designUrl;
   if (state.currentDesign?.backDesignUrl) state.preparedDesignUrls.back = state.currentDesign.backDesignUrl;
+  if (targetSide === 'back' && designUrl) {
+    state.preparedDesignUrls.front = getFrontDesignUrl() || state.preparedDesignUrls.front;
+    state.preparedDesignUrls.back = designUrl;
+  }
 
   updateDesignOverlayForSide();
   applyCurrentDesignToViewer();
   document.getElementById('placementPanel')?.style && (document.getElementById('placementPanel').style.display = 'block');
   updatePrice();
   updateActionButtons(true);
+  updateSideBadge();
+  updateBackDesignControls();
 
   if (isTrialMode()) addWatermark(viewer);
   else removeWatermark(viewer);
@@ -520,6 +797,7 @@ function updatePrice() {
 function updateActionButtons(enabled) {
   document.getElementById('orderBtn').disabled = !enabled;
   document.getElementById('downloadBtn').disabled = !enabled;
+  document.getElementById('printPreviewBtn').disabled = !enabled;
   document.getElementById('shareDesignBtn').disabled = !enabled;
 }
 
@@ -559,7 +837,7 @@ async function enhancePrompt() {
     }
   } catch (e) {
     // Client-side fallback: simple enhancement
-    const enhanced = prompt.charAt(0).toUpperCase() + prompt.slice(1) + ', high quality, detailed, professional artwork, t-shirt design, centered composition, clean background';
+    const enhanced = prompt.charAt(0).toUpperCase() + prompt.slice(1) + ', thiết kế in áo thun thủ công, bố cục lệch tự nhiên, texture in lụa, chi tiết sáng tạo độc đáo, tránh vẻ ngoài AI generic';
     input.value = enhanced;
     showToast('Prompt đã được tối ưu (offline mode)', 'info');
   }
@@ -654,20 +932,28 @@ function initGenerateButtons() {
   document.getElementById('promptEnhanceBtn')?.addEventListener('click', enhancePrompt);
 }
 
-async function generateFromPrompt() {
+async function generateFromPrompt(targetSide = 'front') {
   if (guardTrialBeforeGenerate()) return;
   const prompt = document.getElementById('promptInput')?.value?.trim();
   if (!prompt) { showToast('Vui lòng nhập mô tả thiết kế!', 'warning'); return; }
   const btn = document.getElementById('generatePromptBtn');
+  const isBack = targetSide === 'back';
   updateActionButtons(false);
   setLoading(btn, true);
   startGenProgress();
 
   const draft = generateMockDesign(state.selectedStyle, prompt);
   draft.isDraft = true;
-  state.currentDesign = draft;
-  state.isGeneratingAi = true;
-  await showDesignOnMockup(draft.designUrl);
+  if (isBack) {
+    if (!state.currentDesign) state.currentDesign = draft;
+    state.currentDesign.backDesignUrl = draft.designUrl;
+    state.preparedDesignUrls.back = draft.designUrl;
+    await showDesignOnMockup(getFrontDesignUrl() || draft.designUrl, null, null, 'back');
+  } else {
+    state.currentDesign = draft;
+    state.isGeneratingAi = true;
+    await showDesignOnMockup(draft.designUrl);
+  }
 
   try {
     const resp = await fetch(`${API_BASE}/ai-design/generate`, {
@@ -678,14 +964,26 @@ async function generateFromPrompt() {
     const data = await resp.json();
     if (!resp.ok || data.success === false) throw new Error(formatAiError(data));
     if (data.success && data.designUrl) {
-      state.currentDesign = data;
-      state.customTextSides = data.customTextSides || state.customTextSides;
       state.isGeneratingAi = false;
       completeGenProgress(true);
-      await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
-      updateShareButton();
-      saveToHistory(data);
-      markTrialUsedAfterGenerate();
+      if (isBack) {
+        if (!state.currentDesign) state.currentDesign = data;
+        state.currentDesign.backDesignUrl = data.designUrl;
+        state.preparedDesignUrls.back = data.designUrl;
+        updateDesignOverlayForSide();
+        applyCurrentDesignToViewer();
+        updateBackDesignControls();
+        setViewerSide('back');
+        saveToHistory(state.currentDesign);
+        markTrialUsedAfterGenerate();
+      } else {
+        state.currentDesign = data;
+        state.customTextSides = data.customTextSides || state.customTextSides;
+        await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+        updateShareButton();
+        saveToHistory(data);
+        markTrialUsedAfterGenerate();
+      }
     } else {
       failGenProgress();
     }
@@ -697,6 +995,12 @@ async function generateFromPrompt() {
       setLoading(btn, false); return;
     }
     console.warn('API unavailable, keeping draft');
+    if (isBack) {
+      updateDesignOverlayForSide();
+      applyCurrentDesignToViewer();
+      updateBackDesignControls();
+      setViewerSide('back');
+    }
   }
   state.isGeneratingAi = false;
   setLoading(btn, false);
@@ -760,18 +1064,34 @@ function initViewToggle() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      state.currentView = btn.dataset.view;
-      setViewerSide(state.currentView);
+      setViewerSide(btn.dataset.view);
     });
   });
 }
 
 function setViewerSide(side) {
-  state.currentView = side;
-  document.querySelectorAll('.view-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === side));
-  try { window.tshirt360Viewer?.showSide?.(side); } catch (e) { /* */ }
-  if (state.cssViewer) { side === 'back' ? state.cssViewer.showBack() : state.cssViewer.showFront(); }
-  if (state.currentDesign) { updateDesignOverlayForSide(); applyCurrentDesignToViewer(); }
+  const next = side === 'back' ? 'back' : 'front';
+  if (state.currentView === next) {
+    if (state.currentDesign || state.printDesignUrl) { updateDesignOverlayForSide(); applyCurrentDesignToViewer(); }
+    updateSideBadge();
+    updateBackDesignControls();
+    return;
+  }
+  commitActivePlacements();
+  state.currentView = next;
+  loadPlacementsForSide(next);
+  document.querySelectorAll('.view-toggle-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === next));
+  try { window.tshirt360Viewer?.showSide?.(next); } catch (e) { /* */ }
+  if (state.cssViewer) { next === 'back' ? state.cssViewer.showBack() : state.cssViewer.showFront(); }
+  syncPlacementInputs();
+  syncPresetChips();
+  syncCustomTextInputs();
+  updateSideBadge();
+  updateBackDesignControls();
+  if (state.currentDesign || state.preparedDesignUrls.front || state.preparedDesignUrls.back) {
+    updateDesignOverlayForSide();
+    applyCurrentDesignToViewer();
+  }
 }
 
 /* ============================================================
@@ -781,10 +1101,10 @@ function initInteractionMode() {
   document.getElementById('placementModeBtn')?.addEventListener('click', () => setInteractionMode('position'));
   document.getElementById('rotateModeBtn')?.addEventListener('click', () => setInteractionMode('rotate'));
   document.getElementById('resetViewBtn')?.addEventListener('click', () => {
-    state.printPlacement = { x: 0, y: -12, scale: 1 };
-    state.textPlacement = { x: 0, y: 18, scale: 1 };
+    state.printPlacement = { ...PRINT_POSITION_PRESETS[state.currentView === 'back' ? 'back' : 'chest'] };
+    state.textPlacement = getSideTextPlacement(state.currentView);
+    commitActivePlacements();
     syncPlacementInputs();
-    state.compositeCacheKey = '';
     updateOverlayPlacement();
     applyCurrentDesignToViewer();
     try { window.tshirt360Viewer?.showSide?.(state.currentView); } catch (e) { /* */ }
@@ -814,6 +1134,7 @@ function initPrintControls() {
   textInputs.forEach(input => {
     input.addEventListener('input', () => {
       state.customText = input.value.trim();
+      state.customTextSides[sideKey()] = state.customText;
       textInputs.forEach(o => { if (o !== input) o.value = input.value; });
       state.compositeCacheKey = '';
       updateDesignOverlayForSide();
@@ -833,9 +1154,10 @@ function initPrintControls() {
           y: Number(document.getElementById(ids[1])?.value || defaults.y),
           scale: Number(document.getElementById(ids[2])?.value || defaults.scale * 100) / 100,
         };
-        state.compositeCacheKey = '';
+        commitActivePlacements();
         updateOverlayPlacement();
         applyCurrentDesignToViewer();
+        syncPresetChips();
       });
     });
   };
@@ -843,12 +1165,13 @@ function initPrintControls() {
   bind(['textPosX', 'textPosY', 'textScale'], 'textPlacement', { x: 0, y: 18, scale: 1 });
 
   document.getElementById('placementReset')?.addEventListener('click', () => {
-    state.printPlacement = { x: 0, y: -12, scale: 1 };
-    state.textPlacement = { x: 0, y: 18, scale: 1 };
+    state.printPlacement = { ...PRINT_POSITION_PRESETS[state.currentView === 'back' ? 'back' : 'chest'] };
+    state.textPlacement = getSideTextPlacement(state.currentView);
+    commitActivePlacements();
     syncPlacementInputs();
-    state.compositeCacheKey = '';
     updateOverlayPlacement();
     applyCurrentDesignToViewer();
+    syncPresetChips();
   });
 
   // Keyboard nudge
@@ -876,8 +1199,8 @@ function nudgePlacement(layer, dx, dy) {
     state.printPlacement.x = Math.max(-80, Math.min(80, state.printPlacement.x + dx));
     state.printPlacement.y = Math.max(-75, Math.min(45, state.printPlacement.y + dy));
   }
+  commitActivePlacements();
   syncPlacementInputs();
-  state.compositeCacheKey = '';
   updateOverlayPlacement();
   applyCurrentDesignToViewer();
 }
@@ -998,6 +1321,7 @@ async function submitOrder() {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Đang xử lý...';
 
+  commitActivePlacements();
   const orderData = {
     designUrl: state.currentDesign?.designUrl || '',
     frontDesignUrl: getFrontDesignUrl(),
@@ -1007,8 +1331,10 @@ async function submitOrder() {
     size: state.selectedSize,
     quantity: state.quantity,
     customText: state.customText,
-    printPlacement: state.printPlacement,
-    textPlacement: state.textPlacement,
+    printPlacement: getSidePrintPlacement('front'),
+    textPlacement: getSideTextPlacement('front'),
+    printPlacementBack: getSidePrintPlacement('back'),
+    textPlacementBack: getSideTextPlacement('back'),
     customer: { name, phone, address, note },
     payment: state.selectedPaymentMethod,
     userId: auth.user?.id,
@@ -1397,6 +1723,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initQuantity();
   initGenerateButtons();
   initPrintControls();
+  initPrintPresets();
+  initPrintPreview();
+  initBackDesignControls();
   initInteractionMode();
   initOrderFlow();
   initDownload();

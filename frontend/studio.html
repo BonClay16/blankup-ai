@@ -218,6 +218,7 @@
               src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 360'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f8f8f8'/%3E%3Cstop offset='100%25' stop-color='%23e8e8e8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z' fill='url(%23g)' stroke='%23ddd' stroke-width='1'/%3E%3Cellipse cx='150' cy='52' rx='30' ry='15' fill='none' stroke='%23ddd' stroke-width='1'/%3E%3C/svg%3E"
               alt="T-shirt mockup">
             <div class="viewer-design-overlay" id="mockupDesign"></div>
+            <div class="viewer-side-badge" id="viewerSideBadge">MẶT TRƯỚC</div>
           </div>
         </div>
 
@@ -257,9 +258,32 @@
 
         <!-- Placement Controls (visible when design exists) -->
         <div class="placement-panel" id="placementPanel" style="display:none;">
+          <div class="back-design-controls" id="backDesignControls" style="display:none;">
+            <div class="back-design-status" id="backDesignStatus"></div>
+            <div class="back-design-actions">
+              <button class="btn btn-primary btn-sm" id="backGenerateBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                Tạo mẫu mặt sau
+              </button>
+              <button class="btn btn-ghost btn-sm" id="backClearBtn" style="display:none;">Bỏ mẫu sau</button>
+            </div>
+          </div>
           <div class="placement-panel-header">
-            <span>Vị trí in</span>
+            <span>Vị trí in · <em class="placement-side-tag" id="placementSideTag">mặt trước</em></span>
             <button class="placement-reset-btn" id="placementReset">Reset</button>
+          </div>
+          <div class="placement-presets" id="printPositionPresets">
+            <button class="placement-preset-btn active" data-pp="chest">Giữa ngực</button>
+            <button class="placement-preset-btn" data-pp="chest-left">Ngực trái</button>
+            <button class="placement-preset-btn" data-pp="chest-right">Ngực phải</button>
+            <button class="placement-preset-btn" data-pp="back">Lưng trên</button>
+            <button class="placement-preset-btn" data-pp="stomach">Bụng</button>
+          </div>
+          <div class="placement-presets" id="printSizePresets">
+            <button class="placement-preset-btn" data-ps="small">Nhỏ</button>
+            <button class="placement-preset-btn active" data-ps="medium">Trung bình</button>
+            <button class="placement-preset-btn" data-ps="large">Lớn</button>
+            <button class="placement-preset-btn" data-ps="xl">Rất lớn</button>
           </div>
           <div class="placement-sliders">
             <div class="placement-slider-group">
@@ -372,6 +396,10 @@
           <button class="action-btn" id="downloadBtn" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>Tải design</span>
+          </button>
+          <button class="action-btn" id="printPreviewBtn" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            <span>Preview PDF</span>
           </button>
           <button class="action-btn" id="shareDesignBtn" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -491,6 +519,62 @@
           </div>
           <button class="btn btn-primary" id="orderCloseBtn" data-i18n="order.close">Đóng</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== PRINT PREVIEW (In / Lưu PDF) ====== -->
+  <div class="modal-overlay print-preview-overlay" id="printPreviewModal">
+    <div class="print-preview-panel">
+      <div class="print-preview-toolbar">
+        <span>Xem trước bản in</span>
+        <div class="print-preview-toolbar-actions">
+          <button class="btn btn-primary btn-sm" id="printPdfBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            <span>In / Lưu PDF</span>
+          </button>
+          <button class="btn btn-ghost btn-sm" id="printPreviewClose">✕</button>
+        </div>
+      </div>
+      <div class="print-sheet" id="printSheet">
+        <div class="print-sheet-header">
+          <div class="print-sheet-brand">
+            <div class="print-sheet-logo">BLANK<span>UP</span></div>
+            <div class="print-sheet-doc">BẢN XEM TRƯỚC BẢN IN<br><span>Print proof sheet</span></div>
+          </div>
+          <div class="print-sheet-date" id="printSheetDate"></div>
+        </div>
+        <div class="print-sheet-body">
+          <div class="print-sheet-col">
+            <div class="print-mockup-box">
+              <img id="printSheetMockup" src="" alt="Mockup áo với vị trí in">
+            </div>
+            <div class="print-mockup-box" id="printSheetBack" style="display:none;">
+              <img src="" alt="Mockup mặt sau">
+              <div class="print-mockup-caption">Mặt sau</div>
+            </div>
+            <div class="print-sheet-note">
+              Vị trí & kích thước in theo lựa chọn bên trái. File in chuẩn: PNG ≥ 1500×1500px, nền trong suốt.
+            </div>
+          </div>
+          <div class="print-sheet-col">
+            <table class="print-table">
+              <tr><td>Sản phẩm</td><td id="psProduct">—</td></tr>
+              <tr><td>Màu áo</td><td id="psColor">—</td></tr>
+              <tr><td>Kích cỡ</td><td id="psSize">—</td></tr>
+              <tr><td>Số lượng</td><td id="psQty">—</td></tr>
+              <tr><td>Vị trí in trước</td><td id="psPosition">—</td></tr>
+              <tr id="psPositionBackRow" style="display:none;"><td>Vị trí in sau</td><td id="psPositionBack">—</td></tr>
+              <tr><td>Kích thước in</td><td id="psPrintSize">—</td></tr>
+              <tr class="print-total-row"><td>Tổng cộng</td><td id="psTotal">—</td></tr>
+            </table>
+            <div class="print-sheet-thumb">
+              <img id="printSheetDesign" src="" alt="Thiết kế">
+              <div class="print-sheet-thumb-caption">Thiết kế in</div>
+            </div>
+          </div>
+        </div>
+        <div class="print-sheet-footer">Blankup AI Studio · Bản xem trước mang tính tham khảo · In chuyển nhiệt cao cấp</div>
       </div>
     </div>
   </div>

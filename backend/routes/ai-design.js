@@ -306,15 +306,15 @@ function hasCloudflareConfig() {
 }
 
 const STYLE_PROMPTS = {
-  minimalist: 'minimalist vector logo, simple line art, clean negative space',
-  streetwear: 'bold streetwear graphic, high contrast, edgy urban poster style',
-  vintage: 'vintage badge illustration, retro ink texture, classic screen print look',
-  abstract: 'abstract graphic mark, expressive shapes, modern art composition',
-  anime: 'anime-inspired illustration, sharp dynamic lines, vibrant character-art energy',
-  ai3d: 'AI 3D render style, cute 3D mascot, soft studio lighting, rounded forms, glossy clay or vinyl toy material, isometric product-icon look',
-  watercolor: 'soft watercolor illustration, painterly texture, gentle organic edges',
-  geometric: 'geometric vector emblem, angular shapes, symmetric composition, clean icon design',
-  typography: 'typographic poster graphic, expressive lettering, bold readable type',
+  minimalist: 'clean minimalist graphic, precise thin line art, generous negative space, refined and elegant like a modern brand mark, subtle screen-print texture',
+  streetwear: 'bold streetwear graphic, high-contrast, urban poster energy, rough ink or spray-stencil texture, hand-drawn marker edge, dynamic diagonal composition',
+  vintage: 'vintage badge illustration, retro ink texture, faded screen-print grain, old-school patch and stamp look, dusty warm palette',
+  abstract: 'expressive abstract graphic mark, gestural brush strokes, asymmetric organic composition, layered textures, modern art "gallery" energy rather than stock gradients',
+  anime: 'anime illustration with confident dynamic ink lines, cel shading, energetic action pose and motion lines, designed like a custom sticker or key visual',
+  ai3d: 'playful 3D mascot render, soft studio lighting, rounded forms, glossy clay or vinyl toy material, subtle isometric product-icon feel, one hero character only, no fancy scene',
+  watercolor: 'hand-painted watercolor illustration, visible pigment blooms and paper grain, uneven organic edges, sparse and airy rather than fully covered',
+  geometric: 'geometric emblem design, angular shapes, precise symmetric composition, clean geometric print, halftone texture, architectural draft atmosphere',
+  typography: 'typographic poster graphic, expressive hand-lettering, bold readable type, vintage print or urban sign-painting texture, balanced layout',
 };
 
 function normalizeDesignIdea(prompt) {
@@ -334,8 +334,11 @@ function buildTshirtPrompt({ prompt, style, fromImage = false }) {
     sourceInstruction,
     `Main subject: ${idea}`,
     `Visual style: ${styleText}.`,
-    'Make the requested subject unmistakable and large in the center of the square canvas.',
-    'Use crisp vector-like edges, strong silhouette, high readability, print-ready composition, plain light or transparent-looking background.',
+    'Design for a real t-shirt artist, not a stock generator: deliberate asymmetric composition, strong readable silhouette, hand-drawn imperfections, visible print texture such as screen-print halftone, risograph grain, ink brush or woodcut.',
+    'Add ONE unexpected creative twist related to the subject: an unusual color pairing, a surreal hidden detail, a cultural fusion, or an ironic juxtaposition. Make the artwork feel handmade and distinctive.',
+    'Avoid the generic AI look: no soft gradient blobs, no glossy stock render, no lens flare, no perfectly centered symmetrical clipart, no boring flat minimal shapes.',
+    'Make the requested subject unmistakable and large in the center or strong off-center of the square canvas.',
+    'Keep high readability and print-ready composition with a plain light or transparent-looking background.',
     'Absolutely do not draw a t-shirt, shirt outline, clothing, hanger, model, mannequin, product photo, frame, UI, watermark, or text unless the user explicitly asks for lettering.'
   ].join(' ');
 }
@@ -394,6 +397,9 @@ async function enhanceImagePrompt(prompt, style, fromImage = false) {
             'Never replace a named place, landmark, person, animal, object, or cultural detail with a different one.',
             'For a named character, meme, brand-like visual reference, or cultural reference, retain the name and explicitly describe its distinctive visual traits so the image model preserves its identity.',
             'Translate faithfully instead of inventing new content. Resolve minor Vietnamese spelling mistakes from context without changing the meaning.',
+            'Art direction: think like a real t-shirt artist, not a stock-image generator. Propose ONE specific creative twist that fits the idea (an unconventional color pairing, a surreal or ironic detail, a hidden micro-element, or a Vietnamese cultural fusion) and describe it concretely.',
+            'Texture direction: pick a real print technique matching the style (halftone screen-print grain, risograph, rough ink brush, woodcut, sticker-cut edge, watercolor paper) and name it.',
+            'Anti-AI-slop instructions to include: avoid soft gradient blobs, glossy stock render, generic lens flare, perfectly centered symmetrical clipart, boring flat minimal shapes; prefer an asymmetric dynamic composition with hand-made feel.',
           ].join(' '),
         },
         {
@@ -402,14 +408,14 @@ async function enhanceImagePrompt(prompt, style, fromImage = false) {
             `User request: ${prompt || 'original graphic artwork'}`,
             `Requested style: ${styleText}`,
             fromImage ? 'Reference mode: use the uploaded image only as inspiration.' : '',
-            'Requirements: make the requested subject unmistakable, centered, large, print-ready, crisp vector-like edges, plain light or transparent-looking background.',
+            'Requirements: make the requested subject unmistakable; choose placement with purpose (mouthpiece can be off-center); design for a real shirt, not a stock image; moderate negative space.',
             'Fidelity rule: include every meaningful detail from the user request and do not add unrelated landmarks, characters, objects, or text. Do not reduce a named reference to a generic version of the same category.',
-            'Negative requirements: no t-shirt, no clothing, no apparel outline, no hanger, no model, no mannequin, no product photo, no UI, no watermark, no frame.',
+            'Negative requirements: no t-shirt, no clothing, no apparel outline, no hanger, no model, no mannequin, no product photo, no UI, no watermark, no frame, no text unless the user asked for lettering.',
           ].filter(Boolean).join('\n'),
         },
       ],
-      temperature: 0.2,
-      max_tokens: 500,
+      temperature: 0.7,
+      max_tokens: 600,
     });
 
     const enhanced = cleanEnhancedPrompt(extractTextResult(data));
@@ -682,10 +688,19 @@ function writeComments(data) {
 // ---------------------------------------------------------------------------
 router.post('/generate', async (req, res) => {
   try {
-    const { prompt, style, author } = req.body;
+    const { prompt, style, author, enhanceOnly } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ success: false, error: 'A prompt is required.' });
+    }
+
+    if (enhanceOnly) {
+      try {
+        const enhancedPrompt = await enhanceImagePrompt(prompt, style, false);
+        return res.json({ success: true, enhancedPrompt });
+      } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
     }
 
     const designId = 'design-' + Date.now();
