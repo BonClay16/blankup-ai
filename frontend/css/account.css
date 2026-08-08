@@ -415,6 +415,83 @@
   font-size: 0.8rem;
 }
 
+/* ---------- AI Plan Cards ---------- */
+
+.account-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-plan-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--bg-card, #fff);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.account-plan-card:hover {
+  border-color: var(--rust, #ff6b00);
+  box-shadow: 0 2px 8px rgba(255, 107, 0, 0.08);
+}
+
+.account-plan-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-plan-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-heading, #0f172a);
+  margin-bottom: 4px;
+}
+
+.account-plan-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.account-plan-credits {
+  display: flex;
+  gap: 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.plan-credit-high {
+  color: #d97706;
+}
+
+.plan-credit-low {
+  color: #6366f1;
+}
+
+.account-plan-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.account-plan-price {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--rust, #ff6b00);
+}
+
+.plan-buy-btn {
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .account-form .form-row {
     grid-template-columns: 1fr;

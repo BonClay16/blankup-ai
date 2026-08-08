@@ -117,9 +117,11 @@ router.post('/', (req, res) => {
 
     console.log(`[Orders] New order created: ${order.orderId} (By: ${order.authorName})`);
 
+    const transferContent = `BLANKUP-${order.orderId}`;
     res.status(201).json({
       success: true,
       orderId: order.orderId,
+      transferContent,
       message: 'Đặt hàng thành công! Chúng tôi sẽ liên hệ bạn sớm nhất.',
     });
   } catch (err) {

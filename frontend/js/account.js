@@ -59,8 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!creditsLoaded) {
       creditsLoaded = true;
       loadCreditLedger();
+      loadPlans();
     }
   });
+
+  initPlanPurchaseModal();
 
   // Deep-link support: account.html#orders opens directly on the orders tab
   if (window.location.hash === '#orders') {
@@ -321,4 +324,99 @@ async function loadCreditLedger() {
   } catch (err) {
     container.innerHTML = `<div class="account-empty">Không thể tải lịch sử credit. Vui lòng thử lại sau.</div>`;
   }
+}
+
+/* ---------- AI Plans ---------- */
+
+async function loadPlans() {
+  const container = document.getElementById('planList');
+  if (!container) return;
+
+  try {
+    const resp = await fetch(`${API_BASE}/ai-plans`);
+    const result = await resp.json();
+    if (!resp.ok || result.success === false) throw new Error(result.error || 'Không thể tải danh sách gói.');
+
+    const plans = (result.data || []).filter(p => p.isPaid && p.priceVnd > 0);
+    if (plans.length === 0) {
+      container.innerHTML = `<div class="account-empty">Hiện chưa có gói nào khả dụng.</div>`;
+      return;
+    }
+
+    container.innerHTML = plans.map(plan => `
+      <div class="account-plan-card" data-plan-id="${escapeAttr(plan.id)}" data-plan-code="${escapeAttr(plan.code)}">
+        <div class="account-plan-info">
+          <div class="account-plan-name">${escapeHtml(plan.name)}</div>
+          <div class="account-plan-desc">${escapeHtml(plan.description || '')}</div>
+          <div class="account-plan-credits">
+            <span class="plan-credit-high">+${plan.highCredits} High</span>
+            ${plan.bonusLowCredits > 0 ? `<span class="plan-credit-low">+${plan.bonusLowCredits} Low</span>` : ''}
+          </div>
+        </div>
+        <div class="account-plan-action">
+          <div class="account-plan-price">${formatPrice(plan.priceVnd)}</div>
+          <button class="btn btn-primary btn-sm plan-buy-btn" data-plan-id="${escapeAttr(plan.id)}">Mua</button>
+        </div>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.plan-buy-btn').forEach(btn => {
+      btn.addEventListener('click', () => purchasePlan(btn.dataset.planId));
+    });
+  } catch (err) {
+    container.innerHTML = `<div class="account-empty">Không thể tải danh sách gói. ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function purchasePlan(planId) {
+  if (!auth.isLoggedIn()) {
+    showToast('Vui lòng đăng nhập để mua gói.', 'warning');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${API_BASE}/ai-plans/purchase`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...auth.getAuthHeaders(),
+      },
+      body: JSON.stringify({ planId }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.success === false) throw new Error(data.error || 'Không thể tạo đơn mua.');
+
+    showPlanPurchaseModal(data);
+  } catch (err) {
+    showToast(err.message || 'Lỗi khi mua gói.', 'error');
+  }
+}
+
+function showPlanPurchaseModal(data) {
+  const modal = document.getElementById('planPurchaseModal');
+  if (!modal) return;
+
+  const amount = data.amount;
+  const transferContent = data.transferContent;
+  const bankInfo = data.bankInfo;
+
+  document.getElementById('planPurchaseTitle').textContent = `Mua gói ${data.planName}`;
+  document.getElementById('planPurchaseInfo').textContent = `Số tiền: ${formatPrice(amount)}`;
+  document.getElementById('planPurchaseTransferContent').textContent = transferContent;
+
+  const qrUrl = `https://img.vietqr.io/image/${bankInfo.bankId}-${bankInfo.accountNumber}-compact2.png?amount=${amount}&addInfo=${encodeURIComponent(transferContent)}&accountName=${encodeURIComponent(bankInfo.accountName)}`;
+  document.getElementById('planPurchaseQr').src = qrUrl;
+
+  modal.style.display = 'flex';
+}
+
+function initPlanPurchaseModal() {
+  document.getElementById('planPurchaseClose')?.addEventListener('click', () => {
+    document.getElementById('planPurchaseModal').style.display = 'none';
+  });
+  document.getElementById('planPurchaseModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'planPurchaseModal') {
+      e.target.style.display = 'none';
+    }
+  });
 }
