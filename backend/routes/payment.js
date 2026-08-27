@@ -1,21 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const fs = require('fs');
 const { buildPaymentUrl, verifyIpn } = require('../services/vnpay.service');
 const { authenticate } = require('./auth');
+const { readJson, writeJson } = require('../utils/fileStore');
 
 const ORDERS_FILE = path.join(__dirname, '../data/orders.json');
-
-function readOrders() {
-  try {
-    return JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8') || '[]');
-  } catch { return []; }
-}
-
-function writeOrders(orders) {
-  fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf8');
-}
+const readOrders = () => readJson(ORDERS_FILE);
+const writeOrders = (data) => writeJson(ORDERS_FILE, data);
 
 // POST /api/payment/create — Generate payment URL for an order
 router.post('/create', authenticate, (req, res) => {

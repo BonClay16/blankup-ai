@@ -166,7 +166,7 @@ const translations = {
     'order.payment': 'Thanh toán khi nhận hàng (COD)',
     'order.submit': 'Xác nhận đặt hàng',
     'order.submitting': 'Đang xử lý...',
-    'order.success.title': '🎉 Đặt hàng thành công!',
+    'order.success.title': 'Đặt hàng thành công!',
     'order.success.desc': 'Mã đơn hàng: ',
     'order.success.note': 'Chúng tôi sẽ liên hệ xác nhận trong vòng 24 giờ.',
     'order.close': 'Đóng',
@@ -380,8 +380,8 @@ const translations = {
     'admin.th.dailyFree': 'Miễn phí hôm nay',
     'admin.actions.edit': 'Sửa',
     'admin.actions.delete': 'Xóa',
-    'admin.actions.ship': '🚚 Gửi hàng',
-    'admin.actions.deliver': '📦 Đã giao',
+    'admin.actions.ship': 'Gửi hàng',
+    'admin.actions.deliver': 'Đã giao',
     'admin.actions.complete': 'Hoàn thành',
     'admin.actions.cancel': 'Hủy đơn',
     'admin.actions.view': 'Xem',
@@ -787,7 +787,7 @@ const translations = {
     'order.payment': 'Cash on Delivery (COD)',
     'order.submit': 'Confirm Order',
     'order.submitting': 'Processing...',
-    'order.success.title': '🎉 Order Placed Successfully!',
+    'order.success.title': 'Order Placed Successfully!',
     'order.success.desc': 'Order ID: ',
     'order.success.note': 'We will contact you to confirm within 24 hours.',
     'order.close': 'Close',
@@ -1000,8 +1000,8 @@ const translations = {
     'admin.th.dailyFree': 'Free Today',
     'admin.actions.edit': 'Edit',
     'admin.actions.delete': 'Delete',
-    'admin.actions.ship': '🚚 Ship',
-    'admin.actions.deliver': '📦 Delivered',
+    'admin.actions.ship': 'Ship',
+    'admin.actions.deliver': 'Delivered',
     'admin.actions.complete': 'Complete',
     'admin.actions.cancel': 'Cancel',
     'admin.actions.view': 'View',
@@ -1322,6 +1322,7 @@ class I18nManager {
       const activeLang = this.currentLang;
       btn.querySelectorAll('[data-lang]').forEach(span => {
         span.classList.toggle('active', span.getAttribute('data-lang') === activeLang);
+        span.setAttribute('aria-pressed', String(span.getAttribute('data-lang') === activeLang));
       });
     });
   }

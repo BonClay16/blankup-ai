@@ -168,10 +168,17 @@ class AuthManager {
     const btn = document.getElementById('themeToggleBtn');
     if (!btn) return;
     
+    const syncThemeColor = () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', current === 'dark' ? '#12100d' : '#f6f1e6');
+    };
+
     // Set active class or state initially
     const syncButtonState = () => {
       const current = document.documentElement.getAttribute('data-theme') || 'light';
       btn.setAttribute('aria-label', `Switch to ${current === 'dark' ? 'light' : 'dark'} theme`);
+      syncThemeColor();
     };
     syncButtonState();
 

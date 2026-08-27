@@ -1,20 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const fs = require('fs');
+const { readJson } = require('../utils/fileStore');
 
 const ORDERS_FILE = path.join(__dirname, '../data/orders.json');
 const DESIGNS_FILE = path.join(__dirname, '../data/designs.json');
-
-function readJson(file) {
-  try {
-    if (!fs.existsSync(file)) return [];
-    return JSON.parse(fs.readFileSync(file, 'utf8') || '[]');
-  } catch (err) {
-    console.error(`[Stats] Error reading ${file}:`, err.message);
-    return [];
-  }
-}
 
 // ---------------------------------------------------------------------------
 // GET /api/stats

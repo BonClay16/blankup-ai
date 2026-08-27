@@ -7,32 +7,11 @@
 const express = require('express');
 const { authenticate } = require('./auth');
 const { getPool, sql } = require('../db');
+const { localhostOnly, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-function localhostOnly(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocalhost = (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip === 'localhost'
-  );
-  if (!isLocalhost) {
-    console.warn(`[Admin-Commerce] Blocked remote access attempt from IP: ${ip}`);
-    return res.status(403).json({ success: false, error: 'Forbidden. Localhost only.' });
-  }
-  next();
-}
-
 router.use(localhostOnly);
-
-async function requireAdmin(req, res, next) {
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-  }
-  next();
-}
 
 const VOUCHER_TYPES = ['fixed', 'percent'];
 const VOUCHER_APPLIES_TO = ['all', 'order', 'plan'];

@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('./auth');
+const { readJson, writeJson } = require('../utils/fileStore');
 
 const router = express.Router();
 const designsFilePath = path.join(__dirname, '../data/designs.json');
@@ -75,169 +76,88 @@ function buildSvg(body) {
 
 const SVG_TEMPLATES = {
   minimalist: buildSvg(`
-    <defs>
-      <linearGradient id="gm" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#f8f9fa"/>
-        <stop offset="100%" style="stop-color:#e9ecef"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="url(#gm)"/>
-    <circle cx="100" cy="85" r="35" fill="none" stroke="#212529" stroke-width="2"/>
-    <line x1="100" y1="50" x2="100" y2="120" stroke="#212529" stroke-width="1.5"/>
-    <line x1="65" y1="85" x2="135" y2="85" stroke="#212529" stroke-width="1.5"/>
-    <text x="100" y="150" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="11" fill="#495057" font-weight="600">MINIMALIST</text>
-    <text x="100" y="166" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="8" fill="#868e96">Less is more</text>
+    <rect width="200" height="200" fill="#111111"/>
+    <circle cx="100" cy="82" r="32" fill="none" stroke="#f0ece2" stroke-width="1.8" stroke-dasharray="2,1"/>
+    <line x1="100" y1="50" x2="100" y2="114" stroke="#f0ece2" stroke-width="1.2"/>
+    <line x1="68" y1="82" x2="132" y2="82" stroke="#f0ece2" stroke-width="1.2"/>
+    <text x="100" y="148" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#c4b89a" letter-spacing="1">LESS IS MORE</text>
+    <text x="100" y="164" text-anchor="middle" font-family="Courier New,monospace" font-size="7" fill="#6b6352">hand-drawn linework</text>
   `),
 
   streetwear: buildSvg(`
-    <defs>
-      <linearGradient id="gs" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#1a1a2e"/>
-        <stop offset="100%" style="stop-color:#16213e"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="url(#gs)"/>
-    <polygon points="100,20 130,70 170,80 140,115 148,165 100,142 52,165 60,115 30,80 70,70" fill="none" stroke="#e94560" stroke-width="2.5"/>
-    <polygon points="100,40 120,72 150,78 128,105 134,145 100,128 66,145 72,105 50,78 80,72" fill="#e94560" opacity="0.3"/>
-    <text x="100" y="182" text-anchor="middle" font-family="Impact,sans-serif" font-size="14" fill="#e94560" letter-spacing="3">STREET</text>
-    <text x="100" y="196" text-anchor="middle" font-family="Impact,sans-serif" font-size="9" fill="#0f3460" letter-spacing="2">CULTURE</text>
+    <rect width="200" height="200" fill="#0a0a0a"/>
+    <polygon points="100,18 128,68 168,78 138,112 146,162 100,140 54,162 62,112 32,78 72,68" fill="none" stroke="#ff3333" stroke-width="2.2" stroke-linejoin="round"/>
+    <text x="100" y="96" text-anchor="middle" font-family="Impact,sans-serif" font-size="22" fill="#ff3333" letter-spacing="4">BLK</text>
+    <text x="100" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="8" fill="#555" letter-spacing="6">UP</text>
+    <text x="100" y="188" text-anchor="middle" font-family="Courier New,monospace" font-size="7" fill="#333" letter-spacing="2">RISOGRAPH PRINT</text>
   `),
 
   vintage: buildSvg(`
-    <defs>
-      <radialGradient id="gv" cx="50%" cy="50%" r="60%">
-        <stop offset="0%" style="stop-color:#fefae0"/>
-        <stop offset="100%" style="stop-color:#dda15e"/>
-      </radialGradient>
-    </defs>
-    <rect width="200" height="200" fill="url(#gv)"/>
-    <circle cx="100" cy="90" r="50" fill="none" stroke="#606c38" stroke-width="2"/>
-    <circle cx="100" cy="90" r="42" fill="none" stroke="#606c38" stroke-width="1" stroke-dasharray="4,3"/>
-    <text x="100" y="86" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#283618" font-weight="700">VINTAGE</text>
-    <text x="100" y="100" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="#606c38">— Est. 2024 —</text>
-    <line x1="58" y1="110" x2="142" y2="110" stroke="#bc6c25" stroke-width="1"/>
-    <text x="100" y="160" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#283618">PREMIUM QUALITY</text>
-    <rect x="60" y="148" width="80" height="18" rx="2" fill="none" stroke="#283618" stroke-width="1"/>
+    <rect width="200" height="200" fill="#1a1612"/>
+    <circle cx="100" cy="86" r="48" fill="none" stroke="#c4a96a" stroke-width="1.5"/>
+    <circle cx="100" cy="86" r="40" fill="none" stroke="#c4a96a" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="100" y="82" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#e8d5b0" font-weight="700">VINTAGE</text>
+    <text x="100" y="96" text-anchor="middle" font-family="Georgia,serif" font-size="7" fill="#8a7d5a">— Est. 2024 —</text>
+    <line x1="58" y1="104" x2="142" y2="104" stroke="#6b5c3a" stroke-width="0.8"/>
+    <text x="100" y="156" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="#c4a96a" letter-spacing="1">SCREEN PRINT</text>
   `),
 
   abstract: buildSvg(`
-    <defs>
-      <linearGradient id="ga" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#667eea"/>
-        <stop offset="50%" style="stop-color:#764ba2"/>
-        <stop offset="100%" style="stop-color:#f093fb"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="#0f0c29"/>
-    <circle cx="60" cy="70" r="40" fill="#667eea" opacity="0.6"/>
-    <circle cx="140" cy="60" r="30" fill="#764ba2" opacity="0.5"/>
-    <circle cx="100" cy="130" r="45" fill="#f093fb" opacity="0.4"/>
-    <circle cx="50" cy="150" r="20" fill="#a29bfe" opacity="0.5"/>
-    <circle cx="160" cy="140" r="25" fill="#fd79a8" opacity="0.4"/>
-    <rect x="80" y="40" width="40" height="40" rx="8" fill="url(#ga)" opacity="0.7" transform="rotate(30 100 60)"/>
-    <text x="100" y="185" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="11" fill="#ffffff" font-weight="600" letter-spacing="2">ABSTRACT</text>
+    <rect width="200" height="200" fill="#0c0a14"/>
+    <circle cx="55" cy="65" r="35" fill="#5a4fcf" opacity="0.5"/>
+    <circle cx="145" cy="55" r="28" fill="#9b59b6" opacity="0.4"/>
+    <circle cx="95" cy="128" r="42" fill="#e05a24" opacity="0.35"/>
+    <rect x="78" y="38" width="38" height="38" rx="6" fill="#e9b55c" opacity="0.5" transform="rotate(25 97 57)"/>
+    <text x="100" y="185" text-anchor="middle" font-family="Courier New,monospace" font-size="9" fill="#888" letter-spacing="3">ABSTRACT</text>
   `),
 
   anime: buildSvg(`
-    <defs>
-      <linearGradient id="gan" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#ff6b6b"/>
-        <stop offset="100%" style="stop-color:#feca57"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="#2d3436"/>
-    <polygon points="100,15 115,55 160,55 125,80 138,120 100,95 62,120 75,80 40,55 85,55" fill="url(#gan)"/>
-    <circle cx="100" cy="140" r="8" fill="#ff6b6b"/>
-    <circle cx="80" cy="155" r="5" fill="#feca57" opacity="0.7"/>
-    <circle cx="120" cy="155" r="5" fill="#feca57" opacity="0.7"/>
-    <line x1="60" y1="140" x2="40" y2="130" stroke="#ff6b6b" stroke-width="2"/>
-    <line x1="140" y1="140" x2="160" y2="130" stroke="#ff6b6b" stroke-width="2"/>
-    <line x1="60" y1="148" x2="35" y2="145" stroke="#feca57" stroke-width="1.5"/>
-    <line x1="140" y1="148" x2="165" y2="145" stroke="#feca57" stroke-width="1.5"/>
-    <text x="100" y="188" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#feca57" font-weight="700" letter-spacing="1">ANIME</text>
+    <rect width="200" height="200" fill="#0e0e0e"/>
+    <polygon points="100,12 114,52 158,52 124,78 136,118 100,94 64,118 76,78 42,52 86,52" fill="#ff4444" opacity="0.85"/>
+    <line x1="58" y1="136" x2="38" y2="126" stroke="#ff4444" stroke-width="1.8"/>
+    <line x1="142" y1="136" x2="162" y2="126" stroke="#ff4444" stroke-width="1.8"/>
+    <line x1="58" y1="144" x2="33" y2="141" stroke="#ffaa44" stroke-width="1.2"/>
+    <line x1="142" y1="144" x2="167" y2="141" stroke="#ffaa44" stroke-width="1.2"/>
+    <text x="100" y="186" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#ff4444" font-weight="700" letter-spacing="1">ANIME</text>
   `),
 
   ai3d: buildSvg(`
-    <defs>
-      <radialGradient id="g3d" cx="35%" cy="25%" r="70%">
-        <stop offset="0%" style="stop-color:#ffffff"/>
-        <stop offset="45%" style="stop-color:#ff9f43"/>
-        <stop offset="100%" style="stop-color:#d35400"/>
-      </radialGradient>
-      <filter id="s3d">
-        <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000000" flood-opacity="0.25"/>
-      </filter>
-    </defs>
-    <rect width="200" height="200" fill="#f8fafc"/>
-    <circle cx="100" cy="92" r="54" fill="url(#g3d)" filter="url(#s3d)"/>
-    <circle cx="82" cy="78" r="9" fill="#0f172a"/>
-    <circle cx="118" cy="78" r="9" fill="#0f172a"/>
-    <ellipse cx="100" cy="105" rx="27" ry="18" fill="#fff7ed"/>
-    <path d="M84 112 Q100 124 116 112" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>
-    <path d="M64 55 L83 29 L92 65 Z" fill="#ffb56b"/>
-    <path d="M136 55 L117 29 L108 65 Z" fill="#ffb56b"/>
-    <circle cx="76" cy="70" r="11" fill="#ffffff" opacity="0.28"/>
-    <text x="100" y="178" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#d35400" font-weight="700">AI 3D</text>
+    <rect width="200" height="200" fill="#111"/>
+    <circle cx="100" cy="88" r="50" fill="#ff8844"/>
+    <circle cx="80" cy="74" r="8" fill="#111"/>
+    <circle cx="120" cy="74" r="8" fill="#111"/>
+    <ellipse cx="100" cy="102" rx="24" ry="15" fill="#ffcc99"/>
+    <path d="M84 108 Q100 118 116 108" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="74" cy="66" r="9" fill="#fff" opacity="0.2"/>
+    <text x="100" y="176" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#ff8844" font-weight="700">MASCOT</text>
   `),
 
   watercolor: buildSvg(`
-    <defs>
-      <radialGradient id="gw1" cx="30%" cy="30%">
-        <stop offset="0%" style="stop-color:#74b9ff;stop-opacity:0.8"/>
-        <stop offset="100%" style="stop-color:#74b9ff;stop-opacity:0"/>
-      </radialGradient>
-      <radialGradient id="gw2" cx="70%" cy="50%">
-        <stop offset="0%" style="stop-color:#fd79a8;stop-opacity:0.7"/>
-        <stop offset="100%" style="stop-color:#fd79a8;stop-opacity:0"/>
-      </radialGradient>
-      <radialGradient id="gw3" cx="50%" cy="70%">
-        <stop offset="0%" style="stop-color:#55efc4;stop-opacity:0.6"/>
-        <stop offset="100%" style="stop-color:#55efc4;stop-opacity:0"/>
-      </radialGradient>
-    </defs>
-    <rect width="200" height="200" fill="#fefefe"/>
-    <ellipse cx="60" cy="60" rx="65" ry="55" fill="url(#gw1)"/>
-    <ellipse cx="145" cy="90" rx="55" ry="60" fill="url(#gw2)"/>
-    <ellipse cx="90" cy="145" rx="70" ry="50" fill="url(#gw3)"/>
-    <ellipse cx="40" cy="140" rx="35" ry="30" fill="#a29bfe" opacity="0.3"/>
-    <ellipse cx="160" cy="160" rx="30" ry="25" fill="#fdcb6e" opacity="0.35"/>
-    <text x="100" y="108" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#2d3436" font-style="italic">watercolor</text>
-    <text x="100" y="122" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="#636e72">dreamy · soft · artistic</text>
+    <rect width="200" height="200" fill="#0f0f0f"/>
+    <ellipse cx="58" cy="58" rx="58" ry="50" fill="#4488cc" opacity="0.35"/>
+    <ellipse cx="142" cy="85" rx="50" ry="55" fill="#cc4488" opacity="0.3"/>
+    <ellipse cx="88" cy="140" rx="62" ry="45" fill="#44cc88" opacity="0.25"/>
+    <ellipse cx="38" cy="135" rx="30" ry="25" fill="#8844cc" opacity="0.2"/>
+    <text x="100" y="106" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#ddd" font-style="italic">watercolor</text>
   `),
 
   geometric: buildSvg(`
-    <defs>
-      <linearGradient id="gg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#00b894"/>
-        <stop offset="100%" style="stop-color:#00cec9"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="#0c0c1d"/>
-    <polygon points="100,20 40,65 40,135 100,180 160,135 160,65" fill="none" stroke="#00b894" stroke-width="2"/>
-    <polygon points="100,40 60,72 60,128 100,160 140,128 140,72" fill="none" stroke="#00cec9" stroke-width="1.5"/>
-    <polygon points="100,60 80,78 80,122 100,140 120,122 120,78" fill="url(#gg)" opacity="0.3"/>
-    <line x1="100" y1="20" x2="100" y2="180" stroke="#6c5ce7" stroke-width="0.5" opacity="0.5"/>
-    <line x1="40" y1="100" x2="160" y2="100" stroke="#6c5ce7" stroke-width="0.5" opacity="0.5"/>
-    <circle cx="100" cy="100" r="4" fill="#fd79a8"/>
-    <text x="100" y="195" text-anchor="middle" font-family="Courier New,monospace" font-size="10" fill="#00cec9" letter-spacing="3">GEOMETRIC</text>
+    <rect width="200" height="200" fill="#080818"/>
+    <polygon points="100,18 38,63 38,133 100,178 162,133 162,63" fill="none" stroke="#00cc88" stroke-width="1.8"/>
+    <polygon points="100,38 58,70 58,126 100,158 142,126 142,70" fill="none" stroke="#00aa88" stroke-width="1.2"/>
+    <polygon points="100,58 78,76 78,120 100,138 122,120 122,76" fill="#00cc88" opacity="0.2"/>
+    <circle cx="100" cy="100" r="3.5" fill="#ff4488"/>
+    <text x="100" y="194" text-anchor="middle" font-family="Courier New,monospace" font-size="9" fill="#00aa88" letter-spacing="3">GEO</text>
   `),
 
   typography: buildSvg(`
-    <defs>
-      <linearGradient id="gt" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#6c5ce7"/>
-        <stop offset="100%" style="stop-color:#a29bfe"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="#2d3436"/>
-    <text x="100" y="50" text-anchor="middle" font-family="Impact,sans-serif" font-size="28" fill="url(#gt)" letter-spacing="2">TYPE</text>
-    <text x="100" y="82" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#dfe6e9" font-style="italic">is an art form</text>
-    <line x1="40" y1="92" x2="160" y2="92" stroke="#6c5ce7" stroke-width="1"/>
-    <text x="100" y="115" text-anchor="middle" font-family="Courier New,monospace" font-size="9" fill="#74b9ff" letter-spacing="4">ABCDEFG</text>
-    <text x="100" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#a29bfe">Aa Bb Cc Dd Ee</text>
-    <text x="100" y="155" text-anchor="middle" font-family="Impact,sans-serif" font-size="20" fill="#fd79a8" letter-spacing="6">FONT</text>
-    <text x="100" y="175" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="#636e72">The quick brown fox jumps</text>
-    <rect x="30" y="25" width="140" height="165" rx="4" fill="none" stroke="#6c5ce7" stroke-width="1" opacity="0.4"/>
+    <rect width="200" height="200" fill="#0e0e0e"/>
+    <text x="100" y="48" text-anchor="middle" font-family="Impact,sans-serif" font-size="26" fill="#cc44ff" letter-spacing="2">TYPE</text>
+    <text x="100" y="78" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#ddd" font-style="italic">is an art form</text>
+    <line x1="38" y1="88" x2="162" y2="88" stroke="#cc44ff" stroke-width="0.8"/>
+    <text x="100" y="112" text-anchor="middle" font-family="Courier New,monospace" font-size="8" fill="#6688cc" letter-spacing="3">ABCDEFG</text>
+    <text x="100" y="150" text-anchor="middle" font-family="Impact,sans-serif" font-size="18" fill="#ff4488" letter-spacing="5">FONT</text>
+    <rect x="28" y="23" width="144" height="160" rx="3" fill="none" stroke="#cc44ff" stroke-width="0.6" opacity="0.3"/>
   `),
 };
 
@@ -264,38 +184,19 @@ function getDesignSvg(style) {
 // Build a special "from-image" SVG (used for generate-from-image endpoint)
 function getFromImageSvg() {
   const svg = buildSvg(`
-    <defs>
-      <linearGradient id="gfi" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#e17055"/>
-        <stop offset="33%" style="stop-color:#d63031"/>
-        <stop offset="66%" style="stop-color:#6c5ce7"/>
-        <stop offset="100%" style="stop-color:#0984e3"/>
-      </linearGradient>
-    </defs>
-    <rect width="200" height="200" fill="#1e272e"/>
-    <rect x="30" y="30" width="60" height="60" rx="6" fill="#e17055" opacity="0.7" transform="rotate(15 60 60)"/>
-    <circle cx="140" cy="60" r="30" fill="#6c5ce7" opacity="0.6"/>
-    <polygon points="100,110 70,170 130,170" fill="#0984e3" opacity="0.5"/>
-    <circle cx="60" cy="150" r="22" fill="#d63031" opacity="0.5"/>
-    <rect x="120" y="130" width="45" height="45" rx="4" fill="#fdcb6e" opacity="0.4" transform="rotate(-10 142 152)"/>
-    <text x="100" y="195" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="10" fill="#dfe6e9" letter-spacing="1">IMAGE REMIX</text>
+    <rect width="200" height="200" fill="#0c0a14"/>
+    <rect x="28" y="28" width="55" height="55" rx="5" fill="#e05a24" opacity="0.6" transform="rotate(12 55 55)"/>
+    <circle cx="142" cy="55" r="28" fill="#8f93f2" opacity="0.5"/>
+    <polygon points="100,108 72,168 128,168" fill="#5fc4b4" opacity="0.4"/>
+    <circle cx="55" cy="148" r="20" fill="#e9b55c" opacity="0.45"/>
+    <rect x="118" cy="128" width="42" height="42" rx="4" fill="#ff4488" opacity="0.35" transform="rotate(-8 139 149)"/>
+    <text x="100" y="194" text-anchor="middle" font-family="Courier New,monospace" font-size="9" fill="#888" letter-spacing="2">IMAGE REMIX</text>
   `);
   return svgToDataUri(svg);
 }
 
-// Helper function to read designs
-function readDesigns() {
-  try {
-    if (!fs.existsSync(designsFilePath)) {
-      return [];
-    }
-    const data = fs.readFileSync(designsFilePath, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading designs:', err);
-    return [];
-  }
-}
+const readDesigns = () => readJson(designsFilePath);
+const writeDesigns = (data) => writeJson(designsFilePath, data);
 
 function hasOpenAIConfig() {
   return Boolean(OPENAI_API_KEY && typeof fetch === 'function');
@@ -306,15 +207,14 @@ function hasCloudflareConfig() {
 }
 
 const STYLE_PROMPTS = {
-  minimalist: 'clean minimalist graphic, precise thin line art, generous negative space, refined and elegant like a modern brand mark, subtle screen-print texture',
-  streetwear: 'bold streetwear graphic, high-contrast, urban poster energy, rough ink or spray-stencil texture, hand-drawn marker edge, dynamic diagonal composition',
-  vintage: 'vintage badge illustration, retro ink texture, faded screen-print grain, old-school patch and stamp look, dusty warm palette',
-  abstract: 'expressive abstract graphic mark, gestural brush strokes, asymmetric organic composition, layered textures, modern art "gallery" energy rather than stock gradients',
-  anime: 'anime illustration with confident dynamic ink lines, cel shading, energetic action pose and motion lines, designed like a custom sticker or key visual',
-  ai3d: 'playful 3D mascot render, soft studio lighting, rounded forms, glossy clay or vinyl toy material, subtle isometric product-icon feel, one hero character only, no fancy scene',
-  watercolor: 'hand-painted watercolor illustration, visible pigment blooms and paper grain, uneven organic edges, sparse and airy rather than fully covered',
-  geometric: 'geometric emblem design, angular shapes, precise symmetric composition, clean geometric print, halftone texture, architectural draft atmosphere',
-  typography: 'typographic poster graphic, expressive hand-lettering, bold readable type, vintage print or urban sign-painting texture, balanced layout',
+  minimalist: 'clean minimalist single-color line art, thin precise pen strokes on plain background, generous negative space, hand-drawn imperfections visible, subtle screen-print halftone texture, like a designer drew it by hand on paper, NOT a digital vector, slight ink bleed on edges',
+  streetwear: 'bold streetwear graphic tee print, high-contrast risograph or screen-print aesthetic, rough spray-stencil texture with visible overspray, hand-drawn marker outlines, torn paper collage energy, urban underground zine feel, limited color palette (2-3 colors max), distressed ink edges',
+  vintage: 'vintage 1970s screen-print badge, faded ink texture with visible grain, hand-drawn illustration style, old-school patch stamp aesthetic, warm earthy muted palette, distressed edges like a worn-out thrift store find, halftone dot pattern in shadows, letterpress imperfection',
+  abstract: 'expressive abstract art print, visible gestural brush strokes with texture, asymmetric composition with intentional imbalance, mixed media collage feel, layered paper and ink textures, like a contemporary art gallery poster, NOT smooth digital gradients, raw and imperfect',
+  anime: 'hand-drawn anime ink illustration, confident dynamic linework with varying thickness, cel-shaded coloring with visible flat areas, screentone texture in shadows, motion lines and speed effects, designed like a custom doujinshi cover or event poster, NOT polished digital anime',
+  watercolor: 'hand-painted watercolor on textured paper, visible pigment blooms and water edges, uneven organic color bleeding, paper grain showing through, sparse composition with lots of white space, like a field sketch or travel journal illustration, paint splatters and drips',
+  geometric: 'geometric pattern print, precise angular shapes with slight hand-drawn wobble, limited palette (2-3 colors), screen-print registration offset effect, like a 1960s Swiss poster or constructivist print, halftone texture, NOT perfect digital vectors',
+  typography: 'hand-lettered typographic print, expressive brush lettering or sign-painter style, vintage print imperfection, ink bleed on serifs, balanced asymmetric layout, like a letterpress or screen-printed poster, NOT clean digital fonts',
 };
 
 function normalizeDesignIdea(prompt) {
@@ -330,17 +230,30 @@ function buildTshirtPrompt({ prompt, style, fromImage = false }) {
     : 'Create a standalone print graphic from the user idea.';
 
   return [
-    'Standalone sticker/logo artwork only. No apparel mockup.',
+    'Print-ready T-shirt graphic design on a SOLID BLACK background. Flat graphic print, not a photograph.',
     sourceInstruction,
-    `Main subject: ${idea}`,
-    `Visual style: ${styleText}.`,
-    'Design for a real t-shirt artist, not a stock generator: deliberate asymmetric composition, strong readable silhouette, hand-drawn imperfections, visible print texture such as screen-print halftone, risograph grain, ink brush or woodcut.',
-    'Add ONE unexpected creative twist related to the subject: an unusual color pairing, a surreal hidden detail, a cultural fusion, or an ironic juxtaposition. Make the artwork feel handmade and distinctive.',
-    'Avoid the generic AI look: no soft gradient blobs, no glossy stock render, no lens flare, no perfectly centered symmetrical clipart, no boring flat minimal shapes.',
-    'Make the requested subject unmistakable and large in the center or strong off-center of the square canvas.',
-    'Keep high readability and print-ready composition with a plain light or transparent-looking background.',
-    'Absolutely do not draw a t-shirt, shirt outline, clothing, hanger, model, mannequin, product photo, frame, UI, watermark, or text unless the user explicitly asks for lettering.'
-  ].join(' ');
+    `Subject: "${idea}".`,
+    `Style: ${styleText}.`,
+    'This is a standalone print artwork — no apparel mockup, no product photo.',
+    '',
+    'ANTI-AI QUALITY RULES (critical for natural, handmade feel):',
+    '• Hand-drawn imperfections: slightly wobbly lines, uneven edges, visible pen/brush strokes',
+    '• Limited flat colors: 2-4 solid colors max, NO gradients, NO smooth blends, NO glowing effects',
+    '• Print texture: screen-print halftone dots, risograph grain, letterpress ink bleed, woodcut linework, or linocut edges',
+    '• Rough edges: torn paper, distressed borders, ink splatter, registration misalignment',
+    '• Asymmetric composition with intentional negative space, NOT perfectly centered or mirrored',
+    '• Think: independent artist screen-print, underground zine illustration, hand-pulled risograph print, gig poster art',
+    '',
+    'FORBIDDEN (instant AI tell — will be rejected):',
+    '• Gradient blobs, neon glows, lens flares, light rays, glass reflections',
+    '• Perfect symmetry, mirrored compositions, centered orbs',
+    '• Smooth 3D renders, glossy surfaces, photorealism',
+    '• Generic abstract swirls, fractal patterns, digital vector perfection',
+    '• T-shirt outlines, hangers, models, mannequins, frames, UI, watermarks',
+    '',
+    'Composition: one focused motif, large and unmistakable, centered or strong off-center on the square canvas.',
+    'Background: plain solid black, no scene, no environment.',
+  ].filter(Boolean).join(' ');
 }
 
 function buildProductMockupPrompt() {
@@ -389,17 +302,31 @@ async function enhanceImagePrompt(prompt, style, fromImage = false) {
         {
           role: 'system',
           content: [
-            'You are a prompt engineer for a t-shirt print artwork generator.',
-            'Convert the user request, often in Vietnamese, into one detailed English image prompt.',
-            'Return only the final image prompt. No markdown. No explanations.',
-            'The image must be standalone print artwork only, never a shirt mockup or product photo.',
-            'Preserve every requested subject, place, season, color, number, action, relationship, and visual detail.',
-            'Never replace a named place, landmark, person, animal, object, or cultural detail with a different one.',
-            'For a named character, meme, brand-like visual reference, or cultural reference, retain the name and explicitly describe its distinctive visual traits so the image model preserves its identity.',
-            'Translate faithfully instead of inventing new content. Resolve minor Vietnamese spelling mistakes from context without changing the meaning.',
-            'Art direction: think like a real t-shirt artist, not a stock-image generator. Propose ONE specific creative twist that fits the idea (an unconventional color pairing, a surreal or ironic detail, a hidden micro-element, or a Vietnamese cultural fusion) and describe it concretely.',
-            'Texture direction: pick a real print technique matching the style (halftone screen-print grain, risograph, rough ink brush, woodcut, sticker-cut edge, watercolor paper) and name it.',
-            'Anti-AI-slop instructions to include: avoid soft gradient blobs, glossy stock render, generic lens flare, perfectly centered symmetrical clipart, boring flat minimal shapes; prefer an asymmetric dynamic composition with hand-made feel.',
+            'You are a prompt engineer for a premium t-shirt print artwork generator.',
+            'Convert the user request (often in Vietnamese) into ONE detailed English image generation prompt.',
+            'Return ONLY the final image prompt. No markdown. No explanations. No extra text.',
+            '',
+            'CORE RULES:',
+            '• The image is standalone print artwork ONLY — never a shirt mockup, product photo, or scene.',
+            '• Preserve every requested subject, place, color, number, action, and visual detail from the user.',
+            '• Never replace a named place, character, animal, or object with a generic version.',
+            '• For cultural references (Vietnamese, anime, memes), keep the name AND describe distinctive visual traits.',
+            '• Translate Vietnamese faithfully. Fix minor typos without changing meaning.',
+            '',
+            'ART DIRECTION (think like a real print artist, not a stock generator):',
+            '• Propose ONE specific creative twist: an unusual color pairing, a surreal hidden detail, a cultural fusion, or an ironic juxtaposition. Describe it concretely.',
+            '• Pick a real print technique that matches the style: halftone screen-print, risograph, rough ink brush, woodcut, sticker-cut edge, watercolor paper, or letterpress. Name it explicitly.',
+            '• The result should look like something an independent artist pulled from a screen-print press or risograph, NOT like a polished digital render.',
+            '',
+            'HANDMADE QUALITY (the most important rule):',
+            '• The image MUST look hand-crafted, not AI-generated.',
+            '• Include: visible hand-drawn line imperfections, limited flat color palette (2-4 colors), print texture grain, rough/distressed edges, asymmetric composition.',
+            '• AVOID completely: gradient blobs, glossy renders, lens flare, perfect symmetry, centered orbs, neon glows, smooth 3D, generic abstract swirls, digital vector perfection.',
+            '',
+            'NEGATIVE REQUIREMENTS:',
+            '• No t-shirt, clothing, apparel outline, hanger, model, mannequin, product photo, UI, watermark, frame, or text (unless user asked for lettering).',
+            '',
+            'Output format: one paragraph, 60-120 words, starting directly with the visual description.',
           ].join(' '),
         },
         {
@@ -408,9 +335,10 @@ async function enhanceImagePrompt(prompt, style, fromImage = false) {
             `User request: ${prompt || 'original graphic artwork'}`,
             `Requested style: ${styleText}`,
             fromImage ? 'Reference mode: use the uploaded image only as inspiration.' : '',
-            'Requirements: make the requested subject unmistakable; choose placement with purpose (mouthpiece can be off-center); design for a real shirt, not a stock image; moderate negative space.',
-            'Fidelity rule: include every meaningful detail from the user request and do not add unrelated landmarks, characters, objects, or text. Do not reduce a named reference to a generic version of the same category.',
-            'Negative requirements: no t-shirt, no clothing, no apparel outline, no hanger, no model, no mannequin, no product photo, no UI, no watermark, no frame, no text unless the user asked for lettering.',
+            '',
+            'Fidelity: include every meaningful detail from the user request. Do not add unrelated content.',
+            'Handmade quality: the result must look like a real hand-pulled print, NOT an AI-generated image.',
+            'Negative: no t-shirt, no clothing, no apparel outline, no hanger, no model, no mannequin, no product photo, no UI, no watermark, no frame, no text unless user asked for lettering.',
           ].filter(Boolean).join('\n'),
         },
       ],
@@ -649,44 +577,15 @@ function saveDesignRecord({ designId, prompt, style, author, designUrl, productM
   writeDesigns(designs);
 }
 
-// Helper function to write designs
-function writeDesigns(data) {
-  try {
-    fs.writeFileSync(designsFilePath, JSON.stringify(data, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error writing designs:', err);
-    return false;
-  }
-}
-
 const commentsFilePath = path.join(__dirname, '../data/comments.json');
-
-function readComments() {
-  try {
-    if (!fs.existsSync(commentsFilePath)) return [];
-    return JSON.parse(fs.readFileSync(commentsFilePath, 'utf8'));
-  } catch (err) {
-    console.error('Error reading comments:', err);
-    return [];
-  }
-}
-
-function writeComments(data) {
-  try {
-    fs.writeFileSync(commentsFilePath, JSON.stringify(data, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error writing comments:', err);
-    return false;
-  }
-}
+const readComments = () => readJson(commentsFilePath);
+const writeComments = (data) => writeJson(commentsFilePath, data);
 
 // ---------------------------------------------------------------------------
 // POST /api/ai-design/generate
-// Mock AI design generation from text prompt
+// AI design generation from text prompt — requires authentication
 // ---------------------------------------------------------------------------
-router.post('/generate', async (req, res) => {
+router.post('/generate', authenticate, async (req, res) => {
   try {
     const { prompt, style, author, enhanceOnly } = req.body;
 
@@ -785,9 +684,9 @@ router.post('/generate', async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/ai-design/generate-from-image
-// Mock AI design generation from an uploaded image
+// AI design generation from an uploaded image — requires authentication
 // ---------------------------------------------------------------------------
-router.post('/generate-from-image', upload.single('image'), async (req, res) => {
+router.post('/generate-from-image', authenticate, upload.single('image'), async (req, res) => {
   try {
     const idea = req.body.idea || '';
     const author = req.body.author || 'Guest';

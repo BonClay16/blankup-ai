@@ -2,6 +2,9 @@
 backend/node_modules/
 backend/.env
 
+# Test coverage
+backend/coverage/
+
 # Runtime data and generated AI images
 backend/uploads/*
 backend/data/designs.json

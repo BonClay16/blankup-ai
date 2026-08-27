@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getPool, sql } = require('../db');
 const { authenticate } = require('./auth');
+const { requireAdmin } = require('../middleware/auth');
 
 const BANK_TRANSFER_INFO = {
   bankId: '970422',
@@ -151,9 +152,8 @@ router.get('/purchase/:purchaseId/status', authenticate, async (req, res) => {
 // POST /api/ai-plans/purchase/:purchaseId/confirm — Admin xác nhận thanh toán
 // Body: { paymentStatus: 'paid' | 'failed', note? }
 // ---------------------------------------------------------------------------
-router.post('/purchase/:purchaseId/confirm', authenticate, async (req, res) => {
+router.post('/purchase/:purchaseId/confirm', authenticate, requireAdmin, async (req, res) => {
   try {
-    // TODO: Add requireAdmin middleware when admin auth is ready
     const { paymentStatus, note } = req.body;
     const { purchaseId } = req.params;
 

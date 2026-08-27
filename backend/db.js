@@ -47,13 +47,12 @@ const DB_CONFIG = {
     ? {}
     : { port: Number(SQL_PORT || 1433) }),
   ...(useWindowsAuth
-    ? { authentication: { type: 'ntlm', options: { domain: process.env.SQL_DOMAIN || '' } } }
+    ? { trustedConnection: true }
     : { user: SQL_USER, password: SQL_PASSWORD }),
   options: {
     encrypt: false,
     trustServerCertificate: true,
     enableArithAbort: true,
-    useLocalDB: true,
   },
   pool: {
     max: 10,

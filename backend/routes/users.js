@@ -4,44 +4,18 @@
  */
 
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const { authenticate } = require('./auth');
 const { getPool, sql } = require('../db');
+const { readJson, writeJson } = require('../utils/fileStore');
 
 const router = express.Router();
 const followsFilePath = path.join(__dirname, '../data/follows.json');
 const designsFilePath = path.join(__dirname, '../data/designs.json');
 
-function readFollows() {
-  try {
-    if (!fs.existsSync(followsFilePath)) return {};
-    return JSON.parse(fs.readFileSync(followsFilePath, 'utf8'));
-  } catch (err) {
-    console.error('Error reading follows:', err.message);
-    return {};
-  }
-}
-
-function writeFollows(data) {
-  try {
-    fs.writeFileSync(followsFilePath, JSON.stringify(data, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error writing follows:', err.message);
-    return false;
-  }
-}
-
-function readDesigns() {
-  try {
-    if (!fs.existsSync(designsFilePath)) return [];
-    return JSON.parse(fs.readFileSync(designsFilePath, 'utf8'));
-  } catch (err) {
-    console.error('Error reading designs:', err.message);
-    return [];
-  }
-}
+const readFollows = () => readJson(followsFilePath);
+const writeFollows = (data) => writeJson(followsFilePath, data);
+const readDesigns = () => readJson(designsFilePath);
 
 // ---------------------------------------------------------------------------
 // GET /api/users/:username — Hồ sơ công khai của creator

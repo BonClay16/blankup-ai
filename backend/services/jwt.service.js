@@ -5,6 +5,11 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'blankup-dev-secret-do-not-use-in-prod';
+
+if (!process.env.JWT_SECRET) {
+  console.warn('[JWT] ⚠️  Using default dev secret. Set JWT_SECRET environment variable in production!');
+}
+
 const JWT_EXPIRES_IN = '7d';
 
 function signToken(user) {

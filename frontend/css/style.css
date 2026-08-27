@@ -1,13 +1,14 @@
 /* frontend/css/style.css */
 /* ============================================================
-   BLANKUP — Design System & Main Stylesheet
+   BLANKUP �?" Design System & Main Stylesheet
    Direction: Fashion-editorial / print-lab.
    Signature: print registration marks on every framed panel,
    garment-tag labels as the eyebrow/meta device.
    Type: Fraunces (display) + DM Sans (body) + DM Mono (labels/data)
-   ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');
+   Fonts are loaded per-page via <link> in each HTML head
+   (homepage: Archivo + Fraunces; app pages: Fraunces + DM Sans + DM Mono).
+   ============================================================ */
 
 /* ---------- Reset ---------- */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }

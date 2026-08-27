@@ -155,73 +155,30 @@ function setLoading(btn, loading) { if (!btn) return; btn.classList.toggle('load
 function formatAiError(data) { if (data?.error) return data.error; if (data?.message) return data.message; return 'AI generation failed. Please try again.'; }
 
 /* ============================================================
-   TRIAL MODE HELPERS
+   AUTH GUARD — must be logged in to use studio
    ============================================================ */
-function isTrialMode() { return document.documentElement.dataset.trial === 'true'; }
-
-function consumeTrial() {
-  localStorage.setItem('blankup_guest_trial_used', 'true');
-  document.documentElement.dataset.trial = 'trial-consumed';
-  const banner = document.getElementById('trialBanner');
-  if (banner) banner.classList.remove('active');
-}
-
-function showTrialExpiredModal() {
+function requireAuth() {
+  if (auth.isLoggedIn()) return false;
   const modal = document.getElementById('authRequiredModal');
   if (modal) {
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
-    const heading = modal.querySelector('h3');
-    const desc = modal.querySelector('p');
-    if (heading) heading.textContent = 'Đã hết lượt dùng thử';
-    if (desc) desc.innerHTML = 'Bạn đã dùng xong lượt tạo miễn phí. Đăng ký tài khoản để <strong>dùng không giới hạn</strong> và tải về thiết kế!';
   }
-}
-
-function addWatermark(canvasEl) {
-  if (!isTrialMode()) return;
-  const existing = canvasEl?.querySelector('.watermark-overlay');
-  if (existing) return;
-  const wm = document.createElement('div');
-  wm.className = 'watermark-overlay';
-  wm.innerHTML = '<svg viewBox="0 0 200 200"><text x="100" y="100" text-anchor="middle" dominant-baseline="central" font-size="18" font-weight="800" fill="currentColor" transform="rotate(-25,100,100)">BLANKUP<br/>TRIAL</text></svg>';
-  if (canvasEl) canvasEl.appendChild(wm);
-}
-
-function removeWatermark(canvasEl) {
-  const wm = canvasEl?.querySelector('.watermark-overlay');
-  if (wm) wm.remove();
-}
-
-function guardTrialBeforeGenerate() {
-  const used = localStorage.getItem('blankup_guest_trial_used') === 'true';
-  if (used) {
-    showTrialExpiredModal();
-    return true;
-  }
-  return false;
-}
-
-function markTrialUsedAfterGenerate() {
-  if (isTrialMode()) {
-    consumeTrial();
-    showTrialExpiredModal();
-    showToast('Bạn đã dùng hết lượt dùng thử. Đăng ký để dùng không giới hạn!', 'info', 6000);
-  }
+  return true;
 }
 
 /* ============================================================
    AI GENERATION PROGRESS
    ============================================================ */
 const GEN_STAGES = [
-  { pct: 8,  msg: 'Đang khởi tạo AI...' },
-  { pct: 20, msg: 'AI đang phân tích từ khóa tiếng Việt...' },
-  { pct: 35, msg: 'Nhận diện phong cách và ý tưởng thiết kế...' },
-  { pct: 50, msg: 'Tối ưu hóa prompt sang tiếng Anh thời trang...' },
-  { pct: 65, msg: 'Đang chọn màu sắc và bố cục hài hòa...' },
-  { pct: 78, msg: 'Đang vẽ chi tiết thiết kế bằng mô hình Flux...' },
-  { pct: 88, msg: 'Hoàn thiện chi tiết và hiệu ứng ánh sáng...' },
-  { pct: 95, msg: 'Áp bản decal lên mô hình 3D...' },
+  { pct: 8,  msg: 'Khởi tạo mô hình AI…' },
+  { pct: 20, msg: 'Phân tích prompt và chọn phong cách in…' },
+  { pct: 35, msg: 'Xây dựng layout & bố cục thủ công…' },
+  { pct: 50, msg: 'Tối ưu prompt sang tiếng Anh (print-ready)…' },
+  { pct: 65, msg: 'Vẽ chi tiết với texture halftone & ink bleed…' },
+  { pct: 78, msg: 'Áp dụng phong cách screen-print / risograph…' },
+  { pct: 88, msg: 'Hoàn thiện & kiểm tra chất lượng in…' },
+  { pct: 95, msg: 'Áp bản decal lên mô hình 3D…' },
 ];
 
 const genProgress = {
@@ -284,7 +241,7 @@ function completeGenProgress(success = true, message = '') {
   if (title) title.textContent = success ? 'Thiết kế đã sẵn sàng!' : 'Có lỗi xảy ra';
   setTimeout(() => {
     genProgress.overlay.classList.remove('active', 'success', 'error');
-    if (title) title.textContent = 'AI đang sáng tạo...';
+    if (title) title.textContent = 'AI đang sáng tạo…';
     genProgress.currentPct = 0;
     updateGenProgressUI(0, GEN_STAGES[0].msg);
   }, success ? 900 : 2200);
@@ -622,14 +579,19 @@ function updateMockupColor() {
    MOCK DESIGN (SVG fallback)
    ============================================================ */
 function generateMockDesign(style, prompt) {
-  const colors = ['#ff6b00', '#e65c00', '#ff8c38', '#cc5200', '#ff4500', '#ff7f50', '#ffa500', '#ff6347'];
-  const color = colors[Math.floor(Math.random() * colors.length)];
-  const words = String(prompt || 'DESIGN').split(/\s+/).slice(0, 4);
+  const palettes = [
+    ['#e05a24', '#8f93f2', '#e9b55c'],
+    ['#ff4444', '#222222', '#f5f5f5'],
+    ['#00cc88', '#0a0a0a', '#ffffff'],
+    ['#cc44ff', '#111111', '#ffaa44'],
+  ];
+  const pal = palettes[Math.floor(Math.random() * palettes.length)];
+  const words = String(prompt || 'DESIGN').split(/\s+/).slice(0, 3);
   const lines = [];
-  for (let i = 0; i < words.length && i < 3; i++) {
-    lines.push(`<text x="512" y="${420 + i * 60}" text-anchor="middle" font-family="Outfit,Arial,sans-serif" font-size="42" font-weight="800" fill="${color}" opacity="0.9">${escapeHtml(words[i])}</text>`);
+  for (let i = 0; i < words.length; i++) {
+    lines.push(`<text x="512" y="${400 + i * 70}" text-anchor="middle" font-family="Outfit,Arial,sans-serif" font-size="${40 + i * 4}" font-weight="800" fill="${pal[i % pal.length]}">${escapeHtml(words[i])}</text>`);
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#111827" rx="24"/><circle cx="512" cy="380" r="120" fill="${color}" opacity="0.15"/><circle cx="512" cy="380" r="80" fill="${color}" opacity="0.25"/><circle cx="512" cy="380" r="40" fill="${color}" opacity="0.4"/>${lines.join('')}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#111" rx="16"/><circle cx="512" cy="340" r="90" fill="none" stroke="${pal[0]}" stroke-width="3" stroke-dasharray="6,4" opacity="0.5"/><circle cx="512" cy="340" r="60" fill="${pal[0]}" opacity="0.12"/>${lines.join('')}</svg>`;
   return { success: true, designId: 'draft-' + Date.now(), designUrl: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), prompt, style, author: 'AI Draft', isDraft: true };
 }
 
@@ -657,9 +619,6 @@ async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlan
   updateActionButtons(true);
   updateSideBadge();
   updateBackDesignControls();
-
-  if (isTrialMode()) addWatermark(viewer);
-  else removeWatermark(viewer);
 }
 
 /* ============================================================
@@ -837,7 +796,7 @@ async function enhancePrompt() {
     }
   } catch (e) {
     // Client-side fallback: simple enhancement
-    const enhanced = prompt.charAt(0).toUpperCase() + prompt.slice(1) + ', thiết kế in áo thun thủ công, bố cục lệch tự nhiên, texture in lụa, chi tiết sáng tạo độc đáo, tránh vẻ ngoài AI generic';
+    const enhanced = `Hand-crafted t-shirt print design: ${prompt}. Style: screen-print halftone texture, limited flat colors (2-3 max), hand-drawn linework with visible imperfections, rough distressed edges, asymmetric composition, like an independent artist risograph print. NOT AI-generated, NOT digital render, NOT gradient blobs, NOT glossy.`;
     input.value = enhanced;
     showToast('Prompt đã được tối ưu (offline mode)', 'info');
   }
@@ -924,6 +883,25 @@ function initHistory() {
 }
 
 /* ============================================================
+   PROMPT SUGGESTIONS
+   ============================================================ */
+function initPromptSuggestions() {
+  const container = document.getElementById('promptSuggestions');
+  const input = document.getElementById('promptInput');
+  if (!container || !input) return;
+  container.querySelectorAll('.prompt-suggestion-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const prompt = chip.dataset.prompt;
+      if (prompt) {
+        input.value = prompt;
+        input.focus();
+        input.dispatchEvent(new Event('input'));
+      }
+    });
+  });
+}
+
+/* ============================================================
    AI GENERATION - PROMPT
    ============================================================ */
 function initGenerateButtons() {
@@ -933,7 +911,7 @@ function initGenerateButtons() {
 }
 
 async function generateFromPrompt(targetSide = 'front') {
-  if (guardTrialBeforeGenerate()) return;
+  if (requireAuth()) return;
   const prompt = document.getElementById('promptInput')?.value?.trim();
   if (!prompt) { showToast('Vui lòng nhập mô tả thiết kế!', 'warning'); return; }
   const btn = document.getElementById('generatePromptBtn');
@@ -975,14 +953,12 @@ async function generateFromPrompt(targetSide = 'front') {
         updateBackDesignControls();
         setViewerSide('back');
         saveToHistory(state.currentDesign);
-        markTrialUsedAfterGenerate();
       } else {
         state.currentDesign = data;
         state.customTextSides = data.customTextSides || state.customTextSides;
         await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
         updateShareButton();
         saveToHistory(data);
-        markTrialUsedAfterGenerate();
       }
     } else {
       failGenProgress();
@@ -1010,7 +986,7 @@ async function generateFromPrompt(targetSide = 'front') {
    AI GENERATION - IMAGE
    ============================================================ */
 async function generateFromImage() {
-  if (guardTrialBeforeGenerate()) return;
+  if (requireAuth()) return;
   if (!state.uploadedFile) { showToast('Vui lòng upload ảnh!', 'warning'); return; }
   const idea = document.getElementById('ideaInput')?.value?.trim() || '';
   const btn = document.getElementById('generateImageBtn');
@@ -1039,7 +1015,6 @@ async function generateFromImage() {
       showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
       updateShareButton();
       saveToHistory(data);
-      markTrialUsedAfterGenerate();
     } else {
       failGenProgress();
     }
@@ -1262,7 +1237,7 @@ function initOrderFlow() {
   const closeBtn2 = document.getElementById('orderCloseBtn');
 
   document.getElementById('orderBtn')?.addEventListener('click', () => {
-    if (guardTrialBeforeGenerate()) return;
+    if (requireAuth()) return;
     if (!state.currentDesign) return;
     updateOrderSummary();
     if (auth.isLoggedIn()) {
@@ -1319,7 +1294,7 @@ async function submitOrder() {
   if (!/^(\+?84|0)[3-9]\d{8}$/.test(phone.replace(/[\s.\-]/g, ''))) { showToast('Số điện thoại không hợp lệ!', 'warning'); return; }
 
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Đang xử lý...';
+  submitBtn.textContent = 'Đang xử lý…';
 
   commitActivePlacements();
   const orderData = {
@@ -1400,7 +1375,7 @@ function showOrderSuccess(orderId, payment, transferContent) {
 
   if (payment === 'VNPAY') {
     const note = document.querySelector('.order-success-note');
-    if (note) note.textContent = 'Đang chuyển hướng đến cổng thanh toán VNPay...';
+    if (note) note.textContent = 'Đang chuyển hướng đến cổng thanh toán VNPay…';
   }
 }
 
@@ -1409,7 +1384,7 @@ function showOrderSuccess(orderId, payment, transferContent) {
    ============================================================ */
 function initDownload() {
   document.getElementById('downloadBtn')?.addEventListener('click', async () => {
-    if (guardTrialBeforeGenerate()) return;
+    if (requireAuth()) return;
     const url = getActiveDesignUrl();
     if (!url) return;
     const link = document.createElement('a');
@@ -1436,12 +1411,12 @@ function initDownload() {
    ============================================================ */
 function initShareDesign() {
   document.getElementById('shareDesignBtn')?.addEventListener('click', async () => {
-    if (guardTrialBeforeGenerate()) return;
+    if (requireAuth()) return;
     if (!state.currentDesign?.designId || state.currentDesign?.isDraft || state.currentDesign?.designId?.startsWith('community-') || state.currentDesign?.designId?.startsWith('text-only-')) {
       showToast('Cần có thiết kế AI thật để chia sẻ!', 'warning'); return;
     }
     const btn = document.getElementById('shareDesignBtn');
-    btn.disabled = true; btn.textContent = 'Đang chia sẻ...';
+    btn.disabled = true; btn.textContent = 'Đang chia sẻ…';
     try {
       const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(state.currentDesign.designId)}/share`, {
         method: 'POST',
@@ -1489,7 +1464,7 @@ async function loadCommunityDesigns() {
       <div class="community-card-info">
         <div class="community-card-prompt">"${escapeHtml(d.prompt || '')}"</div>
         <div class="community-card-meta">
-          <span class="community-card-author" data-author="${escapeAttr(d.author || 'Anonymous')}">👤 ${escapeHtml(d.author || 'Anonymous')}</span>
+          <span class="community-card-author" data-author="${escapeAttr(d.author || 'Anonymous')}"><svg class="community-author-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${escapeHtml(d.author || 'Anonymous')}</span>
           <button class="community-card-like ${liked ? 'liked' : ''}" data-id="${escapeAttr(d.designId || '')}" data-likes="${d.likes || 0}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             <span>${d.likes || 0}</span>
@@ -1717,6 +1692,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initStyleSelector();
   initUpload();
+  initPromptSuggestions();
   initProductTypeSelector();
   initColorPicker();
   initSizeSelector();

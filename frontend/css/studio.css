@@ -598,10 +598,47 @@
 }
 
 .style-chip-icon {
-  font-size: 0.95rem;
   width: 20px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  color: var(--s-accent);
+}
+
+/* ============================================================
+   PROMPT SUGGESTIONS
+   ============================================================ */
+.prompt-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--s-space-2);
+}
+
+.prompt-suggestion-chip {
+  padding: 6px 11px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--s-text-muted);
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all var(--s-transition);
+  white-space: nowrap;
+  font-family: 'Outfit', sans-serif;
+}
+
+.prompt-suggestion-chip:hover {
+  color: var(--s-accent);
+  border-color: var(--s-accent);
+  background: var(--s-accent-glow);
+  transform: translateY(-1px);
+}
+
+.prompt-suggestion-chip:active {
+  transform: translateY(0) scale(0.96);
 }
 
 /* ============================================================
@@ -1624,6 +1661,9 @@
 }
 
 .community-card-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   cursor: pointer;
   transition: color var(--s-transition-fast);
 }
@@ -1876,9 +1916,10 @@
 }
 
 .order-success-icon {
-  font-size: 3rem;
+  display: flex;
+  justify-content: center;
   margin-bottom: var(--s-space-3);
-  animation: float 2s ease-in-out infinite;
+  color: #059669;
 }
 
 .order-success-title {

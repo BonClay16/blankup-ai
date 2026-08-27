@@ -2,37 +2,6 @@
 const API_BASE = window.location.origin + '/api';
 
 /* ============================================================
-   CURSOR GLOW
-   ============================================================ */
-function initCursorGlow() {
-  const glow = document.getElementById('cursorGlow');
-  if (!glow) return;
-  let raf = null;
-  let mouseX = -400;
-  let mouseY = -400;
-  let currentX = -400;
-  let currentY = -400;
-
-  function update() {
-    currentX += (mouseX - currentX) * 0.08;
-    currentY += (mouseY - currentY) * 0.08;
-    glow.style.transform = `translate(${currentX}px, ${currentY}px) translate(-50%, -50%)`;
-    raf = requestAnimationFrame(update);
-  }
-
-  document.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    glow.classList.remove('hidden');
-    if (!raf) raf = requestAnimationFrame(update);
-  });
-
-  document.addEventListener('mouseleave', () => {
-    glow.classList.add('hidden');
-  });
-}
-
-/* ============================================================
    TYPING ANIMATION
    ============================================================ */
 function initTypingAnimation() {
@@ -93,14 +62,15 @@ function initTypingAnimation() {
 function initHeroTilt() {
   const card = document.getElementById('heroMockup');
   if (!card) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   card.addEventListener('mousemove', (e) => {
     const rect = card.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    const tiltX = (y - 0.5) * 6;
-    const tiltY = (0.5 - x) * 6;
-    card.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale3d(1.02,1.02,1.02)`;
+    const tiltX = (y - 0.5) * 8;
+    const tiltY = (0.5 - x) * 8;
+    card.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale3d(1.03,1.03,1.03)`;
     card.style.transition = 'transform 0.1s ease-out';
   });
 
@@ -111,9 +81,33 @@ function initHeroTilt() {
 }
 
 /* ============================================================
+   HERO SPOTLIGHT — soft print-light follows the pointer
+   ============================================================ */
+function initHeroSpotlight() {
+  const spotlight = document.querySelector('.hero-spotlight');
+  if (!spotlight) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+  if (window.innerWidth <= 1024) return;
+
+  const area = spotlight.parentElement;
+  let raf = null;
+  area.addEventListener('pointermove', (e) => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      const r = area.getBoundingClientRect();
+      spotlight.style.setProperty('--sx', (e.clientX - r.left) + 'px');
+      spotlight.style.setProperty('--sy', (e.clientY - r.top) + 'px');
+      raf = null;
+    });
+  });
+}
+
+/* ============================================================
    MAGNETIC BUTTONS
    ============================================================ */
 function initMagneticButtons() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   document.querySelectorAll('.hero-btn-primary, .hero-btn-secondary, .nav-cta').forEach(btn => {
     btn.addEventListener('mousemove', (e) => {
       const rect = btn.getBoundingClientRect();
@@ -132,18 +126,67 @@ function initMagneticButtons() {
 }
 
 /* ============================================================
-   SCROLL ANIMATIONS (Intersection Observer)
+   SCROLL ANIMATIONS (Intersection Observer + MutationObserver)
    ============================================================ */
+let _scrollObserver = null;
+let _mutationObserver = null;
 function initScrollAnimations() {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('visible');
-      }
-    });
-  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+  if (!_scrollObserver) {
+    _scrollObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+  }
+  document.querySelectorAll('.anim-on-scroll:not(.visible)').forEach(el => _scrollObserver.observe(el));
 
-  document.querySelectorAll('.anim-on-scroll').forEach(el => observer.observe(el));
+  if (!_mutationObserver) {
+    _mutationObserver = new MutationObserver((mutations) => {
+      mutations.forEach(mutation => {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType !== 1) return;
+          if (node.matches?.('.anim-on-scroll:not(.visible)')) _scrollObserver.observe(node);
+          node.querySelectorAll?.('.anim-on-scroll:not(.visible)').forEach(el => _scrollObserver.observe(el));
+        });
+      });
+    });
+    _mutationObserver.observe(document.body, { childList: true, subtree: true });
+  }
+}
+
+/* ============================================================
+   HERO LOAD CHOREOGRAPHY — staggered reveal on page load
+   ============================================================ */
+function initHeroLoad() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.hero-load-hidden').forEach(el => el.classList.remove('hero-load-hidden'));
+    return;
+  }
+
+  const beats = [
+    { sel: '.hero-badge', delay: 100 },
+    { sel: '.hero-title', delay: 220 },
+    { sel: '.hero-subtitle', delay: 380 },
+    { sel: '.hero-cta', delay: 500 },
+    { sel: '.live-prompt', delay: 620 },
+    { sel: '.hero-trust', delay: 720 },
+    { sel: '.hero-visual', delay: 300 },
+  ];
+
+  requestAnimationFrame(() => {
+    document.fonts.ready.then(() => {
+      beats.forEach(({ sel, delay }) => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        setTimeout(() => {
+          el.style.animation = `heroEnter 0.8s var(--ease-out-expo) forwards`;
+          el.classList.remove('hero-load-hidden');
+        }, delay);
+      });
+    });
+  });
 }
 
 /* ============================================================
@@ -249,6 +292,8 @@ function initScrollProgress() {
 /* ============================================================
    HERO ARTWORK — auto-rotate through community designs
    ============================================================ */
+let _artworkInterval = null;
+
 async function initHeroArtworkCycle() {
   const img = document.getElementById('heroArtImg');
   if (!img) return;
@@ -261,19 +306,19 @@ async function initHeroArtworkCycle() {
       const result = await resp.json();
       pool = (result.data || []).map(d => d.frontDesignUrl || d.designUrl).filter(Boolean);
     }
-  } catch { /* */ }
+  } catch (e) { console.warn('[Blankup] Gallery fetch failed:', e); }
 
   if (!pool.length) {
-    const artwork = document.getElementById('heroArtwork');
-    if (artwork) artwork.innerHTML = '<div class="hero-artwork-empty" aria-hidden="true"></div>';
     return;
   }
 
+  const fallback = document.getElementById('heroArtFallback');
+  if (fallback) fallback.style.display = 'none';
   img.src = pool[0];
   if (!motionOK) return;
 
   let i = 1;
-  setInterval(() => {
+  _artworkInterval = setInterval(() => {
     img.classList.add('crossfade-out');
     setTimeout(() => {
       img.src = pool[i % pool.length];
@@ -340,7 +385,7 @@ async function loadStats() {
     const result = await resp.json();
     if (!result.success) throw new Error('Failed');
     stats = result;
-  } catch { /* keep zeros */ }
+  } catch (e) { console.warn('[Blankup] Stats fetch failed:', e); }
 
   const counters = {
     designs: document.querySelector('.stat-item [data-count="designs"]'),
@@ -348,14 +393,23 @@ async function loadStats() {
     orders: document.querySelector('.stat-item [data-count="orders"]'),
   };
 
+  const statsBar = document.querySelector('.stats-bar');
+
   if (stats) {
     if (counters.designs) counters.designs.dataset.count = String(stats.totalDesigns || 0);
     if (counters.customers) counters.customers.dataset.count = String(stats.totalCustomers || 0);
     if (counters.orders) counters.orders.dataset.count = String(stats.totalOrders || 0);
   }
 
+  if (statsBar) statsBar.classList.add('stats-loaded');
+
   const floatDesigns = document.getElementById('heroFloatDesigns');
   if (floatDesigns) floatDesigns.textContent = (stats?.totalDesigns || 0).toLocaleString('vi-VN');
+
+  document.querySelectorAll('.marquee-count').forEach(el => {
+    const n = stats?.[el.dataset.count === 'orders' ? 'totalOrders' : 'totalDesigns'] || 0;
+    el.textContent = `${Number(n).toLocaleString('vi-VN')}+ ${el.dataset.count === 'orders' ? 'ĐƠN HÀNG' : 'THIẾT KẾ'}`;
+  });
 
   initCounters();
   renderHeroTrust(stats?.recentOrders || [], stats?.totalOrders || 0);
@@ -417,7 +471,9 @@ async function loadGallery() {
     if (!resp.ok) throw new Error('Failed');
     const result = await resp.json();
     designs = (result.data || []).slice(0, 24);
-  } catch { /* empty gallery */ }
+  } catch (e) { console.warn('[Blankup] Gallery fetch failed:', e); }
+
+  applyCollectionArtwork(designs);
 
   const userId = (typeof auth !== 'undefined' && auth.user?.id) || localStorage.getItem('guest_id') || '';
 
@@ -431,6 +487,33 @@ async function loadGallery() {
   initGalleryEvents(designs, userId);
   initGalleryTilt();
   initScrollAnimations();
+}
+
+/* ============================================================
+   COLLECTIONS — real community artwork behind each card
+   (falls back to the themed gradient when no design exists yet)
+   ============================================================ */
+function applyCollectionArtwork(designs) {
+  const cards = document.querySelectorAll('.collection-card[data-collection-style]');
+  if (!cards.length || !designs.length) return;
+
+  const pool = designs.map(d => ({
+    style: (d.style || '').toLowerCase(),
+    url: d.frontDesignUrl || d.designUrl || '',
+  })).filter(d => d.url);
+
+  if (!pool.length) return;
+
+  const used = new Set();
+  cards.forEach(card => {
+    const wanted = card.dataset.collectionStyle;
+    const match = pool.find(d => d.style === wanted && !used.has(d.url))
+      || pool.find(d => !used.has(d.url));
+    if (!match) return;
+    used.add(match.url);
+    const art = card.querySelector('.collection-art');
+    if (art) art.style.backgroundImage = `url("${match.url}")`;
+  });
 }
 
 function renderGalleryEmpty() {
@@ -542,7 +625,7 @@ function initGalleryEvents(designs, userId) {
           const label = btn.querySelector('span');
           if (label) label.textContent = data.likes;
         }
-      } catch { /* */ }
+      } catch (e) { console.warn('[Blankup] Like failed:', e); }
     });
   });
 
@@ -575,7 +658,7 @@ async function openCommentsModal(designId, count) {
   if (form) form.style.display = isLoggedIn ? '' : 'none';
   if (prompt) prompt.style.display = isLoggedIn ? 'none' : '';
 
-  list.innerHTML = '<div class="comments-loading">Đang tải bình luận...</div>';
+  list.innerHTML = '<div class="comments-loading">Đang tải bình luận…</div>';
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
 
@@ -584,7 +667,8 @@ async function openCommentsModal(designId, count) {
     const data = await resp.json();
     commentsState.list = data.data || [];
     renderCommentsList(list);
-  } catch {
+  } catch (e) {
+    console.warn('[Blankup] Comments fetch failed:', e);
     list.innerHTML = '<div class="comments-empty">Không thể tải bình luận.</div>';
   }
 }
@@ -701,10 +785,17 @@ async function loadReviews() {
       } catch { /* */ }
       if (reviews.length >= 6) break;
     }
-  } catch { /* hide section */ }
+  } catch (e) { console.warn('[Blankup] Reviews fetch failed:', e); }
 
   if (!reviews.length) {
-    section.style.display = 'none';
+    track.innerHTML = `
+      <div class="gallery-empty">
+        <div class="gallery-empty-icon">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3>Chưa có đánh giá nào</h3>
+        <p>Hãy là người đầu tiên chia sẻ cảm nhận về thiết kế của bạn.</p>
+      </div>`;
     return;
   }
 
@@ -749,9 +840,10 @@ function initLang() {
    INIT
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
-  initCursorGlow();
+  initHeroLoad();
   initTypingAnimation();
   initHeroTilt();
+  initHeroSpotlight();
   initMagneticButtons();
   initNavbar();
   initScrollAnimations();

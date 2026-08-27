@@ -283,7 +283,7 @@ function renderVouchersList() {
           <div class="action-buttons">
             <button class="btn-icon btn-view-action" data-action="edit-voucher" data-id="${escapeAttr(v.id)}" title="${escapeAttr(t('admin.actions.edit', 'Chỉnh sửa'))}">✎</button>
             <button class="btn-icon ${v.status === 'active' ? 'btn-cancel-action' : 'btn-complete-action'}" data-action="toggle-voucher" data-id="${escapeAttr(v.id)}" title="${v.status === 'active' ? escapeAttr(t('admin.voucherOff', 'Tắt voucher')) : escapeAttr(t('admin.voucherOn', 'Bật voucher'))}">${v.status === 'active' ? '⏻' : '▶'}</button>
-            <button class="btn-icon btn-cancel-action" data-action="delete-voucher" data-id="${escapeAttr(v.id)}" title="${escapeAttr(t('admin.actions.delete', 'Xóa voucher'))}">🗑</button>
+            <button class="btn-icon btn-cancel-action" data-action="delete-voucher" data-id="${escapeAttr(v.id)}" title="${escapeAttr(t('admin.actions.delete', 'Xóa voucher'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
           </div>
         </td>
       </tr>
@@ -459,7 +459,7 @@ function renderPlansList() {
           <div class="action-buttons">
             <button class="btn-icon btn-view-action" data-action="edit-plan" data-id="${escapeAttr(p.id)}" title="${escapeAttr(t('admin.actions.edit', 'Chỉnh sửa'))}">✎</button>
             <button class="btn-icon ${p.isActive ? 'btn-cancel-action' : 'btn-complete-action'}" data-action="toggle-plan" data-id="${escapeAttr(p.id)}" title="${p.isActive ? escapeAttr(t('admin.planOff', 'Tắt gói')) : escapeAttr(t('admin.planOn', 'Bật gói'))}">${p.isActive ? '⏻' : '▶'}</button>
-            <button class="btn-icon btn-cancel-action" data-action="delete-plan" data-id="${escapeAttr(p.id)}" title="${escapeAttr(t('admin.actions.delete', 'Xóa gói'))}">🗑</button>
+            <button class="btn-icon btn-cancel-action" data-action="delete-plan" data-id="${escapeAttr(p.id)}" title="${escapeAttr(t('admin.actions.delete', 'Xóa gói'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
           </div>
         </td>
       </tr>
@@ -958,10 +958,10 @@ function renderOrderRow(order, compact = false) {
     ? `<button class="btn-icon btn-cancel-action" data-action="cancel" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.cancel', 'Hủy đơn'))}">×</button>`
     : '';
   const shipActionHtml = order.status === 'processing'
-    ? `<button class="btn-icon btn-ship-action" data-action="ship" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.ship2', 'Chuyển sang đã gửi hàng'))}">🚚</button>`
+    ? `<button class="btn-icon btn-ship-action" data-action="ship" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.ship2', 'Chuyển sang đã gửi hàng'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg></button>`
     : '';
   const deliverActionHtml = order.status === 'shipped'
-    ? `<button class="btn-icon btn-deliver-action" data-action="deliver" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.deliver2', 'Chuyển sang đã giao hàng'))}">📦</button>`
+    ? `<button class="btn-icon btn-deliver-action" data-action="deliver" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.deliver2', 'Chuyển sang đã giao hàng'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg></button>`
     : '';
   const markPaidActionHtml = order.payment === 'BANK_TRANSFER' && order.paymentStatus !== 'paid'
     ? `<button class="btn-icon btn-paid-action" data-action="mark-paid" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.markPaid', 'Xác nhận đã nhận tiền'))}">₫</button>`
@@ -1001,7 +1001,7 @@ function renderOrderRow(order, compact = false) {
       </td>
       <td>
         <div class="action-buttons">
-          <button class="btn-icon btn-view-action" data-action="preview" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.preview', 'Xem chi tiết'))}">👁</button>
+          <button class="btn-icon btn-view-action" data-action="preview" data-id="${escapeAttr(order.orderId)}" title="${escapeAttr(t('admin.actions.preview', 'Xem chi tiết'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></button>
           ${copyActionHtml}
           ${markPaidActionHtml}
           ${shipActionHtml}
@@ -1156,9 +1156,9 @@ function renderUsersList() {
         <td><span class="money-cell">${formatMoney(user.totalSpend || 0)}</span></td>
         <td>
           <div class="action-buttons">
-            <button class="btn-icon btn-view-action" data-user-detail-id="${escapeAttr(user.id)}" title="${escapeAttr(t('admin.actions.preview', 'Xem chi tiết'))}">👁</button>
+            <button class="btn-icon btn-view-action" data-user-detail-id="${escapeAttr(user.id)}" title="${escapeAttr(t('admin.actions.preview', 'Xem chi tiết'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></button>
             <button class="btn-icon btn-view-action" data-user-edit-id="${escapeAttr(user.id)}" title="${escapeAttr(t('admin.actions.edit', 'Chỉnh sửa'))}">✎</button>
-            <button class="btn-icon btn-view-action" data-user-id="${escapeAttr(user.id)}" data-user-label="${escapeAttr(user.fullName || user.username)}" title="${escapeAttr(t('admin.actions.viewOrders', 'Xem đơn hàng'))}">📋</button>
+            <button class="btn-icon btn-view-action" data-user-id="${escapeAttr(user.id)}" data-user-label="${escapeAttr(user.fullName || user.username)}" title="${escapeAttr(t('admin.actions.viewOrders', 'Xem đơn hàng'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h.01"/><path d="M15 12h.01"/><path d="M9 16h.01"/><path d="M15 16h.01"/></svg></button>
             ${!isCurrentUser && !isAdmin ? `<button class="btn-icon btn-cancel-action" data-user-delete-id="${escapeAttr(user.id)}" data-user-delete-name="${escapeAttr(user.username)}" title="${escapeAttr(t('admin.actions.deleteUser', 'Xóa tài khoản'))}">×</button>` : ''}
           </div>
         </td>

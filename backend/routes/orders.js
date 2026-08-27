@@ -1,36 +1,14 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('./auth');
+const { readJson, writeJson } = require('../utils/fileStore');
 
 const router = express.Router();
 const ordersFilePath = path.join(__dirname, '../data/orders.json');
 
-// Helper function to read orders
-function readOrders() {
-  try {
-    if (!fs.existsSync(ordersFilePath)) {
-      return [];
-    }
-    const data = fs.readFileSync(ordersFilePath, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading orders:', err);
-    return [];
-  }
-}
-
-// Helper function to write orders
-function writeOrders(orders) {
-  try {
-    fs.writeFileSync(ordersFilePath, JSON.stringify(orders, null, 2), 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error writing orders:', err);
-    return false;
-  }
-}
+const readOrders = () => readJson(ordersFilePath);
+const writeOrders = (data) => writeJson(ordersFilePath, data);
 
 // Map product category to default price
 const PRODUCT_PRICES = {

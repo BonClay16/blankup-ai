@@ -7,13 +7,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { getPool, sql } = require('../db');
-const { sendMail } = require('../service/mailer');
+const { sendMail } = require('../services/mailer');
 const { verifyGoogleIdToken } = require('../services/google-auth.service');
 const { signToken, verifyToken } = require('../services/jwt.service');
+const { verifyCode, createVerificationCode, generateOtp, OTP_EXPIRY_MINUTES } = require('../services/otp.service');
 
 const router = express.Router();
-
-const OTP_EXPIRY_MINUTES = 2;
 
 // ---------------------------------------------------------------------------
 // Helper: authenticate middleware (accepts JWT or legacy mock token)
@@ -75,66 +74,8 @@ async function readUsers() {
 }
 
 // ---------------------------------------------------------------------------
-// OTP Helpers
+// OTP Helpers — imported from services/otp.service.js
 // ---------------------------------------------------------------------------
-function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-async function createVerificationCode(userId, type) {
-  const pool = getPool();
-  const code = generateOtp();
-  const id = `vc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
-
-  // Invalidate any previous unused codes for this user+type
-  await pool.request()
-    .input('userId', sql.NVarChar, userId)
-    .input('type', sql.NVarChar, type)
-    .query('UPDATE VerificationCodes SET used = 1 WHERE userId = @userId AND type = @type AND used = 0');
-
-  await pool.request()
-    .input('id', sql.NVarChar, id)
-    .input('userId', sql.NVarChar, userId)
-    .input('code', sql.NVarChar, code)
-    .input('type', sql.NVarChar, type)
-    .input('expiresAt', sql.DateTime, expiresAt)
-    .query(`
-      INSERT INTO VerificationCodes (id, userId, code, type, expiresAt)
-      VALUES (@id, @userId, @code, @type, @expiresAt)
-    `);
-
-  return { code, expiresAt };
-}
-
-async function verifyCode(userId, type, code) {
-  const pool = getPool();
-  const result = await pool.request()
-    .input('userId', sql.NVarChar, userId)
-    .input('type', sql.NVarChar, type)
-    .input('code', sql.NVarChar, code.trim())
-    .query(`
-      SELECT id, expiresAt FROM VerificationCodes
-      WHERE userId = @userId AND type = @type AND code = @code AND used = 0
-      ORDER BY createdAt DESC
-    `);
-
-  if (result.recordset.length === 0) {
-    return { valid: false, error: 'Mã xác thực không đúng.' };
-  }
-
-  const record = result.recordset[0];
-  if (new Date(record.expiresAt) < new Date()) {
-    return { valid: false, error: 'Mã xác thực đã hết hạn. Vui lòng yêu cầu mã mới.' };
-  }
-
-  // Mark as used
-  await pool.request()
-    .input('id', sql.NVarChar, record.id)
-    .query('UPDATE VerificationCodes SET used = 1 WHERE id = @id');
-
-  return { valid: true };
-}
 
 async function sendVerificationEmail(email, code) {
   return sendMail({
@@ -521,13 +462,9 @@ router.post('/verify', async (req, res) => {
       return res.json({ success: true, message: 'SĐT đã được xác thực.' });
     }
 
-    // Test bypass: phone OTP always accepts "111111" (remove when real SMS is live)
-    const isPhoneTestCode = type === 'phone' && code.trim() === '111111';
-    if (!isPhoneTestCode) {
-      const result = await verifyCode(userId, type, code);
-      if (!result.valid) {
-        return res.status(400).json({ success: false, error: result.error });
-      }
+    const result = await verifyCode(userId, type, code);
+    if (!result.valid) {
+      return res.status(400).json({ success: false, error: result.error });
     }
 
     // Mark as verified

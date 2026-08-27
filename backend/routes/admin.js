@@ -1,66 +1,20 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { authenticate, readUsers } = require('./auth');
 const { getPool, sql } = require('../db');
+const { readJson } = require('../utils/fileStore');
+const { localhostOnly } = require('../middleware/auth');
 
 const router = express.Router();
 const ordersFilePath = path.join(__dirname, '../data/orders.json');
 const designsFilePath = path.join(__dirname, '../data/designs.json');
 
-// ---------------------------------------------------------------------------
-// Localhost-only middleware: Admin API can ONLY be accessed from the server machine
-// ---------------------------------------------------------------------------
-function localhostOnly(req, res, next) {
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocalhost = (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip === 'localhost'
-  );
-
-  if (!isLocalhost) {
-    console.warn(`[Admin] Blocked remote admin access attempt from IP: ${ip}`);
-    return res.status(403).json({
-      success: false,
-      error: 'Truy cập bị từ chối. Admin Dashboard chỉ có thể truy cập từ máy chủ.',
-    });
-  }
-  next();
-}
-
 // Apply localhost restriction to ALL admin routes
 router.use(localhostOnly);
 
-// Helper function to read orders
-function readOrders() {
-  try {
-    if (!fs.existsSync(ordersFilePath)) {
-      return [];
-    }
-    const data = fs.readFileSync(ordersFilePath, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading orders:', err);
-    return [];
-  }
-}
-
-// Helper function to read designs
-function readDesigns() {
-  try {
-    if (!fs.existsSync(designsFilePath)) {
-      return [];
-    }
-    const data = fs.readFileSync(designsFilePath, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('Error reading designs:', err);
-    return [];
-  }
-}
+const readOrders = () => readJson(ordersFilePath);
+const readDesigns = () => readJson(designsFilePath);
 
 // ---------------------------------------------------------------------------
 // GET /api/admin/stats

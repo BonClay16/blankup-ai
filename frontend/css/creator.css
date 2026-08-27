@@ -150,6 +150,12 @@
   gap: 4px;
 }
 
+.creator-likes-icon {
+  width: 11px;
+  height: 11px;
+  color: #b43e12;
+}
+
 .creator-design-body { padding: 12px 14px; }
 .creator-design-prompt {
   margin: 0 0 6px;
