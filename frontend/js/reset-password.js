@@ -24,8 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     errorMsg.style.display = 'none';
 
-    if (newPassword.length < 6) {
-      errorMsg.textContent = 'Mật khẩu mới cần ít nhất 6 ký tự.';
+    if (newPassword.length < 8) {
+      errorMsg.textContent = 'Mật khẩu mới cần ít nhất 8 ký tự.';
       errorMsg.style.display = 'block';
       return;
     }

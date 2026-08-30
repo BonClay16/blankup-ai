@@ -33,7 +33,7 @@ window.tshirt360Viewer = {
 };
 
 const canvas = document.getElementById('tshirt360Canvas');
-const container = document.getElementById('mockupContainer');
+const container = document.getElementById('mockupContainer') || document.getElementById('canvasViewer') || document.getElementById('canvasWrapper') || (canvas ? canvas.parentElement : null);
 
 if (canvas && container) {
   container.classList.add('viewer-loading');

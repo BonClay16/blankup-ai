@@ -80,11 +80,27 @@ describe('Feature', () => {
 - Not found (404)
 - Edge cases (empty input, max length, special characters)
 
+## Skills (Agent Skills)
+
+Project đã tích hợp 4 bộ skill để hỗ trợ dev (dev-only, xem `SKILLS.md`):
+
+- **taste-skill** (`Leonxlnx/taste-skill`) — 4 skills: `design-taste-frontend` (v2 mặc định), `redesign-existing-projects` (audit trang hiện có), `imagegen-frontend-web`, `high-end-visual-design`. Cài thêm: `npx skills add Leonxlnx/taste-skill --skill <name> -y`
+- **awesome-agent-skills** (`VoltAgent/awesome-agent-skills`) — catalog 1497+ official skills, cài selective: `npx skills find <keyword>` rồi `npx skills add <owner/repo@skill>` (đã cài `anthropics/skills@frontend-design`)
+- **addyosmani/agent-skills** (`addyosmani/agent-skills` — 24 skills) — đã cài 6 skills lõi: `frontend-ui-engineering`, `api-and-interface-design`, `test-driven-development`, `security-and-hardening`, `performance-optimization`, `code-review-and-quality` (chuẩn Addy Osmani cho Blankup Node+Express)
+- **Paldom/node-skills** (`Paldom/node-skills` — 8 skills) — đã cài 3 skills: `node-testing` (Jest/Supertest), `node-lint` (ESLint/Biome), `node-ci` (GitHub Actions)
+
+Quản lý: `npx skills list --json`, `npx skills update -y`, `npx skills experimental_install -y` (restore từ `skills-lock.json`). Skills nằm ở `.agents/skills/<skill>/SKILL.md`, tự load bởi OpenCode.
+
+Khi làm frontend mới: đọc brief → chọn dials (VARIANCE/MOTION/DENSITY) theo `design-taste-frontend` §1; khi sửa trang cũ: chạy `redesign-existing-projects` audit trước. Khi làm BE: dùng `api-and-interface-design` + `test-driven-development` + `security-and-hardening` (theo ECC).
+
 ## Project Structure
 
 ```
 blankup-ai/
 ├── AGENTS.md              # This file
+├── SKILLS.md              # Skills integration guide
+├── skills-lock.json       # Lock file for installed skills
+├── .agents/skills/        # Installed SKILL.md (auto-loaded by OpenCode)
 ├── openspec/              # Feature specs
 │   └── specs/
 ├── backend/

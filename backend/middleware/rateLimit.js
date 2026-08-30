@@ -33,4 +33,15 @@ const otpLimiter = rateLimit({
   message: { success: false, error: 'Too many OTP requests. Please try again later.' },
 });
 
-module.exports = { apiLimiter, authLimiter, otpLimiter };
+/**
+ * AI generation rate limiter: 5 requests per minute per IP (costly).
+ */
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many AI requests. Please try again in a minute.' },
+});
+
+module.exports = { apiLimiter, authLimiter, otpLimiter, aiLimiter };

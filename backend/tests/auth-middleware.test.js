@@ -1,12 +1,54 @@
 const request = require('supertest');
 const express = require('express');
 const { generateTestToken, generateAdminToken } = require('./helpers/setup');
+
+jest.mock('../middleware/rateLimit', () => ({
+  apiLimiter: (req, res, next) => next(),
+  authLimiter: (req, res, next) => next(),
+  otpLimiter: (req, res, next) => next(),
+  aiLimiter: (req, res, next) => next(),
+}));
+
+jest.mock('../db', () => {
+  function createChain(userIdOverride) {
+    const inputs = {};
+    return {
+      input: jest.fn().mockImplementation(function(name, type, value) {
+        inputs[name] = value;
+        return this;
+      }),
+      query: jest.fn().mockImplementation((sql) => {
+        if (sql.includes('FROM Users WHERE id')) {
+          const uid = inputs.id || inputs.userId || userIdOverride || 'u-1';
+          const isAdmin = uid === 'u-admin' || uid === 'admin';
+          const isTest = uid === 'u-test';
+          return Promise.resolve({
+            recordset: [{
+              id: uid,
+              username: isAdmin ? 'admin' : isTest ? 'testuser' : 'testuser',
+              fullName: isAdmin ? 'Admin User' : 'Test User',
+              email: isAdmin ? 'admin@test.com' : 'test@test.com',
+              avatar: null, provider: 'local',
+              role: isAdmin ? 'admin' : 'user',
+            }],
+          });
+        }
+        return Promise.resolve({ recordset: [] });
+      }),
+    };
+  }
+
+  return {
+    getPool: jest.fn(() => ({ request: jest.fn(() => createChain()) })),
+    sql: { NVarChar: 'NVarChar' },
+  };
+});
+
 const { authenticate, requireAdmin, localhostOnly } = require('../middleware/auth');
 
 function createTestApp(middleware) {
   const app = express();
   app.use(express.json());
-  // Trust proxy for localhost detection in tests
   app.set('trust proxy', true);
   app.get('/protected', middleware, (req, res) => {
     res.json({ success: true, user: req.user });
@@ -85,7 +127,6 @@ describe('localhostOnly middleware', () => {
     });
 
     const res = await request(app).get('/test');
-    // supertest from localhost should pass
     expect(res.status).toBe(200);
   });
 });

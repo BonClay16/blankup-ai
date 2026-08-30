@@ -23,7 +23,7 @@ function errorHandler(err, req, res, _next) {
   console.error(`[ERROR] ${err.stack || err.message || err}`);
 
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ success: false, error: 'File too large. Maximum size is 5 MB.' });
+    return res.status(413).json({ success: false, error: 'File too large. Maximum size is 10 MB.' });
   }
 
   if (err.isOperational) {

@@ -10,9 +10,26 @@ const { getPool, sql } = require('../db');
 const { sendMail } = require('../services/mailer');
 const { verifyGoogleIdToken } = require('../services/google-auth.service');
 const { signToken, verifyToken } = require('../services/jwt.service');
-const { verifyCode, createVerificationCode, generateOtp, OTP_EXPIRY_MINUTES } = require('../services/otp.service');
+const { verifyCode, createVerificationCode, OTP_EXPIRY_MINUTES, isAlreadyVerified } = require('../services/otp.service');
+const { generateResetAuthToken, validateResetAuthToken } = require('../services/reset-auth.service');
 
 const router = express.Router();
+
+// ---------------------------------------------------------------------------
+// Lightweight in-process mutex for reset-password (prevents race condition)
+// ---------------------------------------------------------------------------
+const resetMutexes = new Map();
+async function withResetLock(key, fn) {
+  while (resetMutexes.get(key)) {
+    await new Promise(r => setTimeout(r, 10));
+  }
+  resetMutexes.set(key, true);
+  try {
+    return await fn();
+  } finally {
+    resetMutexes.delete(key);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helper: authenticate middleware (accepts JWT or legacy mock token)
@@ -27,7 +44,11 @@ async function authenticate(req, res, next) {
   let userId = null;
 
   if (token.startsWith('mock-token-')) {
-    // Legacy dev token — kept for backward compatibility
+    // Legacy dev token — only allowed outside production
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_MOCK_TOKEN !== 'true') {
+      return res.status(401).json({ success: false, error: 'Invalid or expired authentication token.' });
+    }
+    console.warn('[Auth] Using mock-token (dev/test only)');
     userId = token.replace('mock-token-', '');
   } else {
     try {
@@ -213,9 +234,14 @@ router.post('/login', async (req, res) => {
     }
 
     const user = result.recordset[0];
-    const passwordOk = user.password && user.password.startsWith('$2')
-      ? bcrypt.compareSync(password, user.password)
-      : user.password === password;
+    if (!user.password || !user.password.startsWith('$2')) {
+      // No valid bcrypt hash found — account may have been created without a password
+      return res.status(401).json({
+        success: false,
+        error: 'Tên đăng nhập hoặc mật khẩu không đúng.',
+      });
+    }
+    const passwordOk = bcrypt.compareSync(password, user.password);
     if (!passwordOk) {
       return res.status(401).json({
         success: false,
@@ -647,8 +673,183 @@ router.patch('/me', authenticate, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /api/auth/forgot-password — Request password reset OTP via email
+// Always returns the same response regardless of whether the account exists
+// (prevents account enumeration).
+// ---------------------------------------------------------------------------
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { identifier } = req.body;
+
+    if (!identifier || !String(identifier).trim()) {
+      return res.status(400).json({ success: false, error: 'Vui lòng nhập email hoặc tên đăng nhập.' });
+    }
+
+    const normalizedIdentifier = String(identifier).trim().toLowerCase();
+    const pool = getPool();
+
+    // Look up user by email OR username (case-insensitive)
+    const userResult = await pool.request()
+      .input('identifier', sql.NVarChar, normalizedIdentifier)
+      .query('SELECT id, username, email FROM Users WHERE (LOWER(email) = @identifier OR LOWER(username) = @identifier) AND provider = \'local\'');
+
+    // Always return the same generic message — never reveal account existence
+    const GENERIC_MESSAGE = 'Nếu tài khoản tồn tại, mã xác thực đã được gửi đến email của bạn.';
+
+    if (userResult.recordset.length === 0) {
+      console.log(`[Auth] Forgot password requested for non-existent account: ${normalizedIdentifier}`);
+      return res.json({ success: true, message: GENERIC_MESSAGE });
+    }
+
+    const user = userResult.recordset[0];
+
+    // Check if user has an email to send to
+    if (!user.email) {
+      console.log(`[Auth] Forgot password for user without email: ${user.username}`);
+      return res.json({ success: true, message: GENERIC_MESSAGE });
+    }
+
+    // Generate OTP for password reset
+    const otp = await createVerificationCode(user.id, 'password_reset');
+
+    // Send OTP email
+    const emailResult = await sendMail({
+      to: user.email,
+      subject: '[Blankup] Mã xác thực đặt lại mật khẩu',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;">
+          <h2 style="color:#b43e12;">Đặt lại mật khẩu Blankup</h2>
+          <p>Xin chào <strong>${user.username}</strong>,</p>
+          <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+          <p>Mã xác thực của bạn là:</p>
+          <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#f6f3ec;border-radius:12px;margin:20px 0;color:#1a1a2e;">${otp.code}</div>
+          <p style="color:#64748b;font-size:0.9rem;">Mã này hết hạn sau <strong>${OTP_EXPIRY_MINUTES} phút</strong>.</p>
+          <p style="color:#64748b;font-size:0.9rem;">Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này. Mật khẩu hiện tại của bạn vẫn được giữ nguyên.</p>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;">
+          <p style="color:#94a3b8;font-size:0.8rem;">Email này được gửi từ Blankup. Nếu bạn có thắc mắc, vui lòng liên hệ hỗ trợ.</p>
+        </div>
+      `,
+      text: `Mã xác thực đặt lại mật khẩu Blankup: ${otp.code}. Hết hạn sau ${OTP_EXPIRY_MINUTES} phút.`,
+    });
+
+    if (emailResult.sent) {
+      console.log(`[Auth] Forgot password OTP sent to: ${user.email} (User: ${user.username})`);
+    } else {
+      console.warn(`[Auth] Forgot password OTP could not be sent (SMTP not configured): ${user.email}`);
+    }
+
+    res.json({ success: true, message: GENERIC_MESSAGE });
+  } catch (err) {
+    console.error('[Auth] Forgot password error:', err.message);
+    res.json({ success: true, message: 'Nếu tài khoản tồn tại, mã xác thực đã được gửi đến email của bạn.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/verify-forgot-otp — Verify OTP for password reset
+// Returns a short-lived reset authorization token on success.
+// ---------------------------------------------------------------------------
+router.post('/verify-forgot-otp', async (req, res) => {
+  try {
+    const { identifier, code } = req.body;
+
+    if (!identifier || !code) {
+      return res.status(400).json({ success: false, error: 'Thiếu thông tin xác thực.' });
+    }
+
+    const normalizedIdentifier = String(identifier).trim().toLowerCase();
+    const pool = getPool();
+
+    // Look up user
+    const userResult = await pool.request()
+      .input('identifier', sql.NVarChar, normalizedIdentifier)
+      .query('SELECT id, username, email FROM Users WHERE (LOWER(email) = @identifier OR LOWER(username) = @identifier) AND provider = \'local\'');
+
+    if (userResult.recordset.length === 0) {
+      // Don't reveal account existence — use generic error
+      return res.status(400).json({ success: false, error: 'Mã xác thực không đúng.' });
+    }
+
+    const user = userResult.recordset[0];
+
+    // Verify OTP
+    const result = await verifyCode(user.id, 'password_reset', code);
+    if (!result.valid) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    // OTP verified — generate reset authorization token
+    const { rawToken, expiresAt } = await generateResetAuthToken(user.id);
+
+    console.log(`[Auth] Forgot password OTP verified for user: ${user.username}`);
+
+    res.json({
+      success: true,
+      resetToken: rawToken,
+      expiresAt: expiresAt.toISOString(),
+      message: 'Xác thực thành công. Vui lòng nhập mật khẩu mới.',
+    });
+  } catch (err) {
+    console.error('[Auth] Verify forgot OTP error:', err.message);
+    res.status(500).json({ success: false, error: 'Xác thực thất bại. Vui lòng thử lại.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/reset-password — Reset password using authorization token
+// Token is obtained after verifying OTP via /verify-forgot-otp.
+// Mutex-protected: concurrent requests with same token → only 1 succeeds.
+// ---------------------------------------------------------------------------
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    if (!resetToken || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Thiếu token hoặc mật khẩu mới.' });
+    }
+
+    // Password policy: minimum 8 characters
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({ success: false, error: 'Mật khẩu mới cần ít nhất 8 ký tự.' });
+    }
+
+    // Mutex-protected: prevent concurrent reset with same token
+    const result = await withResetLock(resetToken, async () => {
+      // Validate reset authorization token
+      const tokenResult = await validateResetAuthToken(resetToken);
+      if (!tokenResult.valid) {
+        return { success: false, error: tokenResult.error };
+      }
+
+      // Hash new password and update
+      const hashedPassword = bcrypt.hashSync(String(newPassword), 10);
+      const pool = getPool();
+
+      await pool.request()
+        .input('userId', sql.NVarChar, tokenResult.userId)
+        .input('password', sql.NVarChar, hashedPassword)
+        .query('UPDATE Users SET password = @password, updatedAt = GETDATE() WHERE id = @userId');
+
+      console.log(`[Auth] Password reset successful for user: ${tokenResult.userId}`);
+      return { success: true };
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    res.json({
+      success: true,
+      message: 'Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.',
+    });
+  } catch (err) {
+    console.error('[Auth] Reset password error:', err.message);
+    res.status(500).json({ success: false, error: 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.' });
+  }
+});
+
 module.exports = {
   router,
-  authenticate,
   readUsers,
 };

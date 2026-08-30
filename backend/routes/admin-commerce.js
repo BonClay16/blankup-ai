@@ -5,13 +5,10 @@
  */
 
 const express = require('express');
-const { authenticate } = require('./auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 const { getPool, sql } = require('../db');
-const { localhostOnly, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
-
-router.use(localhostOnly);
 
 const VOUCHER_TYPES = ['fixed', 'percent'];
 const VOUCHER_APPLIES_TO = ['all', 'order', 'plan'];
@@ -427,7 +424,7 @@ router.post('/credits/adjust', authenticate, requireAdmin, async (req, res) => {
     const pool = getPool();
     const account = await pool.request()
       .input('userId', sql.NVarChar, userId)
-      .query('SELECT userId FROM UserAiAccounts WHERE userId = @userId');
+      .query('SELECT userId, highCredits, bonusLowCredits FROM UserAiAccounts WHERE userId = @userId');
     if (account.recordset.length === 0) {
       await pool.request()
         .input('userId', sql.NVarChar, userId)
@@ -435,6 +432,19 @@ router.post('/credits/adjust', authenticate, requireAdmin, async (req, res) => {
           INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank)
           VALUES (@userId, N'plan-free', 0)
         `);
+      // Re-fetch for balance check
+      const fresh = await pool.request()
+        .input('userId', sql.NVarChar, userId)
+        .query('SELECT highCredits, bonusLowCredits FROM UserAiAccounts WHERE userId = @userId');
+      account.recordset = fresh.recordset;
+    }
+
+    // Prevent negative balance
+    const currentBal = creditType === 'high'
+      ? Number(account.recordset[0]?.highCredits || 0)
+      : Number(account.recordset[0]?.bonusLowCredits || 0);
+    if (currentBal + numericAmount < 0) {
+      return res.status(400).json({ success: false, error: 'Số dư không đủ để trừ. Credit không được âm.' });
     }
 
     const ledgerId = 'ledger-' + Date.now() + '-' + Math.floor(Math.random() * 1000);

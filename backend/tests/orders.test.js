@@ -113,16 +113,38 @@ describe('GET /api/orders', () => {
 });
 
 describe('GET /api/orders/:id', () => {
-  it('should return an order by orderId', async () => {
-    const createRes = await request(app).post('/api/orders').send(testOrder);
+  it('should return an order by orderId for owner', async () => {
+    const token = generateTestToken({ id: 'u-owner', username: 'owner', role: 'user' });
+    const orderWithUser = { ...testOrder, userId: 'u-owner' };
+    const createRes = await request(app).post('/api/orders').send(orderWithUser);
     const orderId = createRes.body.orderId;
-    const res = await request(app).get(`/api/orders/${orderId}`);
+    const res = await request(app).get(`/api/orders/${orderId}`).set(authHeader(token));
     expect(res.status).toBe(200);
     expect(res.body.data.orderId).toBe(orderId);
   });
 
+  it('should return 403 when non-owner tries to access order', async () => {
+    const ownerToken = generateTestToken({ id: 'u-owner2', username: 'owner2', role: 'user' });
+    const otherToken = generateTestToken({ id: 'u-other', username: 'other', role: 'user' });
+    const orderWithUser = { ...testOrder, userId: 'u-owner2' };
+    const createRes = await request(app).post('/api/orders').send(orderWithUser);
+    const orderId = createRes.body.orderId;
+    const res = await request(app).get(`/api/orders/${orderId}`).set(authHeader(otherToken));
+    expect(res.status).toBe(403);
+  });
+
+  it('should return 401 without token', async () => {
+    const token = generateTestToken({ id: 'u-owner3', username: 'owner3', role: 'user' });
+    const orderWithUser = { ...testOrder, userId: 'u-owner3' };
+    const createRes = await request(app).post('/api/orders').send(orderWithUser);
+    const orderId = createRes.body.orderId;
+    const res = await request(app).get(`/api/orders/${orderId}`);
+    expect(res.status).toBe(401);
+  });
+
   it('should return 404 for non-existent order', async () => {
-    const res = await request(app).get('/api/orders/BU-NONEXISTENT');
+    const token = generateAdminToken();
+    const res = await request(app).get('/api/orders/BU-NONEXISTENT').set(authHeader(token));
     expect(res.status).toBe(404);
   });
 });

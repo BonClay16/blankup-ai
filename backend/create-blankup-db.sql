@@ -1,10 +1,11 @@
 /*
   Blankup AI — Complete Database Schema & Seed Data
-  SQL Server (SQLEXPRESS)
+  SQL Server (SQLEXPRESS) — Professional Edition
   --------------------------------------------------
   Tương thích với db.js: tự động tạo DB, tạo bảng, seed data.
   Script này có thể chạy tay hoặc db.js sẽ tự migration khi khởi động.
   Mật khẩu seed đã được hash bằng bcrypt ($2b$10$).
+  Phiên bản chuyên nghiệp: FK, INDEX, CHECK, updatedAt, audit, migrations.
 */
 
 -- ============================================================
@@ -24,6 +25,17 @@ GO
 -- ============================================================
 
 -- ------------------------------------------------------------
+-- 2.0 SchemaVersion (migrations tracking)
+-- ------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SchemaVersion' AND xtype='U')
+CREATE TABLE dbo.SchemaVersion (
+  version     INT            NOT NULL PRIMARY KEY,
+  description NVARCHAR(200)  NOT NULL,
+  appliedAt   DATETIME       NOT NULL DEFAULT GETDATE()
+);
+GO
+
+-- ------------------------------------------------------------
 -- 2.1 Users
 -- ------------------------------------------------------------
 IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Users' AND xtype='U')
@@ -37,9 +49,13 @@ CREATE TABLE dbo.Users (
   provider            NVARCHAR(20)   NOT NULL DEFAULT 'local',
   providerId          NVARCHAR(255)  NULL,
   role                NVARCHAR(20)   NOT NULL DEFAULT 'user',
+  emailVerified       BIT            NOT NULL DEFAULT 0,
+  phone               NVARCHAR(20)   NULL,
+  phoneVerified       BIT            NOT NULL DEFAULT 0,
   resetTokenHash      NVARCHAR(255)  NULL,
   resetTokenExpiresAt DATETIME       NULL,
-  createdAt           DATETIME       NOT NULL DEFAULT GETDATE()
+  createdAt           DATETIME       NOT NULL DEFAULT GETDATE(),
+  updatedAt           DATETIME       NULL
 );
 GO
 
@@ -60,13 +76,15 @@ CREATE TABLE dbo.Orders (
   customerAddress NVARCHAR(500)  NOT NULL,
   customerNote    NVARCHAR(500)  NULL,
   payment         NVARCHAR(20)   DEFAULT 'COD',
+  paymentStatus   NVARCHAR(20)   NULL,
   status          NVARCHAR(20)   DEFAULT 'pending',
   userId          NVARCHAR(50)   NULL,
   authorName      NVARCHAR(200)  DEFAULT 'Guest',
   voucherCode     NVARCHAR(50)   NULL,
   discountAmount  INT            NOT NULL DEFAULT 0,
   finalPrice      INT            NULL,
-  createdAt       DATETIME       NOT NULL DEFAULT GETDATE()
+  createdAt       DATETIME       NOT NULL DEFAULT GETDATE(),
+  updatedAt       DATETIME       NULL
 );
 GO
 
@@ -86,7 +104,9 @@ CREATE TABLE dbo.Designs (
   quality           NVARCHAR(20)   NOT NULL DEFAULT 'low',
   hasWatermark      BIT            NOT NULL DEFAULT 1,
   sourceCreditType  NVARCHAR(30)   NULL,
-  createdAt         DATETIME       NOT NULL DEFAULT GETDATE()
+  isShared          BIT            NOT NULL DEFAULT 1,
+  createdAt         DATETIME       NOT NULL DEFAULT GETDATE(),
+  updatedAt         DATETIME       NULL
 );
 GO
 
@@ -230,12 +250,256 @@ CREATE TABLE dbo.VoucherRedemptions (
 );
 GO
 
+-- ------------------------------------------------------------
+-- 2.10 VerificationCodes
+-- ------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='VerificationCodes' AND xtype='U')
+CREATE TABLE dbo.VerificationCodes (
+  id          NVARCHAR(50)   PRIMARY KEY,
+  userId      NVARCHAR(50)   NOT NULL,
+  code        NVARCHAR(10)   NOT NULL,
+  type        NVARCHAR(20)   NOT NULL,
+  expiresAt   DATETIME       NOT NULL,
+  used        BIT            NOT NULL DEFAULT 0,
+  createdAt   DATETIME       NOT NULL DEFAULT GETDATE()
+);
+GO
+
 -- ============================================================
--- 3. SEED DATA
+-- 3. MIGRATIONS — Add missing columns for existing DBs
+-- ============================================================
+IF COL_LENGTH(N'Users', N'emailVerified') IS NULL
+  ALTER TABLE dbo.Users ADD emailVerified BIT NOT NULL DEFAULT 0;
+IF COL_LENGTH(N'Users', N'phone') IS NULL
+  ALTER TABLE dbo.Users ADD phone NVARCHAR(20) NULL;
+IF COL_LENGTH(N'Users', N'phoneVerified') IS NULL
+  ALTER TABLE dbo.Users ADD phoneVerified BIT NOT NULL DEFAULT 0;
+IF COL_LENGTH(N'Users', N'updatedAt') IS NULL
+  ALTER TABLE dbo.Users ADD updatedAt DATETIME NULL;
+IF COL_LENGTH(N'Orders', N'voucherCode') IS NULL
+  ALTER TABLE dbo.Orders ADD voucherCode NVARCHAR(50) NULL;
+IF COL_LENGTH(N'Orders', N'discountAmount') IS NULL
+  ALTER TABLE dbo.Orders ADD discountAmount INT NOT NULL DEFAULT 0;
+IF COL_LENGTH(N'Orders', N'finalPrice') IS NULL
+  ALTER TABLE dbo.Orders ADD finalPrice INT NULL;
+IF COL_LENGTH(N'Orders', N'paymentStatus') IS NULL
+  ALTER TABLE dbo.Orders ADD paymentStatus NVARCHAR(20) NULL;
+IF COL_LENGTH(N'Orders', N'updatedAt') IS NULL
+  ALTER TABLE dbo.Orders ADD updatedAt DATETIME NULL;
+IF COL_LENGTH(N'Designs', N'userId') IS NULL
+  ALTER TABLE dbo.Designs ADD userId NVARCHAR(50) NULL;
+IF COL_LENGTH(N'Designs', N'quality') IS NULL
+  ALTER TABLE dbo.Designs ADD quality NVARCHAR(20) NOT NULL DEFAULT N'low';
+IF COL_LENGTH(N'Designs', N'hasWatermark') IS NULL
+  ALTER TABLE dbo.Designs ADD hasWatermark BIT NOT NULL DEFAULT 1;
+IF COL_LENGTH(N'Designs', N'sourceCreditType') IS NULL
+  ALTER TABLE dbo.Designs ADD sourceCreditType NVARCHAR(30) NULL;
+IF COL_LENGTH(N'Designs', N'isShared') IS NULL
+  ALTER TABLE dbo.Designs ADD isShared BIT NOT NULL DEFAULT 1;
+IF COL_LENGTH(N'Designs', N'updatedAt') IS NULL
+  ALTER TABLE dbo.Designs ADD updatedAt DATETIME NULL;
+IF COL_LENGTH(N'Users', N'resetTokenHash') IS NULL
+  ALTER TABLE dbo.Users ADD resetTokenHash NVARCHAR(255) NULL;
+IF COL_LENGTH(N'Users', N'resetTokenExpiresAt') IS NULL
+  ALTER TABLE dbo.Users ADD resetTokenExpiresAt DATETIME NULL;
+GO
+
+-- ============================================================
+-- 4. CONSTRAINTS — CHECK (enum validation at DB level)
+-- ============================================================
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Users_role')
+  ALTER TABLE dbo.Users ADD CONSTRAINT CK_Users_role CHECK (role IN (N'user', N'admin'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Users_provider')
+  ALTER TABLE dbo.Users ADD CONSTRAINT CK_Users_provider CHECK (provider IN (N'local', N'google', N'facebook'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Orders_productType')
+  ALTER TABLE dbo.Orders ADD CONSTRAINT CK_Orders_productType CHECK (productType IN (N'tshirt', N'oversize', N'polo', N'hoodie'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Orders_status')
+  ALTER TABLE dbo.Orders ADD CONSTRAINT CK_Orders_status CHECK (status IN (N'pending', N'awaiting_payment', N'processing', N'shipped', N'delivered', N'completed', N'cancelled', N'payment_failed'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Orders_payment')
+  ALTER TABLE dbo.Orders ADD CONSTRAINT CK_Orders_payment CHECK (payment IN (N'COD', N'BANK_TRANSFER', N'VNPAY'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Orders_quantity')
+  ALTER TABLE dbo.Orders ADD CONSTRAINT CK_Orders_quantity CHECK (quantity >= 1);
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Orders_price')
+  ALTER TABLE dbo.Orders ADD CONSTRAINT CK_Orders_price CHECK (price >= 0);
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Designs_quality')
+  ALTER TABLE dbo.Designs ADD CONSTRAINT CK_Designs_quality CHECK (quality IN (N'low', N'high'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_AiPlans_quality')
+  ALTER TABLE dbo.AiPlans ADD CONSTRAINT CK_AiPlans_quality CHECK (outputQuality IN (N'low', N'high'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Vouchers_discountType')
+  ALTER TABLE dbo.Vouchers ADD CONSTRAINT CK_Vouchers_discountType CHECK (discountType IN (N'fixed', N'percent'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Vouchers_appliesTo')
+  ALTER TABLE dbo.Vouchers ADD CONSTRAINT CK_Vouchers_appliesTo CHECK (appliesTo IN (N'all', N'order', N'plan'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Vouchers_status')
+  ALTER TABLE dbo.Vouchers ADD CONSTRAINT CK_Vouchers_status CHECK (status IN (N'active', N'disabled', N'expired'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_AiCreditLedger_creditType')
+  ALTER TABLE dbo.AiCreditLedger ADD CONSTRAINT CK_AiCreditLedger_creditType CHECK (creditType IN (N'high', N'low'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_AiCreditLedger_quality')
+  ALTER TABLE dbo.AiCreditLedger ADD CONSTRAINT CK_AiCreditLedger_quality CHECK (quality IN (N'low', N'high'));
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_VerificationCodes_type')
+  ALTER TABLE dbo.VerificationCodes ADD CONSTRAINT CK_VerificationCodes_type CHECK (type IN (N'email', N'phone'));
+GO
+
+-- ============================================================
+-- 5. FOREIGN KEYS — Referential integrity
+--
+-- SQL Server note:
+--   All FK update actions use NO ACTION. Primary keys should not be
+--   updated in normal application flow, and ON UPDATE CASCADE can create
+--   multiple-cascade-path errors when several relationships converge.
+--   DELETE actions are kept only where they are intentional and safe.
+-- ============================================================
+
+-- Drop existing FK constraints first so this script is safe to re-run
+-- against a database that already contains an earlier FK definition.
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Orders_Users')
+  ALTER TABLE dbo.Orders DROP CONSTRAINT FK_Orders_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Designs_Users')
+  ALTER TABLE dbo.Designs DROP CONSTRAINT FK_Designs_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_UserAiAccounts_Users')
+  ALTER TABLE dbo.UserAiAccounts DROP CONSTRAINT FK_UserAiAccounts_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_UserAiAccounts_AiPlans')
+  ALTER TABLE dbo.UserAiAccounts DROP CONSTRAINT FK_UserAiAccounts_AiPlans;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_AiPlanPurchases_Users')
+  ALTER TABLE dbo.AiPlanPurchases DROP CONSTRAINT FK_AiPlanPurchases_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_AiPlanPurchases_AiPlans')
+  ALTER TABLE dbo.AiPlanPurchases DROP CONSTRAINT FK_AiPlanPurchases_AiPlans;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_AiCreditLedger_Users')
+  ALTER TABLE dbo.AiCreditLedger DROP CONSTRAINT FK_AiCreditLedger_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_VoucherRedemptions_Vouchers')
+  ALTER TABLE dbo.VoucherRedemptions DROP CONSTRAINT FK_VoucherRedemptions_Vouchers;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_VoucherRedemptions_Users')
+  ALTER TABLE dbo.VoucherRedemptions DROP CONSTRAINT FK_VoucherRedemptions_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_VoucherRedemptions_Orders')
+  ALTER TABLE dbo.VoucherRedemptions DROP CONSTRAINT FK_VoucherRedemptions_Orders;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_VoucherRedemptions_Purchases')
+  ALTER TABLE dbo.VoucherRedemptions DROP CONSTRAINT FK_VoucherRedemptions_Purchases;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_VerificationCodes_Users')
+  ALTER TABLE dbo.VerificationCodes DROP CONSTRAINT FK_VerificationCodes_Users;
+IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Vouchers_CreatedBy')
+  ALTER TABLE dbo.Vouchers DROP CONSTRAINT FK_Vouchers_CreatedBy;
+GO
+
+ALTER TABLE dbo.Orders ADD CONSTRAINT FK_Orders_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE SET NULL ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.Designs ADD CONSTRAINT FK_Designs_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE SET NULL ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.UserAiAccounts ADD CONSTRAINT FK_UserAiAccounts_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE CASCADE ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.UserAiAccounts ADD CONSTRAINT FK_UserAiAccounts_AiPlans
+  FOREIGN KEY (displayPlanId) REFERENCES dbo.AiPlans(id)
+  ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.AiPlanPurchases ADD CONSTRAINT FK_AiPlanPurchases_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE CASCADE ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.AiPlanPurchases ADD CONSTRAINT FK_AiPlanPurchases_AiPlans
+  FOREIGN KEY (planId) REFERENCES dbo.AiPlans(id)
+  ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.AiCreditLedger ADD CONSTRAINT FK_AiCreditLedger_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE CASCADE ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.VoucherRedemptions ADD CONSTRAINT FK_VoucherRedemptions_Vouchers
+  FOREIGN KEY (voucherId) REFERENCES dbo.Vouchers(id)
+  ON DELETE CASCADE ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.VoucherRedemptions ADD CONSTRAINT FK_VoucherRedemptions_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.VoucherRedemptions ADD CONSTRAINT FK_VoucherRedemptions_Orders
+  FOREIGN KEY (orderId) REFERENCES dbo.Orders(orderId)
+  ON DELETE SET NULL ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.VoucherRedemptions ADD CONSTRAINT FK_VoucherRedemptions_Purchases
+  FOREIGN KEY (purchaseId) REFERENCES dbo.AiPlanPurchases(id)
+  ON DELETE SET NULL ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.VerificationCodes ADD CONSTRAINT FK_VerificationCodes_Users
+  FOREIGN KEY (userId) REFERENCES dbo.Users(id)
+  ON DELETE CASCADE ON UPDATE NO ACTION;
+
+ALTER TABLE dbo.Vouchers ADD CONSTRAINT FK_Vouchers_CreatedBy
+  FOREIGN KEY (createdBy) REFERENCES dbo.Users(id)
+  ON DELETE SET NULL ON UPDATE NO ACTION;
+GO
+
+-- ============================================================
+-- 6. INDEXES — Query performance
+-- ============================================================
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Users_email' AND object_id = OBJECT_ID('dbo.Users'))
+  CREATE INDEX IX_Users_email ON dbo.Users(email);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Users_provider' AND object_id = OBJECT_ID('dbo.Users'))
+  CREATE INDEX IX_Users_provider ON dbo.Users(provider, providerId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Users_createdAt' AND object_id = OBJECT_ID('dbo.Users'))
+  CREATE INDEX IX_Users_createdAt ON dbo.Users(createdAt DESC);
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Orders_userId' AND object_id = OBJECT_ID('dbo.Orders'))
+  CREATE INDEX IX_Orders_userId ON dbo.Orders(userId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Orders_status' AND object_id = OBJECT_ID('dbo.Orders'))
+  CREATE INDEX IX_Orders_status ON dbo.Orders(status);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Orders_payment' AND object_id = OBJECT_ID('dbo.Orders'))
+  CREATE INDEX IX_Orders_payment ON dbo.Orders(payment, paymentStatus);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Orders_createdAt' AND object_id = OBJECT_ID('dbo.Orders'))
+  CREATE INDEX IX_Orders_createdAt ON dbo.Orders(createdAt DESC);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Orders_voucherCode' AND object_id = OBJECT_ID('dbo.Orders'))
+  CREATE INDEX IX_Orders_voucherCode ON dbo.Orders(voucherCode) WHERE voucherCode IS NOT NULL;
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Orders_productType' AND object_id = OBJECT_ID('dbo.Orders'))
+  CREATE INDEX IX_Orders_productType ON dbo.Orders(productType);
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Designs_userId' AND object_id = OBJECT_ID('dbo.Designs'))
+  CREATE INDEX IX_Designs_userId ON dbo.Designs(userId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Designs_createdAt' AND object_id = OBJECT_ID('dbo.Designs'))
+  CREATE INDEX IX_Designs_createdAt ON dbo.Designs(createdAt DESC);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Designs_style' AND object_id = OBJECT_ID('dbo.Designs'))
+  CREATE INDEX IX_Designs_style ON dbo.Designs(style);
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_AiPlanPurchases_userId' AND object_id = OBJECT_ID('dbo.AiPlanPurchases'))
+  CREATE INDEX IX_AiPlanPurchases_userId ON dbo.AiPlanPurchases(userId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_AiPlanPurchases_planId' AND object_id = OBJECT_ID('dbo.AiPlanPurchases'))
+  CREATE INDEX IX_AiPlanPurchases_planId ON dbo.AiPlanPurchases(planId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_AiPlanPurchases_createdAt' AND object_id = OBJECT_ID('dbo.AiPlanPurchases'))
+  CREATE INDEX IX_AiPlanPurchases_createdAt ON dbo.AiPlanPurchases(createdAt DESC);
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_AiCreditLedger_userId' AND object_id = OBJECT_ID('dbo.AiCreditLedger'))
+  CREATE INDEX IX_AiCreditLedger_userId ON dbo.AiCreditLedger(userId, createdAt DESC);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_AiCreditLedger_createdAt' AND object_id = OBJECT_ID('dbo.AiCreditLedger'))
+  CREATE INDEX IX_AiCreditLedger_createdAt ON dbo.AiCreditLedger(createdAt DESC);
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Vouchers_code' AND object_id = OBJECT_ID('dbo.Vouchers'))
+  CREATE UNIQUE INDEX IX_Vouchers_code_unique ON dbo.Vouchers(code) WHERE code IS NOT NULL; -- already UNIQUE, but ensure filtered
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Vouchers_status' AND object_id = OBJECT_ID('dbo.Vouchers'))
+  CREATE INDEX IX_Vouchers_status ON dbo.Vouchers(status, expiresAt);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VoucherRedemptions_voucherId' AND object_id = OBJECT_ID('dbo.VoucherRedemptions'))
+  CREATE INDEX IX_VoucherRedemptions_voucherId ON dbo.VoucherRedemptions(voucherId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VoucherRedemptions_userId' AND object_id = OBJECT_ID('dbo.VoucherRedemptions'))
+  CREATE INDEX IX_VoucherRedemptions_userId ON dbo.VoucherRedemptions(userId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VoucherRedemptions_orderId' AND object_id = OBJECT_ID('dbo.VoucherRedemptions'))
+  CREATE INDEX IX_VoucherRedemptions_orderId ON dbo.VoucherRedemptions(orderId) WHERE orderId IS NOT NULL;
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VerificationCodes_userId' AND object_id = OBJECT_ID('dbo.VerificationCodes'))
+  CREATE INDEX IX_VerificationCodes_userId ON dbo.VerificationCodes(userId);
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VerificationCodes_expiresAt' AND object_id = OBJECT_ID('dbo.VerificationCodes'))
+  CREATE INDEX IX_VerificationCodes_expiresAt ON dbo.VerificationCodes(expiresAt) WHERE used = 0;
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_UserAiAccounts_displayPlanId' AND object_id = OBJECT_ID('dbo.UserAiAccounts'))
+  CREATE INDEX IX_UserAiAccounts_displayPlanId ON dbo.UserAiAccounts(displayPlanId);
+GO
+
+-- ============================================================
+-- 7. SEED DATA
 -- ============================================================
 
 -- ------------------------------------------------------------
--- 3.1 AiPlans
+-- 7.1 AiPlans
 -- ------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM dbo.AiPlans)
 BEGIN
@@ -253,7 +517,7 @@ END
 GO
 
 -- ------------------------------------------------------------
--- 3.2 Vouchers
+-- 7.2 Vouchers
 -- ------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM dbo.Vouchers WHERE code = N'BLANKUP50')
 BEGIN
@@ -272,7 +536,7 @@ END
 GO
 
 -- ------------------------------------------------------------
--- 3.3 Users (bcrypt hashed passwords)
+-- 7.3 Users (bcrypt hashed passwords)
 --    admin123  => $2b$10$7lTxewS3aSn3W3.RqshzeO2uM1b/Ky3Q7s3giLfp/TanWcFxhZ7Su
 --    password123 => $2b$10$/HRY0wOY7w.N8mPU01aU8e/N.yC/w3OSLvBs0SEwshu6de4K1TB5W
 -- ------------------------------------------------------------
@@ -288,7 +552,7 @@ END
 GO
 
 -- ------------------------------------------------------------
--- 3.4 UserAiAccounts (auto-create for every User without one)
+-- 7.4 UserAiAccounts (auto-create for every User without one)
 -- ------------------------------------------------------------
 INSERT INTO dbo.UserAiAccounts (userId, displayPlanId, highestPlanRank)
 SELECT id, N'plan-free', 0
@@ -296,10 +560,18 @@ FROM dbo.Users u
 WHERE NOT EXISTS (SELECT 1 FROM dbo.UserAiAccounts a WHERE a.userId = u.id);
 GO
 
+-- ------------------------------------------------------------
+-- 7.5 SchemaVersion seed
+-- ------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.SchemaVersion WHERE version = 2)
+  INSERT INTO dbo.SchemaVersion (version, description) VALUES (2, N'Professional schema: FK, INDEX, CHECK, updatedAt, isShared');
+GO
+
 PRINT '============================================================';
-PRINT '  BlankupDB initialized successfully.';
+PRINT '  BlankupDB initialized successfully — Professional Edition';
 PRINT '  Tables: Users, Orders, Designs, AiPlans, UserAiAccounts,';
 PRINT '          AiPlanPurchases, AiCreditLedger, Vouchers,';
-PRINT '          VoucherRedemptions';
+PRINT '          VoucherRedemptions, VerificationCodes, SchemaVersion';
+PRINT '  Constraints: FK (13), CHECK (14), INDEX (22)';
 PRINT '============================================================';
 GO

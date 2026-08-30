@@ -1,17 +1,14 @@
 const express = require('express');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { authenticate, readUsers } = require('./auth');
+const { readUsers } = require('./auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 const { getPool, sql } = require('../db');
 const { readJson } = require('../utils/fileStore');
-const { localhostOnly } = require('../middleware/auth');
 
 const router = express.Router();
 const ordersFilePath = path.join(__dirname, '../data/orders.json');
 const designsFilePath = path.join(__dirname, '../data/designs.json');
-
-// Apply localhost restriction to ALL admin routes
-router.use(localhostOnly);
 
 const readOrders = () => readJson(ordersFilePath);
 const readDesigns = () => readJson(designsFilePath);
@@ -20,12 +17,8 @@ const readDesigns = () => readJson(designsFilePath);
 // GET /api/admin/stats
 // Returns overview statistics, recent orders, and user list (Admin only)
 // ---------------------------------------------------------------------------
-router.get('/stats', authenticate, async (req, res) => {
+router.get('/stats', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const orders = readOrders();
     const users = await readUsers();
     const designs = readDesigns();
@@ -124,12 +117,8 @@ router.get('/stats', authenticate, async (req, res) => {
 // POST /api/admin/users
 // Create a new user (admin only)
 // ---------------------------------------------------------------------------
-router.post('/users', authenticate, async (req, res) => {
+router.post('/users', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const { username, password, fullName, email, role } = req.body;
 
     if (!username || !password || !fullName) {
@@ -177,12 +166,8 @@ router.post('/users', authenticate, async (req, res) => {
 // PUT /api/admin/users/:id
 // Update user info (admin only)
 // ---------------------------------------------------------------------------
-router.put('/users/:id', authenticate, async (req, res) => {
+router.put('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const { id } = req.params;
     const { fullName, email, role } = req.body;
     const allowedRoles = ['user', 'admin'];
@@ -231,12 +216,8 @@ router.put('/users/:id', authenticate, async (req, res) => {
 // PUT /api/admin/users/:id/role
 // Update a user's role (admin only)
 // ---------------------------------------------------------------------------
-router.put('/users/:id/role', authenticate, async (req, res) => {
+router.put('/users/:id/role', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const { id } = req.params;
     const { role } = req.body;
     const allowedRoles = ['user', 'admin'];
@@ -267,12 +248,8 @@ router.put('/users/:id/role', authenticate, async (req, res) => {
 // DELETE /api/admin/users/:id
 // Delete a user (admin only, cannot delete self)
 // ---------------------------------------------------------------------------
-router.delete('/users/:id', authenticate, async (req, res) => {
+router.delete('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const { id } = req.params;
 
     if (req.user.id === id) {
@@ -310,12 +287,8 @@ router.delete('/users/:id', authenticate, async (req, res) => {
 // GET /api/admin/users/:id
 // Get single user details (admin only)
 // ---------------------------------------------------------------------------
-router.get('/users/:id', authenticate, async (req, res) => {
+router.get('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const { id } = req.params;
     const pool = getPool();
 
@@ -354,12 +327,8 @@ router.get('/users/:id', authenticate, async (req, res) => {
 // GET /api/admin/designs
 // Get all designs (admin only)
 // ---------------------------------------------------------------------------
-router.get('/designs', authenticate, (req, res) => {
+router.get('/designs', authenticate, requireAdmin, (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const designs = readDesigns();
     res.json({ success: true, data: designs });
   } catch (err) {
@@ -372,12 +341,8 @@ router.get('/designs', authenticate, (req, res) => {
 // PUT /api/admin/designs/:id/visibility
 // Toggle design visibility (admin only)
 // ---------------------------------------------------------------------------
-router.put('/designs/:id/visibility', authenticate, (req, res) => {
+router.put('/designs/:id/visibility', authenticate, requireAdmin, (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
-    }
-
     const { id } = req.params;
     const { isShared } = req.body;
 

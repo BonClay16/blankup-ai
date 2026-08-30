@@ -5,7 +5,7 @@
 
 const express = require('express');
 const path = require('path');
-const { authenticate } = require('./auth');
+const { authenticate } = require('../middleware/auth');
 const { getPool, sql } = require('../db');
 const { readJson, writeJson } = require('../utils/fileStore');
 
@@ -63,7 +63,7 @@ router.get('/:username', async (req, res) => {
     let isFollowing = false;
     if (req.headers.authorization?.startsWith('Bearer ')) {
       try {
-        const { verifyToken } = require('./auth');
+        const { verifyToken } = require('../services/jwt.service');
         const decoded = verifyToken(req.headers.authorization.split(' ')[1]);
         if (decoded?.userId) {
           const viewerId = String(decoded.userId);

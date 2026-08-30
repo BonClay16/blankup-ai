@@ -3,8 +3,159 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { authenticate } = require('./auth');
+const { authenticate } = require('../middleware/auth');
 const { readJson, writeJson } = require('../utils/fileStore');
+const { getPool, sql } = require('../db');
+
+// Helper: deduct 1 credit for AI generation (dailyFree → bonusLow → high)
+// Called BEFORE generation — deduct-then-generate pattern.
+async function deductCreditForGenerate(userId) {
+  let pool;
+  try {
+    pool = getPool();
+  } catch {
+    return { success: false, error: 'Credit service unavailable', serviceUnavailable: true };
+  }
+
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin(sql.IsolationLevels.Serializable);
+
+    let req = new sql.Request(transaction);
+    let accountRes = await req
+      .input('userId', sql.NVarChar, userId)
+      .query(`
+        SELECT a.*, p.dailyFreeLowCredits AS planDailyFree
+        FROM UserAiAccounts a
+        LEFT JOIN AiPlans p ON p.id = a.displayPlanId
+        WHERE a.userId = @userId
+      `);
+
+    if (accountRes.recordset.length === 0) {
+      await new sql.Request(transaction)
+        .input('userId', sql.NVarChar, userId)
+        .query(`INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank) VALUES (@userId, N'plan-free', 0)`);
+      accountRes = await new sql.Request(transaction)
+        .input('userId2', sql.NVarChar, userId)
+        .query(`SELECT a.*, p.dailyFreeLowCredits AS planDailyFree FROM UserAiAccounts a LEFT JOIN AiPlans p ON p.id = a.displayPlanId WHERE a.userId = @userId2`);
+    }
+
+    let account = accountRes.recordset[0];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const resetDateStr = account.dailyFreeResetDate ? new Date(account.dailyFreeResetDate).toISOString().slice(0, 10) : null;
+    if (resetDateStr !== todayStr) {
+      await new sql.Request(transaction)
+        .input('userId', sql.NVarChar, userId)
+        .input('today', sql.Date, new Date(todayStr))
+        .query(`UPDATE UserAiAccounts SET dailyFreeLowCreditsUsed = 0, dailyFreeResetDate = @today WHERE userId = @userId`);
+      account.dailyFreeLowCreditsUsed = 0;
+      account.dailyFreeResetDate = todayStr;
+    }
+
+    const planDailyFree = Number(account.planDailyFree) || 0;
+    const dailyUsed = Number(account.dailyFreeLowCreditsUsed) || 0;
+    const bonusLow = Number(account.bonusLowCredits) || 0;
+    const high = Number(account.highCredits) || 0;
+
+    let creditType = null;
+    let updateSql = '';
+    if (dailyUsed < planDailyFree) {
+      creditType = 'daily';
+      updateSql = `UPDATE UserAiAccounts SET dailyFreeLowCreditsUsed = dailyFreeLowCreditsUsed + 1, updatedAt = GETDATE() WHERE userId = @userIdDeduct`;
+    } else if (bonusLow > 0) {
+      creditType = 'low';
+      updateSql = `UPDATE UserAiAccounts SET bonusLowCredits = bonusLowCredits - 1, updatedAt = GETDATE() WHERE userId = @userIdDeduct AND bonusLowCredits > 0`;
+    } else if (high > 0) {
+      creditType = 'high';
+      updateSql = `UPDATE UserAiAccounts SET highCredits = highCredits - 1, updatedAt = GETDATE() WHERE userId = @userIdDeduct AND highCredits > 0`;
+    } else {
+      await transaction.rollback();
+      return { success: false, error: 'Not enough credits' };
+    }
+
+    const updRes = await new sql.Request(transaction)
+      .input('userIdDeduct', sql.NVarChar, userId)
+      .query(updateSql);
+    if (updRes.rowsAffected[0] === 0) {
+      await transaction.rollback();
+      return { success: false, error: 'Not enough credits' };
+    }
+
+    const ledgerId = 'ledger-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    const balanceRes = await new sql.Request(transaction)
+      .input('userIdBal', sql.NVarChar, userId)
+      .query(`SELECT highCredits, bonusLowCredits, dailyFreeLowCreditsUsed FROM UserAiAccounts WHERE userId = @userIdBal`);
+    const bal = balanceRes.recordset[0] || { highCredits: 0, bonusLowCredits: 0, dailyFreeLowCreditsUsed: 0 };
+    const balanceAfter = creditType === 'high' ? bal.highCredits : creditType === 'low' ? bal.bonusLowCredits : (planDailyFree - Number(bal.dailyFreeLowCreditsUsed));
+
+    await new sql.Request(transaction)
+      .input('ledgerId', sql.NVarChar, ledgerId)
+      .input('userId', sql.NVarChar, userId)
+      .input('creditType', sql.NVarChar, creditType === 'daily' ? 'low' : creditType)
+      .input('quality', sql.NVarChar, 'low')
+      .input('amount', sql.Int, -1)
+      .input('balanceAfter', sql.Int, balanceAfter)
+      .input('reason', sql.NVarChar, 'ai_generate')
+      .query(`
+        INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
+        VALUES (@ledgerId, @userId, @creditType, @quality, @amount, @balanceAfter, @reason, N'ai_design', @ledgerId, N'AI design generation')
+      `);
+
+    await transaction.commit();
+    return { success: true, creditType };
+  } catch (err) {
+    try { await transaction.rollback(); } catch {}
+    throw err;
+  }
+}
+
+// Helper: refund 1 credit when generation fails after successful deduction (compensating transaction)
+async function refundCreditForGenerate(userId, creditType) {
+  let pool;
+  try {
+    pool = getPool();
+  } catch {
+    console.error(`[AI-Design] Cannot refund credit: DB unavailable (userId=${userId}, creditType=${creditType})`);
+    return;
+  }
+
+  try {
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin(sql.IsolationLevels.Serializable);
+
+    let updateSql = '';
+    if (creditType === 'low') {
+      updateSql = `UPDATE UserAiAccounts SET bonusLowCredits = bonusLowCredits + 1, updatedAt = GETDATE() WHERE userId = @userId`;
+    } else if (creditType === 'high') {
+      updateSql = `UPDATE UserAiAccounts SET highCredits = highCredits + 1, updatedAt = GETDATE() WHERE userId = @userId`;
+    } else {
+      await transaction.rollback();
+      return;
+    }
+
+    await new sql.Request(transaction)
+      .input('userId', sql.NVarChar, userId)
+      .query(updateSql);
+
+    const ledgerId = 'ledger-refund-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    await new sql.Request(transaction)
+      .input('ledgerId', sql.NVarChar, ledgerId)
+      .input('userId', sql.NVarChar, userId)
+      .input('creditType', sql.NVarChar, creditType)
+      .input('quality', sql.NVarChar, 'low')
+      .input('amount', sql.Int, 1)
+      .input('reason', sql.NVarChar, 'ai_generate_refund')
+      .query(`
+        INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
+        VALUES (@ledgerId, @userId, @creditType, @quality, @amount, 0, @reason, N'ai_design', @ledgerId, N'AI design generation refund - generation failed')
+      `);
+
+    await transaction.commit();
+    console.log(`[AI-Design] Credit refunded: userId=${userId}, type=${creditType}`);
+  } catch (err) {
+    console.error(`[AI-Design] Refund failed: userId=${userId}, type=${creditType}, error=${err.message}`);
+  }
+}
 
 const router = express.Router();
 const designsFilePath = path.join(__dirname, '../data/designs.json');
@@ -54,7 +205,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB (AGENTS.md)
   fileFilter: (_req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif|webp|svg/;
     const extOk = allowed.test(path.extname(file.originalname).toLowerCase());
@@ -602,6 +753,16 @@ router.post('/generate', authenticate, async (req, res) => {
       }
     }
 
+    // Step 1: Deduct credit BEFORE generation — backend is source of truth
+    const creditRes = await deductCreditForGenerate(req.user.id);
+    if (!creditRes.success) {
+      if (creditRes.serviceUnavailable) {
+        return res.status(503).json({ success: false, error: 'Credit service unavailable. Please try again later.' });
+      }
+      return res.status(400).json({ success: false, error: creditRes.error || 'Not enough credits' });
+    }
+
+    // Step 2: Generate image — if this fails, refund the credit
     const designId = 'design-' + Date.now();
     const authorName = author || 'Guest';
     let designUrl;
@@ -610,44 +771,50 @@ router.post('/generate', authenticate, async (req, res) => {
     let finalProductPrompt;
     let provider = 'mock';
 
-    if (hasCloudflareConfig()) {
-      try {
-        const result = await generateCloudflareImage(prompt, style, designId);
-        designUrl = result.designUrl;
-        finalPrompt = result.finalPrompt;
+    try {
+      if (hasCloudflareConfig()) {
         try {
-          const productResult = await generateCloudflareProductMockup(prompt, style, designId);
-          productMockupUrl = productResult.productMockupUrl;
-          finalProductPrompt = productResult.finalProductPrompt;
-        } catch (mockupErr) {
-          console.warn(`[AI-Design] Cloudflare 3D product mockup failed, continuing with print design: ${mockupErr.message}`);
+          const result = await generateCloudflareImage(prompt, style, designId);
+          designUrl = result.designUrl;
+          finalPrompt = result.finalPrompt;
+          try {
+            const productResult = await generateCloudflareProductMockup(prompt, style, designId);
+            productMockupUrl = productResult.productMockupUrl;
+            finalProductPrompt = productResult.finalProductPrompt;
+          } catch (mockupErr) {
+            console.warn(`[AI-Design] Cloudflare 3D product mockup failed, continuing with print design: ${mockupErr.message}`);
+          }
+          provider = 'cloudflare';
+        } catch (err) {
+          console.warn(`[AI-Design] Cloudflare generation failed, trying next provider: ${err.message}`);
         }
-        provider = 'cloudflare';
-      } catch (err) {
-        console.warn(`[AI-Design] Cloudflare generation failed, trying next provider: ${err.message}`);
       }
-    }
 
-    if (!designUrl && hasOpenAIConfig()) {
-      try {
-        const result = await generateOpenAIImage(prompt, style, designId);
-        designUrl = result.designUrl;
-        finalPrompt = result.finalPrompt;
+      if (!designUrl && hasOpenAIConfig()) {
         try {
-          const productResult = await generateOpenAIProductMockup(prompt, style, designId);
-          productMockupUrl = productResult.productMockupUrl;
-          finalProductPrompt = productResult.finalProductPrompt;
-        } catch (mockupErr) {
-          console.warn(`[AI-Design] OpenAI 3D product mockup failed, continuing with print design: ${mockupErr.message}`);
+          const result = await generateOpenAIImage(prompt, style, designId);
+          designUrl = result.designUrl;
+          finalPrompt = result.finalPrompt;
+          try {
+            const productResult = await generateOpenAIProductMockup(prompt, style, designId);
+            productMockupUrl = productResult.productMockupUrl;
+            finalProductPrompt = productResult.finalProductPrompt;
+          } catch (mockupErr) {
+            console.warn(`[AI-Design] OpenAI 3D product mockup failed, continuing with print design: ${mockupErr.message}`);
+          }
+          provider = 'openai';
+        } catch (err) {
+          console.warn(`[AI-Design] OpenAI generation failed, using fallback: ${err.message}`);
         }
-        provider = 'openai';
-      } catch (err) {
-        console.warn(`[AI-Design] OpenAI generation failed, using fallback: ${err.message}`);
       }
-    }
 
-    if (!designUrl) {
-      designUrl = getDesignSvg(style);
+      if (!designUrl) {
+        designUrl = getDesignSvg(style);
+      }
+    } catch (genErr) {
+      console.error(`[AI-Design] Generation failed after credit deduction, refunding: ${genErr.message}`);
+      await refundCreditForGenerate(req.user.id, creditRes.creditType);
+      return res.status(500).json({ success: false, error: 'AI generation failed. Your credit has been refunded.' });
     }
 
     console.log(`[AI-Design] Generated design ${designId} via ${provider} for prompt: "${prompt}" (style: ${style || DEFAULT_STYLE})`);
@@ -696,35 +863,51 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
       return res.status(400).json({ success: false, error: 'An image file is required.' });
     }
 
+    // Step 1: Deduct credit BEFORE generation
+    const creditResImg = await deductCreditForGenerate(req.user.id);
+    if (!creditResImg.success) {
+      if (creditResImg.serviceUnavailable) {
+        return res.status(503).json({ success: false, error: 'Credit service unavailable. Please try again later.' });
+      }
+      return res.status(400).json({ success: false, error: creditResImg.error || 'Not enough credits' });
+    }
+
+    // Step 2: Generate — refund if fails
     const designId = 'design-' + Date.now();
     let designUrl;
     let finalPrompt;
     let provider = 'mock';
 
-    if (hasCloudflareConfig()) {
-      try {
-        const result = await generateCloudflareImage(idea || 'Remix this reference image into an original t-shirt graphic', 'reference remix', designId);
-        designUrl = result.designUrl;
-        finalPrompt = result.finalPrompt;
-        provider = 'cloudflare';
-      } catch (err) {
-        console.warn(`[AI-Design] Cloudflare image generation failed, trying next provider: ${err.message}`);
+    try {
+      if (hasCloudflareConfig()) {
+        try {
+          const result = await generateCloudflareImage(idea || 'Remix this reference image into an original t-shirt graphic', 'reference remix', designId);
+          designUrl = result.designUrl;
+          finalPrompt = result.finalPrompt;
+          provider = 'cloudflare';
+        } catch (err) {
+          console.warn(`[AI-Design] Cloudflare image generation failed, trying next provider: ${err.message}`);
+        }
       }
-    }
 
-    if (!designUrl && hasOpenAIConfig() && typeof FormData !== 'undefined' && typeof Blob !== 'undefined') {
-      try {
-        const result = await editOpenAIImage(file, idea, designId);
-        designUrl = result.designUrl;
-        finalPrompt = result.finalPrompt;
-        provider = 'openai';
-      } catch (err) {
-        console.warn(`[AI-Design] OpenAI image edit failed, using fallback: ${err.message}`);
+      if (!designUrl && hasOpenAIConfig() && typeof FormData !== 'undefined' && typeof Blob !== 'undefined') {
+        try {
+          const result = await editOpenAIImage(file, idea, designId);
+          designUrl = result.designUrl;
+          finalPrompt = result.finalPrompt;
+          provider = 'openai';
+        } catch (err) {
+          console.warn(`[AI-Design] OpenAI image edit failed, using fallback: ${err.message}`);
+        }
       }
-    }
 
-    if (!designUrl) {
-      designUrl = getFromImageSvg();
+      if (!designUrl) {
+        designUrl = getFromImageSvg();
+      }
+    } catch (genErr) {
+      console.error(`[AI-Design] Image generation failed after credit deduction, refunding: ${genErr.message}`);
+      await refundCreditForGenerate(req.user.id, creditResImg.creditType);
+      return res.status(500).json({ success: false, error: 'AI generation failed. Your credit has been refunded.' });
     }
 
     console.log(`[AI-Design] Generated design ${designId} via ${provider} from image: "${file.filename}" idea: "${idea}"`);
@@ -900,7 +1083,7 @@ router.post('/:id/comments', authenticate, (req, res) => {
 // GET /api/ai-design/gallery
 // Return sample designs with their SVG thumbnails
 // ---------------------------------------------------------------------------
-router.get('/gallery', (_req, res) => {
+router.get('/gallery', (req, res) => {
   try {
     const designs = readDesigns();
     const comments = readComments();
@@ -916,7 +1099,17 @@ router.get('/gallery', (_req, res) => {
     }));
     // Sort: newest first
     const sortedGallery = [...galleryWithImages].reverse();
-    res.json({ success: true, count: sortedGallery.length, data: sortedGallery });
+    // Pagination (R5)
+    let data = sortedGallery;
+    let pagination;
+    if (req.query.page != null || req.query.limit != null) {
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+      const offset = (page - 1) * limit;
+      data = sortedGallery.slice(offset, offset + limit);
+      pagination = { page, limit, total: sortedGallery.length, totalPages: Math.ceil(sortedGallery.length / limit) };
+    }
+    res.json({ success: true, count: data.length, total: sortedGallery.length, data, ...(pagination ? { pagination } : {}) });
   } catch (err) {
     console.error('[AI-Design] Error fetching gallery:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch gallery' });

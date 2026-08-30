@@ -165,7 +165,7 @@ ul { list-style: none; }
    NAVBAR — light, permanent hairline bar, consistent on every page
    ============================================================ */
 .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-.navbar .container { display: flex; align-items: center; justify-content: space-between; height: 76px; }
+.navbar .container { display: flex; align-items: center; justify-content: space-between; height: 72px; }
 .navbar-logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-heading); font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: var(--ink); }
 .navbar-logo .logo-icon { width: 30px; height: 30px; }
 .navbar-logo .logo-highlight { color: var(--rust); }
@@ -408,7 +408,7 @@ ul { list-style: none; }
 
 @media (max-width: 768px) {
   :root { --section-padding: 84px 0; --container-padding: 0 20px; }
-  .navbar-menu { position: fixed; top: 76px; left: 0; right: 0; background: var(--paper); border-bottom: 1px solid var(--line-strong); flex-direction: column; align-items: flex-start; padding: 18px 24px; gap: 18px; transform: translateY(-8px); opacity: 0; pointer-events: none; transition: all var(--transition-base); }
+  .navbar-menu { position: fixed; top: 100%; left: 0; right: 0; background: var(--paper); border-bottom: 1px solid var(--line-strong); flex-direction: column; align-items: flex-start; padding: 18px 24px; gap: 18px; transform: translateY(-8px); opacity: 0; pointer-events: none; transition: all var(--transition-base); }
   .navbar-menu.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
   .navbar-toggle { display: flex; }
   .navbar-actions .btn-sm.btn-primary { display: none; }

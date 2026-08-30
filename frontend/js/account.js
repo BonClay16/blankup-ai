@@ -167,8 +167,8 @@ function initPasswordForm() {
     const newPassword = document.getElementById('newPassword').value;
     const confirmPassword = document.getElementById('confirmPassword').value;
 
-    if (newPassword.length < 6) {
-      showToast('Mật khẩu mới cần ít nhất 6 ký tự.', 'warning');
+    if (newPassword.length < 8) {
+      showToast('Mật khẩu mới cần ít nhất 8 ký tự.', 'warning');
       return;
     }
     if (newPassword !== confirmPassword) {

@@ -2,36 +2,63 @@ const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../services/jwt.service');
 
 /**
- * authenticate — Verify JWT token and attach user to req.
+ * authenticate — Single source of truth for JWT authentication.
+ * Verifies token, queries DB for user data, attaches full user to req.
+ * Supports mock-token in dev/test ONLY (blocked in production).
  */
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, error: 'Access denied. No token provided.' });
   }
 
   const token = authHeader.split(' ')[1];
+  let userId = null;
 
-  // Legacy dev token support
+  // Mock-token: dev/test only, absolutely blocked in production
   if (token.startsWith('mock-token-')) {
-    req.user = { id: token.replace('mock-token-', ''), role: 'user' };
-    return next();
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_MOCK_TOKEN !== 'true') {
+      return res.status(401).json({ success: false, error: 'Invalid or expired token.' });
+    }
+    console.warn('[Auth] Using mock-token (dev/test only)');
+    userId = token.replace('mock-token-', '');
+  } else {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (!decoded || !decoded.userId) {
+        return res.status(401).json({ success: false, error: 'Invalid token.' });
+      }
+      userId = decoded.userId;
+    } catch (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ success: false, error: 'Token expired.' });
+      }
+      return res.status(401).json({ success: false, error: 'Invalid or expired token.' });
+    }
   }
 
+  // Always query DB for user data — JWT role is NEVER trusted alone
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!decoded || !decoded.userId) {
-      return res.status(401).json({ success: false, error: 'Invalid token.' });
+    const { getPool, sql } = require('../db');
+    const pool = getPool();
+    const result = await pool.request()
+      .input('id', sql.NVarChar, userId)
+      .query('SELECT id, username, fullName, email, avatar, provider, role FROM Users WHERE id = @id');
+
+    if (result.recordset.length === 0) {
+      return res.status(401).json({ success: false, error: 'Session expired or user not found.' });
     }
-    req.user = { id: decoded.userId, username: decoded.username, role: decoded.role || 'user' };
+
+    req.user = result.recordset[0];
     next();
   } catch (err) {
-    return res.status(401).json({ success: false, error: 'Invalid or expired token.' });
+    console.error('[Auth] Error in authenticate middleware:', err.message);
+    return res.status(500).json({ success: false, error: 'Authentication check failed.' });
   }
 }
 
 /**
- * requireAdmin — Must be authenticated + role === 'admin'.
+ * requireAdmin — Must be authenticated + role === 'admin' (from DB).
  */
 function requireAdmin(req, res, next) {
   if (!req.user) {

@@ -2925,9 +2925,19 @@ body.home-page .footer {
   }
 }
 
+/* Mobile polish — hero CTA full-width + gallery touch affordance */
+@media (max-width: 768px) {
+  .hero-btn-primary { width: 100%; max-width: 360px; justify-content: center; }
+  .hero-cta { flex-direction: column; align-items: stretch; }
+  .live-prompt { max-width: 100%; }
+}
+@media (hover: none) {
+  .gallery-card-use { opacity: 1 !important; transform: none !important; }
+}
+
 /* ============================================================
-   REDUCED MOTION — disable decorative animations
-   ============================================================ */
+    REDUCED MOTION — disable decorative animations
+    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
   .marquee-track,
   .hero-badge-dot,

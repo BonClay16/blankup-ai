@@ -33,12 +33,24 @@ describe('OTP service', () => {
     expect(typeof otpService.createVerificationCode).toBe('function');
   });
 
-  it('should export generateOtp function', () => {
-    expect(typeof otpService.generateOtp).toBe('function');
+  it('should export isAlreadyVerified function', () => {
+    expect(typeof otpService.isAlreadyVerified).toBe('function');
   });
 
-  it('generateOtp should return 6-digit string', () => {
-    const otp = otpService.generateOtp();
-    expect(otp).toMatch(/^\d{6}$/);
+  it('should export hashOtp function', () => {
+    expect(typeof otpService.hashOtp).toBe('function');
+  });
+
+  it('hashOtp should produce consistent SHA-256 hash', () => {
+    const hash1 = otpService.hashOtp('123456');
+    const hash2 = otpService.hashOtp('123456');
+    expect(hash1).toBe(hash2);
+    expect(hash1).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('hashOtp should produce different hashes for different inputs', () => {
+    const hash1 = otpService.hashOtp('123456');
+    const hash2 = otpService.hashOtp('654321');
+    expect(hash1).not.toBe(hash2);
   });
 });

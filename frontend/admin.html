@@ -96,6 +96,9 @@
         <button class="sidebar-link" data-tab="credits">
           <span class="menu-icon">07</span> <span data-i18n="admin.credits">Credits</span>
         </button>
+        <button class="sidebar-link" data-tab="reports">
+          <span class="menu-icon">08</span> <span>Báo cáo</span>
+        </button>
       </nav>
     </aside>
 
@@ -463,6 +466,98 @@
                 </tr>
               </thead>
               <tbody id="creditsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-reports">
+        <div class="panel-header">
+          <div>
+            <h2>Báo cáo định kỳ</h2>
+            <span class="panel-subtitle">Tổng hợp doanh thu, đơn hàng theo tháng / quý / năm và xuất báo cáo CSV.</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-primary btn-sm" id="reportExportBtn" type="button">Xuất báo cáo CSV</button>
+          </div>
+        </div>
+
+        <div class="filter-bar admin-order-toolbar">
+          <label style="font-weight:700;font-size:0.9rem;">Kỳ báo cáo:</label>
+          <select class="admin-select" id="reportPeriodSelect" style="min-width:160px;">
+            <option value="month">Theo tháng</option>
+            <option value="quarter">Theo quý</option>
+            <option value="year">Theo năm</option>
+          </select>
+          <label style="font-weight:700;font-size:0.9rem;">Năm:</label>
+          <select class="admin-select" id="reportYearSelect" style="min-width:120px;"></select>
+          <button class="btn btn-secondary btn-sm" id="reportLoadBtn" type="button">Xem báo cáo</button>
+          <span class="orders-result-count" id="reportResultCount"></span>
+        </div>
+
+        <div class="stats-grid" id="reportSummaryGrid" style="margin-bottom:20px;">
+          <div class="stat-card revenue-card">
+            <div class="stat-icon">VNĐ</div>
+            <div class="stat-data">
+              <span class="stat-label">Tổng doanh thu</span>
+              <h2 class="stat-value text-glow" id="report-total-revenue">0đ</h2>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">ORD</div>
+            <div class="stat-data">
+              <span class="stat-label">Tổng đơn</span>
+              <h2 class="stat-value" id="report-total-orders">0</h2>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">AVG</div>
+            <div class="stat-data">
+              <span class="stat-label">Giá trị TB</span>
+              <h2 class="stat-value" id="report-avg-value">0đ</h2>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">✓</div>
+            <div class="stat-data">
+              <span class="stat-label">Hoàn thành</span>
+              <h2 class="stat-value" id="report-completed">0</h2>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-card" style="margin-bottom:20px;">
+          <div class="card-header-flex">
+            <h3 class="card-title" id="reportChartTitle">Biểu đồ doanh thu theo kỳ</h3>
+            <span class="revenue-chart-total" id="reportChartTotal">0đ</span>
+          </div>
+          <div class="revenue-chart-wrap">
+            <svg class="revenue-chart" id="reportChart" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true"></svg>
+            <div class="revenue-chart-empty" id="reportChartEmpty">Chưa có dữ liệu cho kỳ này.</div>
+          </div>
+          <div class="revenue-chart-labels" id="reportChartLabels"></div>
+        </div>
+
+        <div class="dashboard-card">
+          <div class="card-header-flex">
+            <h3 class="card-title">Chi tiết theo kỳ</h3>
+            <span class="orders-result-count" id="reportTableCount"></span>
+          </div>
+          <div class="table-container">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Kỳ</th>
+                  <th>Tổng đơn</th>
+                  <th>Hoàn thành</th>
+                  <th>Chờ xử lý</th>
+                  <th>Đã hủy</th>
+                  <th>Doanh thu thực</th>
+                  <th>Doanh thu chờ</th>
+                  <th>TB / đơn</th>
+                </tr>
+              </thead>
+              <tbody id="reportsTableBody"></tbody>
             </table>
           </div>
         </div>

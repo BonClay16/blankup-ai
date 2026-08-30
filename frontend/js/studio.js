@@ -669,7 +669,7 @@ function initUpload() {
 
   function handleFile(file) {
     if (!file.type.startsWith('image/')) { showToast('Chỉ chấp nhận file ảnh!', 'warning'); return; }
-    if (file.size > 5 * 1024 * 1024) { showToast('File quá lớn (tối đa 5MB)!', 'warning'); return; }
+    if (file.size > 10 * 1024 * 1024) { showToast('File quá lớn (tối đa 10MB)!', 'warning'); return; }
     state.uploadedFile = file;
     const reader = new FileReader();
     reader.onload = e => { previewImg.src = e.target.result; preview.style.display = 'block'; dropzone.style.display = 'none'; };

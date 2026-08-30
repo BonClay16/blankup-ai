@@ -4,8 +4,8 @@ const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
-const { apiLimiter, authLimiter } = require('./middleware/rateLimit');
-const { errorHandler } = require('./middleware/errorHandler');
+const { apiLimiter, authLimiter, otpLimiter, aiLimiter } = require('./middleware/rateLimit');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
@@ -19,9 +19,53 @@ app.use(compression());
 // Middleware
 // ---------------------------------------------------------------------------
 
-app.use(cors());
+// ---------------------------------------------------------------------------
+// CORS — Fail-closed in production, flexible in development
+// ---------------------------------------------------------------------------
+const isProduction = process.env.NODE_ENV === 'production';
+const rawOrigins = process.env.ALLOWED_ORIGINS;
+const allowedOrigins = rawOrigins
+  ? rawOrigins.split(',').map(s => s.trim()).filter(Boolean)
+  : null;
+
+if (isProduction && (!allowedOrigins || allowedOrigins.length === 0)) {
+  console.error('[CORS] FATAL: ALLOWED_ORIGINS must be set in production. Refusing to start with open CORS.');
+  process.exit(1);
+}
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (same-origin, mobile apps, curl)
+    if (!origin) return cb(null, true);
+
+    if (allowedOrigins) {
+      // Block wildcard '*' — it must not be used with credentials
+      if (allowedOrigins.includes('*')) {
+        return cb(null, false);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      return cb(null, false);
+    }
+
+    // Development fallback: allow localhost origins only
+    const devPatterns = [/^https?:\/\/localhost(:\d+)?$/, /^https?:\/\/127\.0\.0\.1(:\d+)?$/];
+    if (devPatterns.some(p => p.test(origin))) {
+      return cb(null, true);
+    }
+    return cb(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
+  maxAge: 86400,
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Global API rate limiter
+app.use('/api/', apiLimiter);
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -34,25 +78,6 @@ app.use('/uploads', express.static(uploadsDir));
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three/build')));
 app.use('/vendor/three/examples', express.static(path.join(__dirname, 'node_modules/three/examples')));
 
-// ---------------------------------------------------------------------------
-// Block admin.html for non-localhost requests
-// ---------------------------------------------------------------------------
-app.use('/admin.html', (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress || '';
-  const isLocalhost = (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip === 'localhost'
-  );
-
-  if (!isLocalhost) {
-    console.warn(`[Security] Blocked remote access to admin.html from IP: ${ip}`);
-    return res.status(403).json({ success: false, error: 'Access denied. Admin only.' });
-  }
-  next();
-});
-
 // Serve frontend as static files
 const frontendDir = path.join(__dirname, '../frontend');
 app.use(express.static(frontendDir, { etag: false, lastModified: false, maxAge: 0 }));
@@ -64,24 +89,39 @@ app.use(express.static(frontendDir, { etag: false, lastModified: false, maxAge: 
 app.use('/api/products', require('./routes/products'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/contact', require('./routes/contact'));
+// AI generation is costly — stricter limit (fallback to noop if mocked)
+app.use('/api/ai-design/generate', aiLimiter || ((req, res, next) => next()));
+app.use('/api/ai-design/generate-from-image', aiLimiter || ((req, res, next) => next()));
 app.use('/api/ai-design', require('./routes/ai-design'));
 app.use('/api/ai-plans', require('./routes/ai-plans'));
+app.use('/api/auth/send-verification', otpLimiter);
+app.use('/api/auth/verify', otpLimiter);
+app.use('/api/auth/verify-forgot-otp', otpLimiter);
+app.use('/api/auth/forgot-password', otpLimiter);
+app.use('/api/auth/reset-password', otpLimiter);
 app.use('/api/auth', authLimiter, require('./routes/auth').router);
 app.use('/api/users', require('./routes/users'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/admin', require('./routes/admin-commerce'));
+app.use('/api/admin', require('./routes/admin-reports'));
 app.use('/api/payment', require('./routes/payment'));
 app.use('/api/stats', require('./routes/stats'));
 
+// API 404 for unknown /api routes (before SPA fallback)
+app.use('/api', notFoundHandler);
+
 // ---------------------------------------------------------------------------
-// SPA fallback
+// SPA fallback (only for non-API GET)
 // ---------------------------------------------------------------------------
 app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ success: false, error: 'Route not found.' });
+  }
   const indexPath = path.join(frontendDir, 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    res.status(404).json({ error: 'Frontend not found.' });
+    res.status(404).json({ success: false, error: 'Frontend not found.' });
   }
 });
 

@@ -28,6 +28,10 @@ const adminState = {
   selectedPreviewOrder: null,
   previewSide: 'front',
   previewShirtColor: '#ffffff',
+  reportPeriod: 'month',
+  reportYear: new Date().getFullYear(),
+  reportData: [],
+  reportSummary: null,
 };
 
 const t = (key, fallback, params) => {
@@ -84,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initVoucherTools();
   initPlanTools();
   initCreditTools();
+  initReportTools();
   loadDashboardData();
 });
 
@@ -167,6 +172,9 @@ function switchTab(tabName) {
   });
   window.scrollTo({ top: 0, behavior: 'auto' });
   document.querySelector('.admin-workspace')?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  if (tabName === 'reports' && (!adminState.reportData || adminState.reportData.length === 0)) {
+    loadReports();
+  }
 }
 
 function initOrderFilters() {
@@ -594,6 +602,248 @@ function initCreditTools() {
     const userId = document.getElementById('ca-user-id')?.value;
     if (userId) loadLedger(userId);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Reports (periodic aggregation)
+// ---------------------------------------------------------------------------
+
+function initReportTools() {
+  const periodSelect = document.getElementById('reportPeriodSelect');
+  const yearSelect = document.getElementById('reportYearSelect');
+  const loadBtn = document.getElementById('reportLoadBtn');
+  const exportBtn = document.getElementById('reportExportBtn');
+
+  if (!periodSelect || !yearSelect) return;
+
+  // Populate year options: 2020 .. current+1
+  const currentYear = new Date().getFullYear();
+  yearSelect.innerHTML = '';
+  for (let y = currentYear + 1; y >= 2020; y--) {
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = String(y);
+    if (y === currentYear) opt.selected = true;
+    yearSelect.appendChild(opt);
+  }
+  adminState.reportPeriod = periodSelect.value;
+  adminState.reportYear = Number(yearSelect.value);
+
+  periodSelect.addEventListener('change', () => {
+    adminState.reportPeriod = periodSelect.value;
+    const isYear = periodSelect.value === 'year';
+    // For year period, year filter means "all years" if we hide it; but keep visible for flexibility.
+    // Disable year selector when showing all years? We'll keep enabled but export will omit year for year period.
+    yearSelect.parentElement.style.opacity = isYear ? '0.6' : '1';
+    yearSelect.title = isYear ? 'Khi chọn Theo năm, hệ thống sẽ hiển thị tất cả các năm (bỏ qua năm được chọn) — có thể chọn năm cụ thể rồi bấm Xuất để lọc 1 năm.' : '';
+    loadReports();
+  });
+
+  yearSelect.addEventListener('change', () => {
+    adminState.reportYear = Number(yearSelect.value);
+    if (document.getElementById('panel-reports')?.classList.contains('active')) {
+      loadReports();
+    }
+  });
+
+  loadBtn?.addEventListener('click', loadReports);
+  exportBtn?.addEventListener('click', exportReportsCsv);
+
+  // Auto-load when switching to reports tab (first time)
+  const reportsTabBtn = document.querySelector('.sidebar-link[data-tab="reports"]');
+  reportsTabBtn?.addEventListener('click', () => {
+    if (!adminState.reportData || adminState.reportData.length === 0) {
+      loadReports();
+    }
+  });
+}
+
+async function loadReports() {
+  const period = document.getElementById('reportPeriodSelect')?.value || adminState.reportPeriod || 'month';
+  const yearVal = document.getElementById('reportYearSelect')?.value;
+  const year = yearVal ? Number(yearVal) : null;
+
+  adminState.reportPeriod = period;
+  adminState.reportYear = year;
+
+  const params = new URLSearchParams();
+  params.set('period', period);
+  // For month/quarter, year is required; for year, omit to get all years
+  if (period !== 'year' && year) {
+    params.set('year', String(year));
+  }
+
+  const loadBtn = document.getElementById('reportLoadBtn');
+  const countEl = document.getElementById('reportResultCount');
+  if (loadBtn) { loadBtn.disabled = true; loadBtn.textContent = 'Đang tải...'; }
+  if (countEl) countEl.textContent = 'Đang tải...';
+
+  try {
+    const res = await fetch(`${API_ADMIN}/reports?${params.toString()}`, { headers: auth.getAuthHeaders() });
+    const data = await res.json();
+    if (!res.ok || data.success === false) throw new Error(data.error || 'Không thể tải báo cáo.');
+
+    adminState.reportData = data.data || [];
+    adminState.reportSummary = data.summary || null;
+
+    renderReportSummary(data.summary, period);
+    renderReportChart(data.data, period, data.year);
+    renderReportsTable(data.data, period);
+
+    const totalLabel = period === 'month' ? `Năm ${data.year} · 12 tháng` : period === 'quarter' ? `Năm ${data.year} · 4 quý` : `${data.data.length} năm`;
+    if (countEl) countEl.textContent = `${data.data.length} kỳ · ${totalLabel}`;
+    if (document.getElementById('reportTableCount')) {
+      document.getElementById('reportTableCount').textContent = `${data.data.length} kỳ`;
+    }
+  } catch (err) {
+    console.error('[Reports] load error:', err);
+    showAdminToast(err.message || 'Lỗi tải báo cáo.', 'error');
+    if (countEl) countEl.textContent = 'Lỗi tải';
+    const tbody = document.getElementById('reportsTableBody');
+    if (tbody) tbody.innerHTML = renderEmptyRow(8, err.message || 'Không thể tải báo cáo.');
+  } finally {
+    if (loadBtn) { loadBtn.disabled = false; loadBtn.textContent = 'Xem báo cáo'; }
+  }
+}
+
+function renderReportSummary(summary, period) {
+  if (!summary) return;
+  setText('report-total-revenue', formatMoney(summary.totalRevenue || 0));
+  setText('report-total-orders', String(summary.totalOrdersCount || 0));
+  setText('report-avg-value', formatMoney(summary.averageOrderValue || 0));
+  setText('report-completed', String(summary.completedCount || 0));
+}
+
+function renderReportChart(data, period, year) {
+  const svg = document.getElementById('reportChart');
+  const empty = document.getElementById('reportChartEmpty');
+  const labelsEl = document.getElementById('reportChartLabels');
+  const totalEl = document.getElementById('reportChartTotal');
+  if (!svg || !labelsEl) return;
+
+  if (!data || data.length === 0) {
+    svg.innerHTML = '';
+    if (labelsEl) labelsEl.innerHTML = '';
+    if (totalEl) totalEl.textContent = formatMoney(0);
+    if (empty) empty.style.display = 'flex';
+    return;
+  }
+
+  const values = data.map(d => Number(d.totalRevenue || 0));
+  const total = values.reduce((a, b) => a + b, 0);
+  if (totalEl) totalEl.textContent = formatMoney(total);
+  if (total === 0) {
+    if (empty) empty.style.display = 'flex';
+  } else {
+    if (empty) empty.style.display = 'none';
+  }
+
+  // Build labels
+  let labels = [];
+  if (period === 'month') {
+    labels = data.map(d => `T${d.month}`);
+  } else if (period === 'quarter') {
+    labels = data.map(d => `Q${d.quarter}`);
+  } else {
+    labels = data.map(d => String(d.year));
+  }
+  labelsEl.innerHTML = labels.map(l => `<span class="revenue-chart-label">${escapeHtml(l)}</span>`).join('');
+
+  // Render chart (same style as revenueChart)
+  const W = 600, H = 200, PAD_L = 8, PAD_R = 8, PAD_T = 14, PAD_B = 8;
+  const n = data.length;
+  const max = Math.max(...values, 1);
+  const px = (i) => PAD_L + (n === 1 ? (W - PAD_L - PAD_R) / 2 : (i * (W - PAD_L - PAD_R)) / (n - 1));
+  const py = (v) => H - PAD_B - (v / max) * (H - PAD_T - PAD_B);
+  const line = values.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const area = `${PAD_L},${H - PAD_B} ${line} ${W - PAD_R},${H - PAD_B}`;
+
+  // Title
+  const titleEl = document.getElementById('reportChartTitle');
+  if (titleEl) {
+    if (period === 'month') titleEl.textContent = `Doanh thu theo tháng — ${year}`;
+    else if (period === 'quarter') titleEl.textContent = `Doanh thu theo quý — ${year}`;
+    else titleEl.textContent = 'Doanh thu theo năm';
+  }
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="repFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#b43e12" stop-opacity="0.28"/>
+        <stop offset="100%" stop-color="#b43e12" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    ${[0.25, 0.5, 0.75, 1].map(f => `<line x1="${PAD_L}" x2="${W - PAD_R}" y1="${py(max * f).toFixed(1)}" y2="${py(max * f).toFixed(1)}" stroke="#e7e2d6" stroke-width="1"/>`).join('')}
+    ${values.map((v, i) => v > 0 ? `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.5" fill="#b43e12"/>` : '').join('')}
+    <polygon points="${area}" fill="url(#repFill)"/>
+    <polyline points="${line}" fill="none" stroke="#b43e12" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  `;
+}
+
+function renderReportsTable(data, period) {
+  const tbody = document.getElementById('reportsTableBody');
+  if (!tbody) return;
+  if (!data || data.length === 0) {
+    tbody.innerHTML = renderEmptyRow(8, 'Chưa có dữ liệu cho kỳ này.');
+    return;
+  }
+  tbody.innerHTML = data.map(row => {
+    const periodLabel = escapeHtml(row.label || row.periodKey || '-');
+    return `
+      <tr>
+        <td><span class="table-primary">${periodLabel}</span><div class="row-muted">${escapeHtml(row.periodKey || '')}</div></td>
+        <td class="center-cell"><strong>${Number(row.totalOrdersCount || 0)}</strong></td>
+        <td class="center-cell"><span class="badge badge-completed">${Number(row.completedCount || 0)}</span></td>
+        <td class="center-cell"><span class="badge badge-pending">${Number(row.pendingCount || 0)}</span></td>
+        <td class="center-cell"><span class="badge badge-cancelled">${Number(row.cancelledCount || 0)}</span></td>
+        <td><span class="money-cell">${formatMoney(row.totalRevenue || 0)}</span></td>
+        <td><span class="money-cell">${formatMoney(row.pendingRevenue || 0)}</span></td>
+        <td><span class="money-cell">${formatMoney(row.averageOrderValue || 0)}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function exportReportsCsv() {
+  const period = document.getElementById('reportPeriodSelect')?.value || adminState.reportPeriod || 'month';
+  const yearVal = document.getElementById('reportYearSelect')?.value;
+  const year = yearVal ? Number(yearVal) : null;
+  const params = new URLSearchParams();
+  params.set('period', period);
+  if (period !== 'year' && year) params.set('year', String(year));
+  // For year period with specific year, allow filtering: if user wants single year export, include year
+  // We'll include year if period==year and user selected a year explicitly (and not showing all). But current UI for year shows all, so omit.
+  // If user switched to year and wants single year, they can still export all and filter; keep simple.
+
+  const btn = document.getElementById('reportExportBtn');
+  if (btn) { btn.disabled = true; const old = btn.textContent; btn.textContent = 'Đang xuất...'; btn.dataset.old = old; }
+
+  try {
+    const res = await fetch(`${API_ADMIN}/reports/export?${params.toString()}`, { headers: auth.getAuthHeaders() });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Xuất báo cáo thất bại.');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const disposition = res.headers.get('content-disposition') || '';
+    let filename = `blankup-report-${period}-${year || 'all'}.csv`;
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match) filename = match[1];
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showAdminToast('Đã xuất báo cáo CSV.');
+  } catch (err) {
+    console.error('[Reports] export error:', err);
+    showAdminToast(err.message || 'Lỗi xuất báo cáo.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.old || 'Xuất báo cáo CSV'; }
+  }
 }
 
 function renderCreditsList() {

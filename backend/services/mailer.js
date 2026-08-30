@@ -2,11 +2,8 @@
 /**
  * Blankup Mailer — thin wrapper around nodemailer.
  *
- * If SMTP_HOST/SMTP_USER/SMTP_PASS are set, emails are sent for real.
- * Otherwise (local dev, or a server that hasn't been configured yet),
- * the email is printed to the console instead of failing — this keeps
- * flows like "forgot password" testable without a mail provider, while
- * still making it obvious in the logs that nothing was actually delivered.
+ * Production: requires SMTP_HOST/SMTP_USER/SMTP_PASS. Fails with clear error if not configured.
+ * Development: falls back to console logging for testability without a mail provider.
  */
 
 const nodemailer = require('nodemailer');
@@ -16,6 +13,10 @@ let loggedMissingConfigWarning = false;
 
 function isConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+function isProduction() {
+  return process.env.NODE_ENV === 'production';
 }
 
 function getTransporter() {
@@ -33,11 +34,22 @@ function getTransporter() {
 }
 
 /**
- * Sends an email. Never throws — logs the error and returns
- * { sent: false } instead, so a mail outage never crashes a request.
+ * Sends an email.
+ *
+ * Production: throws if SMTP not configured (fail-closed).
+ * Development: logs to console if SMTP not configured (for testability).
+ *
+ * Returns { sent: true } on success, { sent: false, reason } on failure.
  */
 async function sendMail({ to, subject, html, text }) {
   if (!isConfigured()) {
+    if (isProduction()) {
+      // Production: fail-closed — do not send fake success
+      console.error('[Mailer] CRITICAL: SMTP_HOST/SMTP_USER/SMTP_PASS not set in production!');
+      throw new Error('Email service not configured. Cannot send email in production.');
+    }
+
+    // Development/test: log to console for testability
     if (!loggedMissingConfigWarning) {
       console.warn('[Mailer] ⚠️  SMTP_HOST/SMTP_USER/SMTP_PASS not set — emails will be logged to the console instead of delivered.');
       console.warn('[Mailer] ⚠️  Set these in backend/.env before deploying to production (see .env.example).');
