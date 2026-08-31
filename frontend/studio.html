@@ -646,12 +646,29 @@
   <!-- Scripts -->
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/toast.js"></script>
   <script>
     (function() {
-      if (!auth.isLoggedIn()) {
-        /* Not logged in → block studio with auth modal */
-        document.getElementById('authRequiredModal').style.display = 'flex';
-        document.body.style.overflow = 'hidden';
+      function isExpired(token){
+        try{
+          const p=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+          if(p.exp && Date.now() >= p.exp*1000) return true;
+        }catch{}
+        return false;
+      }
+      const hasAuth = typeof auth !== 'undefined' && auth;
+      const logged = hasAuth && auth.isLoggedIn() && !isExpired(auth.token||'');
+      if (!logged) {
+        // Entry guard: show modal immediately; toast will be handled by studio.js checkStudioAuthOnEntry (deduped)
+        const m=document.getElementById('authRequiredModal');
+        if(m){ m.style.display='flex'; document.body.style.overflow='hidden'; }
+        // Ensure toast appears even if studio.js not yet loaded (fallback)
+        setTimeout(()=>{
+          if(window.showToast && !window._studioAuthPromptShown){
+            window.showToast('Vui lòng đăng nhập để sử dụng Studio.', 'warning', 5000);
+            window._studioAuthPromptShown = true;
+          }
+        }, 250);
       } else {
         document.documentElement.dataset.trial = 'false';
       }

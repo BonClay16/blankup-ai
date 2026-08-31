@@ -41,8 +41,9 @@ function parseYear(value, allowEmpty = false) {
 }
 
 function getOrderTotal(order) {
-  if (order.total != null) return Number(order.total);
+  // Prefer finalPrice (after voucher), then total, then price*qty — keep in sync with admin.js.
   if (order.finalPrice != null) return Number(order.finalPrice);
+  if (order.total != null) return Number(order.total);
   const price = Number(order.price || 0);
   const qty = Number(order.quantity || 1);
   return price * qty;
@@ -320,10 +321,15 @@ router.get('/reports/export', authenticate, requireAdmin, (req, res) => {
       }
     }
 
-    // Build CSV
+    // CSV — OWASP CSV Injection guard: label cells starting with = + - @ or tab/pipe are escaped as "'<value>".
+    function csvTextCell(label) {
+      const raw = String(label ?? '');
+      if (/^[=+\-@\t|]/.test(raw)) return `"'${raw.replace(/"/g, '""')}"`;
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
     const headers = ['period', 'periodKey', 'totalOrders', 'completed', 'pending', 'cancelled', 'totalRevenue', 'pendingRevenue', 'paidRevenue', 'awaitingRevenue', 'averageOrderValue'];
     const rows = data.map((b) => [
-      `"${b.label}"`,
+      csvTextCell(b.label),
       b.periodKey,
       b.totalOrdersCount,
       b.completedCount,
@@ -338,7 +344,7 @@ router.get('/reports/export', authenticate, requireAdmin, (req, res) => {
 
     const summary = buildSummary(data);
     const summaryRow = [
-      '"Tong hop"',
+      csvTextCell('Tong hop'),
       'summary',
       summary.totalOrdersCount,
       summary.completedCount,

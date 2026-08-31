@@ -71,6 +71,52 @@ function requireAdmin(req, res, next) {
 }
 
 /**
+ * optionalAuthenticate — try to authenticate if a Bearer token is present.
+ * On success: req.user is set (same as authenticate).
+ * On missing token: req.user stays null/undefined, continues to next handler.
+ * On invalid token: req.user stays null/undefined, continues (does NOT 401).
+ * Use when the route supports both guest and authenticated flows.
+ */
+async function optionalAuthenticate(req, _res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+  const token = authHeader.split(' ')[1];
+  if (!token) return next();
+
+  let userId = null;
+
+  if (token.startsWith('mock-token-')) {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_MOCK_TOKEN !== 'true') {
+      return next();
+    }
+    userId = token.replace('mock-token-', '');
+  } else {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (!decoded || !decoded.userId) return next();
+      userId = decoded.userId;
+    } catch {
+      return next();
+    }
+  }
+
+  try {
+    const { getPool, sql } = require('../db');
+    const pool = getPool();
+    const result = await pool.request()
+      .input('id', sql.NVarChar, userId)
+      .query('SELECT id, username, fullName, email, avatar, provider, role FROM Users WHERE id = @id');
+    if (result.recordset.length === 0) return next();
+    req.user = result.recordset[0];
+  } catch {
+    // Demo mode / DB unavailable — do not block guest order
+  }
+  next();
+}
+
+/**
  * localhostOnly — IP must be localhost.
  */
 function localhostOnly(req, res, next) {
@@ -87,4 +133,4 @@ function localhostOnly(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, requireAdmin, localhostOnly };
+module.exports = { authenticate, requireAdmin, localhostOnly, optionalAuthenticate };

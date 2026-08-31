@@ -48,6 +48,17 @@ const t = (key, fallback, params) => {
   return text;
 };
 
+const _busy = new Set();
+function busyGuard(key) { if (_busy.has(key)) return true; _busy.add(key); return false; }
+function busyRelease(key) { _busy.delete(key); }
+function setBusyBtn(btn, busy, text) {
+  if (!btn) return function () {};
+  const prev = btn.textContent;
+  btn.disabled = !!busy;
+  if (text) btn.textContent = busy ? text : prev;
+  return function () { btn.disabled = false; btn.textContent = prev; };
+}
+
 const STATUS_META = {
   pending: { label: () => t('admin.filter.pending', 'Đang xử lý'), cls: 'badge-pending' },
   awaiting_payment: { label: () => t('admin.filter.awaitingPayment', 'Chờ thanh toán'), cls: 'badge-awaiting-payment' },
@@ -305,12 +316,19 @@ function renderVouchersList() {
       const id = btn.dataset.id;
       const voucher = adminState.vouchers.find(v => v.id === id);
       if (!voucher) return;
-
-      if (action === 'edit-voucher') openVoucherModal(voucher);
-      if (action === 'toggle-voucher') await updateVoucher(id, { status: voucher.status === 'active' ? 'disabled' : 'active' });
-      if (action === 'delete-voucher') {
-        if (!confirm(t('admin.confirm.deleteVoucher', 'Xóa voucher "{code}"?', { code: voucher.code }))) return;
-        await deleteVoucher(id);
+      const busyKey = `${action}-${id}`;
+      if (busyGuard(busyKey)) return;
+      btn.disabled = true;
+      try {
+        if (action === 'edit-voucher') openVoucherModal(voucher);
+        if (action === 'toggle-voucher') await updateVoucher(id, { status: voucher.status === 'active' ? 'disabled' : 'active', expectedUpdatedAt: voucher.updatedAt });
+        if (action === 'delete-voucher') {
+          if (!confirm(t('admin.confirm.deleteVoucher', 'Xóa voucher "{code}"?', { code: voucher.code }))) return;
+          await deleteVoucher(id, voucher.updatedAt);
+        }
+      } finally {
+        busyRelease(busyKey);
+        btn.disabled = false;
       }
     });
   });
@@ -347,7 +365,11 @@ function openVoucherModal(voucher) {
 
 async function saveVoucher(event) {
   event.preventDefault();
+  if (busyGuard('saveVoucher')) return;
+  const btn = document.getElementById('voucherSubmitBtn') || document.querySelector('#voucherFormModal button[type="submit"]');
+  const releaseBtn = btn ? (btn.disabled = true, btn.textContent = 'Đang lưu…', function(){ btn.disabled=false; btn.textContent='Lưu voucher'; }) : function(){};
   const editId = document.getElementById('vf-edit-id').value;
+  const existingVoucher = editId ? adminState.vouchers.find(v => v.id === editId) : null;
   const payload = {
     code: document.getElementById('vf-code').value.trim(),
     title: document.getElementById('vf-title').value.trim(),
@@ -365,6 +387,7 @@ async function saveVoucher(event) {
     startsAt: document.getElementById('vf-starts-at').value ? new Date(document.getElementById('vf-starts-at').value).toISOString() : null,
     expiresAt: document.getElementById('vf-expires-at').value ? new Date(document.getElementById('vf-expires-at').value).toISOString() : null,
     internalNote: document.getElementById('vf-internal-note').value.trim() || null,
+    ...(existingVoucher && existingVoucher.updatedAt ? { expectedUpdatedAt: existingVoucher.updatedAt } : {}),
   };
 
   try {
@@ -383,14 +406,15 @@ async function saveVoucher(event) {
   } catch (err) {
     console.error('Voucher save error:', err);
     showAdminToast(err.message || t('admin.err.voucherSave', 'Lỗi lưu voucher.'), 'error');
-  }
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
+  } finally { busyRelease('saveVoucher'); releaseBtn(); }
 }
 
 async function updateVoucher(id, patch) {
   try {
     const response = await fetch(`${API_ADMIN}/vouchers/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      headers: auth.getAuthHeaders(),
+      headers: { ...auth.getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
     const data = await response.json();
@@ -400,14 +424,16 @@ async function updateVoucher(id, patch) {
   } catch (err) {
     console.error('Voucher update error:', err);
     showAdminToast(err.message || t('admin.err.voucherUpdate', 'Lỗi cập nhật voucher.'), 'error');
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
   }
 }
 
-async function deleteVoucher(id) {
+async function deleteVoucher(id, expectedUpdatedAt) {
   try {
     const response = await fetch(`${API_ADMIN}/vouchers/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: auth.getAuthHeaders(),
+      headers: { ...auth.getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: expectedUpdatedAt ? JSON.stringify({ expectedUpdatedAt }) : undefined,
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || t('admin.err.voucherDelete', 'Không thể xóa voucher.'));
@@ -416,6 +442,7 @@ async function deleteVoucher(id) {
   } catch (err) {
     console.error('Voucher delete error:', err);
     showAdminToast(err.message || t('admin.err.voucherDelete', 'Lỗi xóa voucher.'), 'error');
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
   }
 }
 
@@ -481,12 +508,19 @@ function renderPlansList() {
       const id = btn.dataset.id;
       const plan = adminState.plans.find(p => p.id === id);
       if (!plan) return;
-
-      if (action === 'edit-plan') openPlanModal(plan);
-      if (action === 'toggle-plan') await updatePlan(id, { isActive: plan.isActive ? 0 : 1 });
-      if (action === 'delete-plan') {
-        if (!confirm(t('admin.confirm.deletePlan', 'Xóa gói "{name}"?', { name: plan.name }))) return;
-        await deletePlan(id);
+      const busyKey = `${action}-${id}`;
+      if (busyGuard(busyKey)) return;
+      btn.disabled = true;
+      try {
+        if (action === 'edit-plan') openPlanModal(plan);
+        if (action === 'toggle-plan') await updatePlan(id, { isActive: plan.isActive ? 0 : 1, expectedUpdatedAt: plan.updatedAt });
+        if (action === 'delete-plan') {
+          if (!confirm(t('admin.confirm.deletePlan', 'Xóa gói "{name}"?', { name: plan.name }))) return;
+          await deletePlan(id, plan.updatedAt);
+        }
+      } finally {
+        busyRelease(busyKey);
+        btn.disabled = false;
       }
     });
   });
@@ -518,7 +552,11 @@ function openPlanModal(plan) {
 
 async function savePlan(event) {
   event.preventDefault();
+  if (busyGuard('savePlan')) return;
+  const _planBtn = document.getElementById('planSubmitBtn') || document.querySelector('#planFormModal button[type="submit"]');
+  const _relPlan = _planBtn ? (_planBtn.disabled=true, _planBtn.textContent='Đang lưu…', function(){ _planBtn.disabled=false; _planBtn.textContent='Lưu gói'; }) : function(){};
   const editId = document.getElementById('pf-edit-id').value;
+  const existingPlan = editId ? adminState.plans.find(p => p.id === editId) : null;
   const payload = {
     code: document.getElementById('pf-code').value.trim(),
     name: document.getElementById('pf-name').value.trim(),
@@ -532,6 +570,7 @@ async function savePlan(event) {
     isPaid: document.getElementById('pf-is-paid').checked ? 1 : 0,
     isComebackOffer: document.getElementById('pf-is-comeback').checked ? 1 : 0,
     comebackWindowDays: document.getElementById('pf-comeback-days').value ? Number(document.getElementById('pf-comeback-days').value) : null,
+    ...(existingPlan && existingPlan.updatedAt ? { expectedUpdatedAt: existingPlan.updatedAt } : {}),
   };
 
   try {
@@ -550,14 +589,15 @@ async function savePlan(event) {
   } catch (err) {
     console.error('Plan save error:', err);
     showAdminToast(err.message || t('admin.err.planSave', 'Lỗi lưu gói.'), 'error');
-  }
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
+  } finally { busyRelease('savePlan'); _relPlan(); }
 }
 
 async function updatePlan(id, patch) {
   try {
     const response = await fetch(`${API_ADMIN}/plans/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      headers: auth.getAuthHeaders(),
+      headers: { ...auth.getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
     const data = await response.json();
@@ -567,14 +607,16 @@ async function updatePlan(id, patch) {
   } catch (err) {
     console.error('Plan update error:', err);
     showAdminToast(err.message || t('admin.err.planUpdate', 'Lỗi cập nhật gói.'), 'error');
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
   }
 }
 
-async function deletePlan(id) {
+async function deletePlan(id, expectedUpdatedAt) {
   try {
     const response = await fetch(`${API_ADMIN}/plans/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: auth.getAuthHeaders(),
+      headers: { ...auth.getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: expectedUpdatedAt ? JSON.stringify({ expectedUpdatedAt }) : undefined,
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || t('admin.err.planDelete', 'Không thể xóa gói.'));
@@ -583,6 +625,7 @@ async function deletePlan(id) {
   } catch (err) {
     console.error('Plan delete error:', err);
     showAdminToast(err.message || t('admin.err.planDelete', 'Lỗi xóa gói.'), 'error');
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
   }
 }
 
@@ -955,6 +998,9 @@ async function loadLedger(userId) {
 
 async function saveCreditAdjust(event) {
   event.preventDefault();
+  if (busyGuard('saveCreditAdjust')) return;
+  var _caBtn = document.querySelector('#creditAdjustForm button[type="submit"]');
+  var _relCa = _caBtn ? (_caBtn.disabled=true, _caBtn.textContent='Đang xử lý…', function(){ _caBtn.disabled=false; _caBtn.textContent='Điều chỉnh'; }) : function(){};
   const payload = {
     userId: document.getElementById('ca-user-id').value,
     creditType: document.getElementById('ca-credit-type').value,
@@ -1266,27 +1312,41 @@ function renderOrderRow(order, compact = false) {
 
 function bindRowActions(container) {
   container.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', (event) => {
+    btn.addEventListener('click', async (event) => {
       event.stopPropagation();
       const action = btn.dataset.action;
       const orderId = btn.dataset.id;
-      if (action === 'complete') updateOrderStatus(orderId, 'completed');
-      if (action === 'ship') updateOrderStatus(orderId, 'shipped');
-      if (action === 'deliver') updateOrderStatus(orderId, 'delivered');
-      if (action === 'mark-paid') markOrderPaid(orderId);
-      if (action === 'copy-transfer') copyTransferContent(orderId);
-      if (action === 'cancel' && confirm(t('admin.confirm.cancelOrder', 'Bạn chắc chắn muốn hủy đơn hàng này?'))) {
-        updateOrderStatus(orderId, 'cancelled');
+      if (action === 'preview' || action === 'copy-transfer') {
+        if (action === 'copy-transfer') copyTransferContent(orderId);
+        if (action === 'preview') openPreviewModal(orderId);
+        return;
       }
-      if (action === 'preview') openPreviewModal(orderId);
+      const busyKey = `order-${action}-${orderId}`;
+      if (busyGuard(busyKey)) return;
+      const prevDisabled = btn.disabled;
+      btn.disabled = true;
+      try {
+        if (action === 'complete') await updateOrderStatus(orderId, 'completed');
+        if (action === 'ship') await updateOrderStatus(orderId, 'shipped');
+        if (action === 'deliver') await updateOrderStatus(orderId, 'delivered');
+        if (action === 'mark-paid') await markOrderPaid(orderId);
+        if (action === 'cancel' && confirm(t('admin.confirm.cancelOrder', 'Bạn chắc chắn muốn hủy đơn hàng này?'))) {
+          await updateOrderStatus(orderId, 'cancelled');
+        }
+      } finally {
+        busyRelease(busyKey);
+        btn.disabled = prevDisabled;
+      }
     });
   });
 }
 
 async function markOrderPaid(orderId) {
+  const busyKey = `order-paid-${orderId}`;
+  if (busyGuard(busyKey)) return;
   const order = adminState.orders.find(item => item.orderId === orderId);
-  if (!order) return;
-  if (!confirm(t('admin.confirm.markPaid', 'Xác nhận đã nhận {amount} cho đơn {orderId}?', { amount: formatMoney(getOrderTotal(order)), orderId }))) return;
+  if (!order) { busyRelease(busyKey); return; }
+  if (!confirm(t('admin.confirm.markPaid', 'Xác nhận đã nhận {amount} cho đơn {orderId}?', { amount: formatMoney(getOrderTotal(order)), orderId }))) { busyRelease(busyKey); return; }
 
   try {
     const response = await fetch(`${API_ORDERS}/${encodeURIComponent(orderId)}/payment`, {
@@ -1307,7 +1367,7 @@ async function markOrderPaid(orderId) {
   } catch (err) {
     console.error('Payment update error:', err);
     showAdminToast(err.message || t('admin.err.markPaid', 'Không thể xác nhận thanh toán.'), 'error');
-  }
+  } finally { busyRelease(busyKey); }
 }
 
 async function copyTransferContent(orderId) {
@@ -1495,6 +1555,8 @@ function renderDesignsGrid() {
 }
 
 async function toggleDesignVisibility(designId, nextIsShared) {
+  const busyKey = `design-visibility-${designId}`;
+  if (busyGuard(busyKey)) return;
   try {
     const response = await fetch(`${API_ADMIN}/designs/${encodeURIComponent(designId)}/visibility`, {
       method: 'PUT',
@@ -1511,10 +1573,12 @@ async function toggleDesignVisibility(designId, nextIsShared) {
     showAdminToast(nextIsShared ? t('admin.toast.designShown', 'Đã hiện lại thiết kế trên thư viện.') : t('admin.toast.designHidden', 'Đã ẩn thiết kế khỏi thư viện.'));
   } catch (err) {
     showAdminToast(err.message || t('admin.err.designToggle', 'Không thể cập nhật trạng thái thiết kế.'), 'error');
-  }
+  } finally { busyRelease(busyKey); }
 }
 
 async function updateOrderStatus(orderId, newStatus) {
+  const busyKey = `order-status-${orderId}`;
+  if (busyGuard(busyKey)) return;
   try {
     const response = await fetch(`${API_ORDERS}/${encodeURIComponent(orderId)}/status`, {
       method: 'PUT',
@@ -1532,7 +1596,8 @@ async function updateOrderStatus(orderId, newStatus) {
   } catch (err) {
     console.error('Order status error:', err);
     showAdminToast(err.message || t('admin.err.orderUpdate', 'Lỗi cập nhật đơn hàng.'), 'error');
-  }
+    if (String(err.message).includes('chỉnh sửa bởi người khác')) await loadDashboardData();
+  } finally { busyRelease(busyKey); }
 }
 
 function openPreviewModal(orderId) {
@@ -1642,11 +1707,13 @@ function populateStatusSelect(selectEl, currentStatus) {
 }
 
 async function savePreviewStatus() {
+  const busyKey = `preview-status-${adminState.selectedPreviewOrder?.orderId}`;
+  if (busyGuard(busyKey)) return;
   const order = adminState.selectedPreviewOrder;
   const selectEl = document.getElementById('prev-status-select');
-  if (!order || !selectEl) return;
+  if (!order || !selectEl) { busyRelease(busyKey); return; }
   const newStatus = selectEl.value;
-  if (newStatus === order.status) return;
+  if (newStatus === order.status) { busyRelease(busyKey); return; }
 
   try {
     const response = await fetch(`${API_ORDERS}/${encodeURIComponent(order.orderId)}/status`, {
@@ -1666,7 +1733,7 @@ async function savePreviewStatus() {
   } catch (err) {
     console.error('Order status error:', err);
     showAdminToast(err.message || t('admin.err.orderUpdate', 'Lỗi cập nhật đơn hàng.'), 'error');
-  }
+  } finally { busyRelease(busyKey); }
 }
 
 function updateAdminMockupColor() {
@@ -1741,9 +1808,7 @@ function setText(id, value) {
   if (el) el.textContent = value;
 }
 
-function showAdminToast() {
-  /* Toasts removed globally. Keep signature for existing call sites. */
-}
+/* showAdminToast → js/toast.js (window.showAdminToast) */
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({

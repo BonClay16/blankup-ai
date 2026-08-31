@@ -2,8 +2,25 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const { readJson, writeJson, withLock } = require('../utils/fileStore');
+// O-04: Rate limit for order creation (backward-compatible with test mocks that lack orderLimiter)
+// Skips limiter for legitimate idempotent retries (same Idempotency-Key + same body)
+function _orderRateLimit(req, res, next) {
+  try {
+    const idempotencyKey = req.headers['idempotency-key'];
+    if (idempotencyKey) {
+      const bodyHash = hashBody(req.body || {});
+      const entry = idempotencyStore.get(idempotencyKey);
+      if (entry && entry.bodyHash === bodyHash) {
+        return next(); // idempotent retry — do not count against rate limit
+      }
+    }
+    const rl = require('../middleware/rateLimit');
+    if (rl && typeof rl.orderLimiter === 'function') return rl.orderLimiter(req, res, next);
+  } catch {}
+  return next();
+}
 const { getPool, sql } = require('../db');
 
 const router = express.Router();
@@ -74,13 +91,17 @@ router.get('/', authenticate, (req, res) => {
   }
 });
 
+const VALID_PRODUCT_TYPES = new Set(['tshirt', 'oversize', 'polo', 'hoodie']);
+
 // ---------------------------------------------------------------------------
 // POST /api/orders
 // Create a new order — mutex-protected, idempotent, backend is source of truth
+// P1 fixes: O-02 (reject unknown productType), O-01/S-02 (auth-derived userId),
+// P-04 (voucher validation+redemption inside mutex)
 // ---------------------------------------------------------------------------
-router.post('/', async (req, res) => {
+router.post('/', _orderRateLimit, optionalAuthenticate, async (req, res) => {
   try {
-    const { designUrl, productType, color, size, quantity, customer, payment, userId, authorName, voucherCode } = req.body;
+    const { designUrl, productType, color, size, quantity, customer, payment, userId: bodyUserId, authorName, voucherCode } = req.body;
 
     if (!customer || !customer.name || !customer.phone || !customer.address) {
       return res.status(400).json({ success: false, error: 'Họ tên, SĐT và địa chỉ nhận hàng là bắt buộc.' });
@@ -90,102 +111,124 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Kiểu áo, kích cỡ và số lượng là bắt buộc.' });
     }
 
+    // O-02: Reject unknown productType — never silently fallback
+    const normalizedType = String(productType).trim().toLowerCase();
+    if (!VALID_PRODUCT_TYPES.has(normalizedType)) {
+      return res.status(400).json({ success: false, error: `Kiểu áo không hợp lệ. Cho phép: ${[...VALID_PRODUCT_TYPES].join(', ')}.` });
+    }
+
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty < 1 || qty > 100) {
       return res.status(400).json({ success: false, error: 'Số lượng phải là số nguyên từ 1 đến 100.' });
     }
 
-    // Price is ALWAYS from backend — never trust client
-    const basePrice = PRODUCT_PRICES[productType.toLowerCase()] || 250000;
-    const totalPrice = basePrice * qty;
-
-    // Voucher handling — inside mutex to prevent check-then-act race
-    let discountAmount = 0;
-    let voucher = null;
-    if (voucherCode) {
-      const code = String(voucherCode).trim().toUpperCase();
-      try {
-        const pool = getPool();
-        const vRes = await pool.request()
-          .input('code', sql.NVarChar, code)
-          .query('SELECT * FROM Vouchers WHERE code = @code');
-        if (vRes.recordset.length === 0) {
-          return res.status(400).json({ success: false, error: 'Mã voucher không tồn tại.' });
-        }
-        voucher = vRes.recordset[0];
-        if (voucher.status !== 'active') {
-          return res.status(400).json({ success: false, error: 'Voucher không hoạt động.' });
-        }
-        const now = new Date();
-        if (voucher.startsAt && new Date(voucher.startsAt) > now) {
-          return res.status(400).json({ success: false, error: 'Voucher chưa bắt đầu.' });
-        }
-        if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
-          return res.status(400).json({ success: false, error: 'Voucher đã hết hạn.' });
-        }
-        if (!['all', 'order'].includes(voucher.appliesTo)) {
-          return res.status(400).json({ success: false, error: 'Voucher không áp dụng cho đơn hàng.' });
-        }
-        if (voucher.minOrderAmount && totalPrice < voucher.minOrderAmount) {
-          return res.status(400).json({ success: false, error: `Đơn tối thiểu ${voucher.minOrderAmount.toLocaleString('vi-VN')}đ để dùng voucher.` });
-        }
-        if (voucher.totalUsageLimit && voucher.usedCount >= voucher.totalUsageLimit) {
-          return res.status(400).json({ success: false, error: 'Voucher đã hết lượt sử dụng.' });
-        }
-        if (userId) {
-          const perUserRes = await pool.request()
-            .input('voucherId', sql.NVarChar, voucher.id)
-            .input('userId', sql.NVarChar, userId)
-            .query('SELECT COUNT(*) as cnt FROM VoucherRedemptions WHERE voucherId = @voucherId AND userId = @userId');
-          if (perUserRes.recordset[0].cnt >= voucher.perUserLimit) {
-            return res.status(400).json({ success: false, error: 'Bạn đã dùng voucher này tối đa số lần cho phép.' });
-          }
-        }
-        if (voucher.discountType === 'fixed') {
-          discountAmount = Number(voucher.discountValue) || 0;
-        } else if (voucher.discountType === 'percent') {
-          discountAmount = Math.round(totalPrice * (Number(voucher.discountValue) || 0) / 100);
-          if (voucher.maxDiscountAmount) discountAmount = Math.min(discountAmount, voucher.maxDiscountAmount);
-        }
-        discountAmount = Math.min(discountAmount, totalPrice);
-      } catch (e) {
-        if (e.message && e.message.includes('Database not initialized')) {
-          console.warn('[Orders] Voucher validation skipped (demo mode, no DB):', code);
-          discountAmount = 0;
-          voucher = null;
-        } else {
-          throw e;
-        }
+    // O-01/S-02: Derive effective userId from auth context, not body
+    let effectiveUserId = null;
+    if (req.user && req.user.id) {
+      effectiveUserId = req.user.id;
+      // If body claimed a different userId → reject
+      if (bodyUserId != null && String(bodyUserId) !== String(effectiveUserId)) {
+        return res.status(400).json({ success: false, error: 'userId không khớp với tài khoản đã xác thực.' });
+      }
+    } else {
+      // Guest: must not claim any userId
+      if (bodyUserId != null && String(bodyUserId).trim() !== '') {
+        return res.status(400).json({ success: false, error: 'Đơn khách không được gán userId. Vui lòng đăng nhập.' });
       }
     }
-    const finalPrice = totalPrice - discountAmount;
 
-    // --- Mutex-protected order creation + idempotency + voucher redemption ---
+    // Price is ALWAYS from backend — never trust client
+    const basePrice = PRODUCT_PRICES[normalizedType];
+    const totalPrice = basePrice * qty;
+
+    // Idempotency setup (read before lock but check inside lock)
     const idempotencyKey = req.headers['idempotency-key'] || null;
     const bodyHash = hashBody(req.body);
-
-    // Periodic cleanup of expired idempotency keys
     if (idempotencyStore.size > 100) cleanupExpiredKeys();
 
+    // --- Everything that touches voucher or order state is inside the mutex ---
     const order = await withLock(ordersFilePath, async () => {
       // Idempotency check — inside mutex for concurrency safety
       if (idempotencyKey) {
         const existing = idempotencyStore.get(idempotencyKey);
         if (existing) {
           if (existing.bodyHash !== bodyHash) {
-            // Same key but different body — reject
             return { idempotent: true, conflict: true };
           }
-          // Same key + same body — return cached result (no new order)
           return { idempotent: true, conflict: false, result: existing.result };
         }
       }
 
+      // P-04: All voucher validation+redemption inside mutex — no TOCTOU.
+      // Voucher check is INSIDE the lock so concurrent requests to the same
+      // voucher are serialized: only N requests pass where N = remaininguses.
+      let discountAmount = 0;
+      let voucher = null;
+
+      if (voucherCode) {
+        const code = String(voucherCode).trim().toUpperCase();
+        // Demo mode: DB unavailable → no voucher, no discount
+        try {
+          const pool = getPool();
+          const vRes = await pool.request()
+            .input('code', sql.NVarChar, code)
+            .query('SELECT * FROM Vouchers WHERE code = @code');
+          if (vRes.recordset.length === 0) {
+            return { voucherError: 'Mã voucher không tồn tại.', voucherStatus: 400 };
+          }
+          voucher = vRes.recordset[0];
+          if (voucher.status !== 'active') {
+            return { voucherError: 'Voucher không hoạt động.', voucherStatus: 400 };
+          }
+          const now = new Date();
+          if (voucher.startsAt && new Date(voucher.startsAt) > now) {
+            return { voucherError: 'Voucher chưa bắt đầu.', voucherStatus: 400 };
+          }
+          if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
+            return { voucherError: 'Voucher đã hết hạn.', voucherStatus: 400 };
+          }
+          if (!['all', 'order'].includes(voucher.appliesTo)) {
+            return { voucherError: 'Voucher không áp dụng cho đơn hàng.', voucherStatus: 400 };
+          }
+          if (voucher.minOrderAmount && totalPrice < voucher.minOrderAmount) {
+            return { voucherError: `Đơn tối thiểu ${voucher.minOrderAmount.toLocaleString('vi-VN')}đ để dùng voucher.`, voucherStatus: 400 };
+          }
+          if (voucher.totalUsageLimit && voucher.usedCount >= voucher.totalUsageLimit) {
+            return { voucherError: 'Voucher đã hết lượt sử dụng.', voucherStatus: 400 };
+          }
+          if (effectiveUserId) {
+            const perUserRes = await pool.request()
+              .input('voucherId', sql.NVarChar, voucher.id)
+              .input('userId', sql.NVarChar, effectiveUserId)
+              .query('SELECT COUNT(*) as cnt FROM VoucherRedemptions WHERE voucherId = @voucherId AND userId = @userId');
+            if (perUserRes.recordset[0].cnt >= voucher.perUserLimit) {
+              return { voucherError: 'Bạn đã dùng voucher này tối đa số lần cho phép.', voucherStatus: 400 };
+            }
+          }
+          if (voucher.discountType === 'fixed') {
+            discountAmount = Number(voucher.discountValue) || 0;
+          } else if (voucher.discountType === 'percent') {
+            discountAmount = Math.round(totalPrice * (Number(voucher.discountValue) || 0) / 100);
+            if (voucher.maxDiscountAmount) discountAmount = Math.min(discountAmount, voucher.maxDiscountAmount);
+          }
+          discountAmount = Math.min(discountAmount, totalPrice);
+        } catch (e) {
+          if (e.message && e.message.includes('Database not initialized')) {
+            console.warn('[Orders] Voucher validation skipped (demo mode, no DB).');
+            discountAmount = 0;
+            voucher = null;
+          } else {
+            throw e;
+          }
+        }
+      }
+
+      const finalPrice = totalPrice - discountAmount;
       const isOnlinePayment = payment === 'VNPAY';
       const newOrder = {
         orderId: 'BU-' + Date.now().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 8),
         designUrl: designUrl || null,
-        productType,
+        productType: normalizedType,
         color: color || '#ffffff',
         size,
         quantity: qty,
@@ -203,16 +246,18 @@ router.post('/', async (req, res) => {
         payment: payment || 'COD',
         paymentStatus: isOnlinePayment ? 'pending' : undefined,
         status: isOnlinePayment ? 'awaiting_payment' : 'pending',
-        userId: userId || null,
+        userId: effectiveUserId,
         authorName: authorName || 'Guest',
         createdAt: new Date().toISOString(),
       };
 
+      // Persist order BEFORE voucher redemption — fileStore is atomic (tmp+rename)
       const orders = readOrders();
       orders.push(newOrder);
       writeOrders(orders);
 
-      // Record voucher redemption inside same lock to prevent double-use
+      // P-04: Voucher redemption must succeed or the order is rolled back.
+      // Without DB cross-storage transaction, we compensate by removing the order.
       if (voucher) {
         try {
           const pool = getPool();
@@ -221,7 +266,7 @@ router.post('/', async (req, res) => {
             .input('id', sql.NVarChar, redemptionId)
             .input('voucherId', sql.NVarChar, voucher.id)
             .input('voucherCode', sql.NVarChar, voucher.code)
-            .input('userId', sql.NVarChar, userId || 'guest')
+            .input('userId', sql.NVarChar, effectiveUserId || 'guest')
             .input('orderId', sql.NVarChar, newOrder.orderId)
             .input('appliesTo', sql.NVarChar, 'order')
             .input('originalAmount', sql.Int, totalPrice)
@@ -232,12 +277,40 @@ router.post('/', async (req, res) => {
               UPDATE Vouchers SET usedCount = usedCount + 1, updatedAt = GETDATE() WHERE id = @voucherId;
             `);
         } catch (e) {
-          console.warn('[Orders] Voucher redemption record failed (non-critical):', e.message);
+          // Redemption failed but order already persisted with discount → compensate by removing discount
+          if (e.message && e.message.includes('Database not initialized')) {
+            // Demo mode: no DB → keep order as-is (no voucher effect) but clear voucher fields
+            console.warn('[Orders] Voucher redemption skipped (demo mode):', e.message);
+            const rollback = readOrders();
+            const idx = rollback.findIndex(o => o.orderId === newOrder.orderId);
+            if (idx !== -1) {
+              rollback[idx].voucherCode = null;
+              rollback[idx].discountAmount = 0;
+              rollback[idx].finalPrice = totalPrice;
+              writeOrders(rollback);
+              newOrder.voucherCode = null;
+              newOrder.discountAmount = 0;
+              newOrder.finalPrice = totalPrice;
+            }
+          } else {
+            // Real DB error: rollback order entirely to avoid free discount
+            console.error('[Orders] Voucher redemption failed, rolling back order:', newOrder.orderId, e.message);
+            try {
+              const rollback = readOrders().filter(o => o.orderId !== newOrder.orderId);
+              writeOrders(rollback);
+            } catch {}
+            return { voucherError: 'Không thể áp dụng voucher lúc này. Vui lòng thử lại.', voucherStatus: 500 };
+          }
         }
       }
 
       return newOrder;
     });
+
+    // Handle voucher validation failures produced inside the lock
+    if (order.voucherError) {
+      return res.status(order.voucherStatus || 400).json({ success: false, error: order.voucherError });
+    }
 
     // --- Handle idempotent responses ---
     if (order.idempotent) {
@@ -339,7 +412,49 @@ router.get('/:id', authenticate, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// PUT /api/orders/:id/payment — mutex-protected
+// Order / payment invariants + status state machine
+// ---------------------------------------------------------------------------
+const ORDER_STATUSES = ['pending', 'awaiting_payment', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'payment_failed'];
+const PAYMENT_STATUSES = ['paid', 'underpaid', 'failed', 'pending', 'awaiting_transfer'];
+const TERMINAL_ORDER_STATUSES = new Set(['cancelled', 'completed']);
+const BLOCKED_PAYMENT_TARGET_STATUSES = new Set(['cancelled', 'completed']);
+const ORDER_TRANSITIONS = {
+  // Lane: pending/awaiting → processing → shipped → delivered → completed. payment_failed is the recoverable failure.
+  pending: new Set(['processing', 'cancelled', 'payment_failed']),
+  awaiting_payment: new Set(['processing', 'cancelled', 'payment_failed']),
+  payment_failed: new Set(['processing', 'cancelled']),
+  processing: new Set(['shipped', 'cancelled', 'completed']),
+  shipped: new Set(['delivered', 'completed', 'cancelled']),
+  delivered: new Set(['completed', 'cancelled']),
+  // completed/cancelled are terminal except idempotent no-op (same value).
+};
+
+function getEffectiveAmount(order) {
+  if (order.finalPrice != null) return Number(order.finalPrice);
+  if (order.total != null) return Number(order.total);
+  return Number(order.price || 0) * Number(order.quantity || 1);
+}
+
+function isValidOrderTransition(from, to) {
+  if (from === to) return true;
+  if (TERMINAL_ORDER_STATUSES.has(from)) return false;
+  const allowed = ORDER_TRANSITIONS[from];
+  if (!allowed) return false;
+  return allowed.has(to);
+}
+
+function orderPaymentInvariantError(order, nextPaymentStatus) {
+  // paid cannot be demoted
+  if (order.paymentStatus === 'paid' && nextPaymentStatus !== 'paid') return 'Không thể hạ cấp payment của đơn đã paid.';
+  // cancelled/completed cannot receive paid
+  if (BLOCKED_PAYMENT_TARGET_STATUSES.has(order.status) && nextPaymentStatus === 'paid') return 'Đơn đã cancelled/completed không thể chuyển thành paid.';
+  // completed must not have non-paid payment if we are moving toward payment
+  // unpaid order cannot jump to shipped/delivered/completed via status PUT — handled in status guard
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// PUT /api/orders/:id/payment — mutex-protected, state-guarded, version-aware
 // ---------------------------------------------------------------------------
 router.put('/:id/payment', authenticate, async (req, res) => {
   try {
@@ -347,45 +462,76 @@ router.put('/:id/payment', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
     }
 
-    const { paymentStatus, receivedAmount, note } = req.body;
-    const allowedStatuses = ['paid', 'underpaid', 'failed', 'pending', 'awaiting_transfer'];
+    const { paymentStatus, receivedAmount, note, expectedUpdatedAt } = req.body;
+    const allowedStatuses = PAYMENT_STATUSES;
 
     if (!paymentStatus || !allowedStatuses.includes(paymentStatus)) {
       return res.status(400).json({ success: false, error: `Invalid paymentStatus. Must be one of: ${allowedStatuses.join(', ')}` });
     }
 
-    const updatedOrder = await withLock(ordersFilePath, () => {
-      const orders = readOrders();
-      const orderIndex = orders.findIndex(o => o.orderId === req.params.id);
+    const numericAmount = receivedAmount != null ? Number(receivedAmount) : null;
+    if (numericAmount != null && (!Number.isFinite(numericAmount) || numericAmount < 0)) {
+      return res.status(400).json({ success: false, error: 'receivedAmount phải là số ≥ 0.' });
+    }
 
-      if (orderIndex === -1) {
-        return null;
+    const out = await withLock(ordersFilePath, () => {
+      const orders = readOrders();
+      const idx = orders.findIndex(o => o.orderId === req.params.id);
+      if (idx === -1) return { notFound: true };
+      const order = orders[idx];
+
+      if (expectedUpdatedAt != null && order.updatedAt != null && String(order.updatedAt) !== String(expectedUpdatedAt)) {
+        return { conflict: true, current: order };
       }
 
-      const order = orders[orderIndex];
+      const invariant = orderPaymentInvariantError(order, paymentStatus);
+      if (invariant) return { invariant, current: order };
+
+      const effective = getEffectiveAmount(order);
+      if (paymentStatus === 'paid' && effective > 0 && numericAmount != null && numericAmount < effective) {
+        // Under-payment marked as paid is not allowed; use underpaid or top-up
+        return { invalidAmount: `receivedAmount (${numericAmount}) nhỏ hơn số tiền đơn (${effective}). Dùng underpaid hoặc bổ sung đủ.` };
+      }
+
+      const prev = { paymentStatus: order.paymentStatus, status: order.status, paidAt: order.paidAt };
       order.paymentStatus = paymentStatus;
-      if (receivedAmount != null) order.receivedAmount = Number(receivedAmount);
+      if (receivedAmount != null) order.receivedAmount = numericAmount;
       if (note) order.paymentNote = note;
+      order.updatedAt = new Date().toISOString();
 
       if (paymentStatus === 'paid') {
-        order.status = 'processing';
-        order.paidAt = new Date().toISOString();
+        if (order.status === 'awaiting_payment' || order.status === 'payment_failed' || order.status === 'pending') {
+          order.status = 'processing';
+        }
+        if (!order.paidAt) order.paidAt = new Date().toISOString();
       } else if (paymentStatus === 'underpaid') {
+        if (order.status === 'completed' || order.status === 'cancelled') {
+          return { invariant: 'Không thể chuyển completed/cancelled thành underpaid.' };
+        }
         order.status = 'pending';
       } else if (paymentStatus === 'failed') {
+        if (BLOCKED_PAYMENT_TARGET_STATUSES.has(order.status)) {
+          return { invariant: 'Không thể chuyển completed/cancelled thành failed.' };
+        }
         order.status = 'payment_failed';
+        // keep paidAt untouched
+      } else if (paymentStatus === 'awaiting_transfer') {
+        if (BLOCKED_PAYMENT_TARGET_STATUSES.has(order.status)) {
+          return { invariant: 'Đơn đã đóng không thể chuyển awaiting_transfer.' };
+        }
       }
 
       writeOrders(orders);
-      return order;
+      return { order, prev };
     });
 
-    if (!updatedOrder) {
-      return res.status(404).json({ success: false, error: `Order with id "${req.params.id}" not found` });
-    }
+    if (out.notFound) return res.status(404).json({ success: false, error: `Order with id "${req.params.id}" not found` });
+    if (out.conflict) return res.status(409).json({ success: false, error: 'Dữ liệu đã bị chỉnh sửa bởi người khác. Vui lòng tải lại.', current: out.current });
+    if (out.invariant) return res.status(409).json({ success: false, error: out.invariant });
+    if (out.invalidAmount) return res.status(400).json({ success: false, error: out.invalidAmount });
 
-    console.log(`[Orders] Order ${req.params.id} payment status updated to: ${paymentStatus}`);
-    res.json({ success: true, message: 'Cập nhật thanh toán thành công!', data: updatedOrder });
+    console.log(`[Orders] Order ${req.params.id} payment ${out.prev.paymentStatus}→${paymentStatus} status ${out.prev.status}→${out.order.status} paidAt=${out.order.paidAt}`);
+    res.json({ success: true, message: 'Cập nhật thanh toán thành công!', data: out.order });
   } catch (err) {
     console.error('[Orders] Error updating payment:', err.message);
     res.status(500).json({ success: false, error: 'Failed to update payment' });
@@ -393,7 +539,7 @@ router.put('/:id/payment', authenticate, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// PUT /api/orders/:id/status — mutex-protected
+// PUT /api/orders/:id/status — mutex-protected, transition-guarded, version-aware
 // ---------------------------------------------------------------------------
 router.put('/:id/status', authenticate, async (req, res) => {
   try {
@@ -401,32 +547,68 @@ router.put('/:id/status', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Forbidden. Admin access required.' });
     }
 
-    const { status } = req.body;
-    const allowedStatuses = ['pending', 'awaiting_payment', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'payment_failed'];
+    const { status, expectedUpdatedAt } = req.body;
+    const allowedStatuses = ORDER_STATUSES;
 
     if (!status || !allowedStatuses.includes(status)) {
       return res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${allowedStatuses.join(', ')}` });
     }
 
-    const updatedOrder = await withLock(ordersFilePath, () => {
+    const out = await withLock(ordersFilePath, () => {
       const orders = readOrders();
-      const orderIndex = orders.findIndex((o) => o.orderId === req.params.id);
+      const idx = orders.findIndex((o) => o.orderId === req.params.id);
+      if (idx === -1) return { notFound: true };
+      const order = orders[idx];
+      const from = order.status;
 
-      if (orderIndex === -1) {
-        return null;
+      if (expectedUpdatedAt != null && order.updatedAt != null && String(order.updatedAt) !== String(expectedUpdatedAt)) {
+        return { conflict: true, current: order };
       }
 
-      orders[orderIndex].status = status;
+      if (!isValidOrderTransition(from, status)) {
+        return { invalidTransition: `Không thể chuyển trạng thái ${from} → ${status}.`, current: order };
+      }
+
+      // Payment ↔ status coherence
+      // X-03: processing requires paid for online payments (VNPAY/BANK_TRANSFER).
+      // COD and guest-no-payment orders have no paymentStatus requirement.
+      if (status === 'processing') {
+        const isOnline = order.payment != null && order.payment !== 'COD';
+        if (isOnline && order.paymentStatus !== 'paid') {
+          return { invariant: 'Đơn chưa thanh toán không thể chuyển sang đang sản xuất.' };
+        }
+      }
+      if ((status === 'shipped' || status === 'delivered' || status === 'completed') && order.paymentStatus === 'failed') {
+        return { invariant: 'Đơn payment failed không thể chuyển sang shipped/delivered/completed.' };
+      }
+      if ((status === 'shipped' || status === 'delivered') && (order.paymentStatus === 'pending' || order.paymentStatus === 'awaiting_transfer' || order.paymentStatus === 'underpaid')) {
+        // COD-style orders have no paymentStatus (null) → allowed. Only explicit pending-like payment blocks shipped/delivered.
+        if (order.payment != null && order.payment !== 'COD') {
+          return { invariant: 'Đơn chưa paid không thể chuyển sang shipped/delivered.' };
+        }
+      }
+      if (status === 'completed' && BLOCKED_PAYMENT_TARGET_STATUSES.has(from) === false) {
+        // completed requires paid or COD-no-payment; if we know payment failed/underpaid, block
+        if (order.paymentStatus === 'failed' || order.paymentStatus === 'underpaid') {
+          return { invariant: 'Đơn chưa paid (failed/underpaid) không thể completed.' };
+        }
+      }
+
+      const prev = from;
+      order.status = status;
+      order.updatedAt = new Date().toISOString();
+      if (status === 'cancelled') order.cancelledAt = order.cancelledAt || new Date().toISOString();
       writeOrders(orders);
-      return orders[orderIndex];
+      return { order, prev };
     });
 
-    if (!updatedOrder) {
-      return res.status(404).json({ success: false, error: `Order with id "${req.params.id}" not found` });
-    }
+    if (out.notFound) return res.status(404).json({ success: false, error: `Order with id "${req.params.id}" not found` });
+    if (out.conflict) return res.status(409).json({ success: false, error: 'Dữ liệu đã bị chỉnh sửa bởi người khác. Vui lòng tải lại.', current: out.current });
+    if (out.invalidTransition) return res.status(409).json({ success: false, error: out.invalidTransition, current: out.current });
+    if (out.invariant) return res.status(409).json({ success: false, error: out.invariant });
 
-    console.log(`[Orders] Order ${req.params.id} status updated to: ${status}`);
-    res.json({ success: true, message: 'Cập nhật trạng thái đơn hàng thành công!', data: updatedOrder });
+    console.log(`[Orders] Order ${req.params.id} status ${out.prev}→${out.order.status}`);
+    res.json({ success: true, message: 'Cập nhật trạng thái đơn hàng thành công!', data: out.order });
   } catch (err) {
     console.error('[Orders] Error updating status:', err.message);
     res.status(500).json({ success: false, error: 'Failed to update order status' });

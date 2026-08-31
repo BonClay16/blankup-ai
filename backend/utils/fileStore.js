@@ -59,6 +59,13 @@ function readJson(filePath) {
         const backup = `${filePath}.corrupt.${Date.now()}`;
         fs.copyFileSync(filePath, backup);
         console.error(`[fileStore] Corrupt file backed up to ${backup}`);
+        // Prune old corrupt backups, keep max 5
+        try {
+          const dir = path.dirname(filePath);
+          const base = path.basename(filePath);
+          const olds = fs.readdirSync(dir).filter(f => f.startsWith(base + '.corrupt.')).sort().reverse();
+          olds.slice(5).forEach(f => { try { fs.unlinkSync(path.join(dir, f)); } catch {} });
+        } catch {}
       } catch {}
     }
     return [];

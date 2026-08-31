@@ -9,9 +9,10 @@ const bcrypt = require('bcryptjs');
 const { getPool, sql } = require('../db');
 const { sendMail } = require('../services/mailer');
 const { verifyGoogleIdToken } = require('../services/google-auth.service');
-const { signToken, verifyToken } = require('../services/jwt.service');
+const { signToken } = require('../services/jwt.service');
 const { verifyCode, createVerificationCode, OTP_EXPIRY_MINUTES, isAlreadyVerified } = require('../services/otp.service');
 const { generateResetAuthToken, validateResetAuthToken } = require('../services/reset-auth.service');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -28,55 +29,6 @@ async function withResetLock(key, fn) {
     return await fn();
   } finally {
     resetMutexes.delete(key);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helper: authenticate middleware (accepts JWT or legacy mock token)
-// ---------------------------------------------------------------------------
-async function authenticate(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Unauthorized. No token provided.' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  let userId = null;
-
-  if (token.startsWith('mock-token-')) {
-    // Legacy dev token — only allowed outside production
-    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_MOCK_TOKEN !== 'true') {
-      return res.status(401).json({ success: false, error: 'Invalid or expired authentication token.' });
-    }
-    console.warn('[Auth] Using mock-token (dev/test only)');
-    userId = token.replace('mock-token-', '');
-  } else {
-    try {
-      const decoded = verifyToken(token);
-      if (!decoded || !decoded.userId) {
-        return res.status(401).json({ success: false, error: 'Invalid authentication token.' });
-      }
-      userId = decoded.userId;
-    } catch (err) {
-      return res.status(401).json({ success: false, error: 'Invalid or expired authentication token.' });
-    }
-  }
-
-  try {
-    const pool = getPool();
-    const result = await pool.request()
-      .input('id', sql.NVarChar, userId)
-      .query('SELECT id, username, fullName, email, avatar, provider, role FROM Users WHERE id = @id');
-
-    if (result.recordset.length === 0) {
-      return res.status(401).json({ success: false, error: 'Session expired or user not found.' });
-    }
-
-    req.user = result.recordset[0];
-    next();
-  } catch (err) {
-    console.error('[Auth] Error in authenticate middleware:', err.message);
-    return res.status(500).json({ success: false, error: 'Authentication check failed.' });
   }
 }
 

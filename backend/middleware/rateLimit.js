@@ -44,4 +44,29 @@ const aiLimiter = rateLimit({
   message: { success: false, error: 'Too many AI requests. Please try again in a minute.' },
 });
 
-module.exports = { apiLimiter, authLimiter, otpLimiter, aiLimiter };
+/**
+ * Order creation rate limiter: 10 orders per minute per IP.
+ * Protects against checkout abuse / voucher brute-force.
+ * Excluded from apiLimiter cone: order creation has its own limit (not additive).
+ */
+const orderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Tạo đơn quá nhanh. Vui lòng thử lại sau 1 phút.' },
+});
+
+/**
+ * Gallery interaction rate limiter: 30 requests per minute per IP.
+ * Covers like/share/comment to prevent spam while keeping guest access.
+ */
+const galleryLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Bạn thao tác quá nhanh, vui lòng thử lại sau.' },
+});
+
+module.exports = { apiLimiter, authLimiter, otpLimiter, aiLimiter, orderLimiter, galleryLimiter };

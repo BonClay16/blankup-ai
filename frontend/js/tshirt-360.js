@@ -87,7 +87,14 @@ function initializeViewer() {
     undefined,
     (error) => {
       container.classList.remove('viewer-loading');
+      container.classList.add('viewer-fallback');
+      const fallbackMsg = document.createElement('div');
+      fallbackMsg.className = 'viewer-error-msg';
+      fallbackMsg.textContent = 'Không thể tải mô hình 3D — đang hiển thị bản xem 2D.';
+      fallbackMsg.setAttribute('role', 'status');
+      container.appendChild(fallbackMsg);
       console.warn('Could not load 3D t-shirt model:', error);
+      if (window.showToast) window.showToast('Không thể tải mô hình 3D, đã chuyển sang xem 2D.', 'warning');
     }
   );
 
@@ -164,6 +171,7 @@ function applyDesign(url) {
   viewer.decalMeshes = [];
   viewer.decalUniforms = [];
 
+  if (!url) return;
   new THREE.TextureLoader().load(url, (texture) => {
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.flipY = true;
@@ -218,6 +226,9 @@ function applyDesign(url) {
       viewer.decalMeshes.push(decal);
       viewer.decalUniforms.push(uniforms);
     });
+  }, undefined, (err) => {
+    console.warn('[3D] Failed to load decal texture:', url, err);
+    if (window.showToast) window.showToast('Không thể tải họa tiết lên mô hình 3D.', 'warning');
   });
 }
 

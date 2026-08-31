@@ -1,8 +1,9 @@
 const request = require('supertest');
 const fs = require('fs');
-const path = require('path');
 const { generateTestToken, authHeader } = require('./helpers/setup');
 
+jest.mock('../db', () => require('./helpers/testIsolation').dbFactory());
+jest.mock('../utils/fileStore', () => require('./helpers/testIsolation').fileStoreFactory('concurrency'));
 jest.mock('../middleware/rateLimit', () => ({
   apiLimiter: (req, res, next) => next(),
   authLimiter: (req, res, next) => next(),
@@ -11,19 +12,10 @@ jest.mock('../middleware/rateLimit', () => ({
 }));
 
 const app = require('../app');
-const ordersFile = path.join(__dirname, '../data/orders.json');
-let originalOrders;
+const { _testOrdersFile: ordersFile, _testCleanup } = require('../utils/fileStore');
 
-beforeAll(() => {
-  if (fs.existsSync(ordersFile)) {
-    originalOrders = fs.readFileSync(ordersFile, 'utf8');
-  }
-});
-
-afterEach(() => {
-  if (originalOrders !== undefined) {
-    fs.writeFileSync(ordersFile, originalOrders, 'utf8');
-  }
+afterAll(() => {
+  _testCleanup();
 });
 
 function makeOrder(i) {
@@ -36,7 +28,6 @@ function makeOrder(i) {
       quantity: 1,
       customer: { name: `User${i}`, phone: `09000000${String(i).padStart(2, '0')}`, address: `Address ${i}` },
       payment: 'COD',
-      userId: `u-concurrent-${i % 5}`,
       authorName: `ConcurrentUser${i}`,
     });
 }
@@ -99,7 +90,7 @@ describe('P0-04: Order Concurrency — mutex protection', () => {
     });
 
     const results = await Promise.all(updates);
-    results.forEach(r => expect([200, 400, 500]).toContain(r.status));
+    results.forEach(r => expect([200, 400, 409, 500]).toContain(r.status));
 
     const orders = JSON.parse(fs.readFileSync(ordersFile, 'utf8'));
     const order = orders.find(o => o.orderId === orderId);

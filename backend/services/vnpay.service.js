@@ -9,11 +9,19 @@ function buildPaymentUrl(params) {
     orderRef,
     locale = 'vn',
     ipAddr,
-    tmnCode = process.env.VNP_TMN_CODE || '',
-    hashSecret = process.env.VNP_HASH_SECRET || '',
+    // Env fallbacks kept for test compatibility — caller must validate. NEVER fallback to '' in production path.
+    tmnCode = process.env.VNP_TMN_CODE,
+    hashSecret = process.env.VNP_HASH_SECRET,
     vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
     returnUrl = process.env.VNP_RETURN_URL || 'http://localhost:3000/api/payment/vnpay-return',
   } = params;
+
+  // Fail-closed: VNPay URL generation requires both secret and tmnCode.
+  if (!hashSecret || !tmnCode) {
+    const err = new Error(!hashSecret ? 'VNPay hash secret not configured' : 'VNPay merchant code not configured');
+    err.code = 'VNPAY_NOT_CONFIGURED';
+    throw err;
+  }
 
   const date = new Date();
   const createDate = date.toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
@@ -49,7 +57,11 @@ function buildPaymentUrl(params) {
 }
 
 function verifyIpn(params) {
-  const hashSecret = process.env.VNP_HASH_SECRET || '';
+  const hashSecret = process.env.VNP_HASH_SECRET;
+  // Fail-closed: if secret is missing, NOTHING is valid. Never accept callbacks without a secret.
+  if (!hashSecret) {
+    return { isValid: false, code: '99', reason: 'VNPay secret not configured' };
+  }
   const secureHash = params.vnp_SecureHash;
   if (!secureHash) return { isValid: false, code: '01' };
 

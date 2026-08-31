@@ -41,26 +41,25 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
     };
 
     orders.forEach((order) => {
-      const orderTotal = (order.price || 0) * (order.quantity || 1);
+      const effectiveTotal = order.finalPrice != null ? Number(order.finalPrice) : (order.total != null ? Number(order.total) : ((order.price || 0) * (order.quantity || 1)));
 
       if (order.status === 'completed') {
         completedCount++;
-        totalRevenue += orderTotal;
+        totalRevenue += effectiveTotal;
 
         const cat = (order.productType || 'tshirt').toLowerCase();
         if (categories[cat]) {
-          categories[cat].revenue += orderTotal;
+          categories[cat].revenue += effectiveTotal;
           categories[cat].count += order.quantity;
         } else {
-          // fallback or other categories
-          categories.tshirt.revenue += orderTotal;
+          categories.tshirt.revenue += effectiveTotal;
           categories.tshirt.count += order.quantity;
         }
       } else if (order.status === 'cancelled') {
         cancelledCount++;
       } else {
         pendingCount++;
-        pendingRevenue += orderTotal;
+        pendingRevenue += effectiveTotal;
       }
     });
 
@@ -72,7 +71,10 @@ router.get('/stats', authenticate, requireAdmin, async (req, res) => {
       const userOrders = orders.filter((o) => o.userId === u.id);
       const userOrdersCount = userOrders.length;
       const userCompletedOrders = userOrders.filter((o) => o.status === 'completed');
-      const userSpend = userCompletedOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      const userSpend = userCompletedOrders.reduce((sum, o) => {
+        const v = o.finalPrice != null ? Number(o.finalPrice) : (o.total != null ? Number(o.total) : (o.price || 0) * (o.quantity || 1));
+        return sum + v;
+      }, 0);
 
       return {
         id: u.id,
@@ -164,7 +166,7 @@ router.post('/users', authenticate, requireAdmin, async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // PUT /api/admin/users/:id
-// Update user info (admin only)
+// Update user info (admin only) — last-admin guard
 // ---------------------------------------------------------------------------
 router.put('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -180,6 +182,13 @@ router.put('/users/:id', authenticate, requireAdmin, async (req, res) => {
 
     if (userCheck.recordset.length === 0) {
       return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    if (role === 'user' && userCheck.recordset[0].role === 'admin') {
+      const adminCount = await pool.request().query(`SELECT COUNT(*) AS cnt FROM Users WHERE role = 'admin'`);
+      if (Number(adminCount.recordset[0]?.cnt) <= 1) {
+        return res.status(400).json({ success: false, error: 'Không thể hạ cấp admin cuối cùng.' });
+      }
     }
 
     const updates = [];
@@ -304,7 +313,10 @@ router.get('/users/:id', authenticate, requireAdmin, async (req, res) => {
     const orders = readOrders();
     const userOrders = orders.filter(o => o.userId === id);
     const completedOrders = userOrders.filter(o => o.status === 'completed');
-    const totalSpend = completedOrders.reduce((sum, o) => sum + (o.price || 0) * (o.quantity || 1), 0);
+    const totalSpend = completedOrders.reduce((sum, o) => {
+      const v = o.finalPrice != null ? Number(o.finalPrice) : (o.total != null ? Number(o.total) : (o.price || 0) * (o.quantity || 1));
+      return sum + v;
+    }, 0);
 
     res.json({
       success: true,

@@ -4,8 +4,13 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('../middleware/auth');
+let galleryLimiter;
+try { ({ galleryLimiter } = require('../middleware/rateLimit')); } catch {}
+if (typeof galleryLimiter !== 'function') galleryLimiter = (req, res, next) => next();
 const { readJson, writeJson } = require('../utils/fileStore');
 const { getPool, sql } = require('../db');
+const { generateWithFallback } = require('../services/ai-providers');
+const { getConfig } = require('../services/ai-providers/provider.config');
 
 // Helper: deduct 1 credit for AI generation (dailyFree → bonusLow → high)
 // Called BEFORE generation — deduct-then-generate pattern.
@@ -110,6 +115,7 @@ async function deductCreditForGenerate(userId) {
 }
 
 // Helper: refund 1 credit when generation fails after successful deduction (compensating transaction)
+// Must handle all three creditType values: daily, low, high.
 async function refundCreditForGenerate(userId, creditType) {
   let pool;
   try {
@@ -124,7 +130,10 @@ async function refundCreditForGenerate(userId, creditType) {
     await transaction.begin(sql.IsolationLevels.Serializable);
 
     let updateSql = '';
-    if (creditType === 'low') {
+    if (creditType === 'daily') {
+      // Daily free quota: decrement used count (refund the consumed slot)
+      updateSql = `UPDATE UserAiAccounts SET dailyFreeLowCreditsUsed = CASE WHEN dailyFreeLowCreditsUsed > 0 THEN dailyFreeLowCreditsUsed - 1 ELSE 0 END, updatedAt = GETDATE() WHERE userId = @userId`;
+    } else if (creditType === 'low') {
       updateSql = `UPDATE UserAiAccounts SET bonusLowCredits = bonusLowCredits + 1, updatedAt = GETDATE() WHERE userId = @userId`;
     } else if (creditType === 'high') {
       updateSql = `UPDATE UserAiAccounts SET highCredits = highCredits + 1, updatedAt = GETDATE() WHERE userId = @userId`;
@@ -137,17 +146,39 @@ async function refundCreditForGenerate(userId, creditType) {
       .input('userId', sql.NVarChar, userId)
       .query(updateSql);
 
+    // Fetch fresh balances for accurate ledger
+    const balRes = await new sql.Request(transaction)
+      .input('userIdBal', sql.NVarChar, userId)
+      .query(`SELECT highCredits, bonusLowCredits, dailyFreeLowCreditsUsed, displayPlanId FROM UserAiAccounts WHERE userId = @userIdBal`);
+    const bal = balRes.recordset[0] || { highCredits: 0, bonusLowCredits: 0, dailyFreeLowCreditsUsed: 0 };
+    let balanceAfter = 0;
+    if (creditType === 'daily') {
+      let planDailyFree = 0;
+      try {
+        const planRes = await new sql.Request(transaction)
+          .input('planId', sql.NVarChar, bal.displayPlanId)
+          .query(`SELECT dailyFreeLowCredits FROM AiPlans WHERE id = @planId`);
+        planDailyFree = Number(planRes.recordset[0]?.dailyFreeLowCredits) || 0;
+      } catch {}
+      balanceAfter = Math.max(0, planDailyFree - Number(bal.dailyFreeLowCreditsUsed || 0));
+    } else if (creditType === 'low') {
+      balanceAfter = Number(bal.bonusLowCredits) || 0;
+    } else {
+      balanceAfter = Number(bal.highCredits) || 0;
+    }
+
     const ledgerId = 'ledger-refund-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     await new sql.Request(transaction)
       .input('ledgerId', sql.NVarChar, ledgerId)
       .input('userId', sql.NVarChar, userId)
-      .input('creditType', sql.NVarChar, creditType)
+      .input('creditType', sql.NVarChar, creditType === 'daily' ? 'low' : creditType)
       .input('quality', sql.NVarChar, 'low')
       .input('amount', sql.Int, 1)
+      .input('balanceAfter', sql.Int, balanceAfter)
       .input('reason', sql.NVarChar, 'ai_generate_refund')
       .query(`
         INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
-        VALUES (@ledgerId, @userId, @creditType, @quality, @amount, 0, @reason, N'ai_design', @ledgerId, N'AI design generation refund - generation failed')
+        VALUES (@ledgerId, @userId, @creditType, @quality, @amount, @balanceAfter, @reason, N'ai_design', @ledgerId, N'AI design generation refund - generation failed')
       `);
 
     await transaction.commit();
@@ -772,49 +803,55 @@ router.post('/generate', authenticate, async (req, res) => {
     let provider = 'mock';
 
     try {
-      if (hasCloudflareConfig()) {
-        try {
-          const result = await generateCloudflareImage(prompt, style, designId);
-          designUrl = result.designUrl;
-          finalPrompt = result.finalPrompt;
-          try {
-            const productResult = await generateCloudflareProductMockup(prompt, style, designId);
-            productMockupUrl = productResult.productMockupUrl;
-            finalProductPrompt = productResult.finalProductPrompt;
-          } catch (mockupErr) {
-            console.warn(`[AI-Design] Cloudflare 3D product mockup failed, continuing with print design: ${mockupErr.message}`);
+      // Provider abstraction: enhance prompt once, then route through AI Provider Layer
+      // Business layer already deducted credit; provider layer must not deduct again.
+      let enhanced = null;
+      try { enhanced = await enhanceImagePrompt(prompt, style, false); } catch (e) { enhanced = null; }
+      const genResult = await generateWithFallback({
+        prompt,
+        style,
+        designId,
+        enhancedPrompt: enhanced,
+        finalPrompt: enhanced,
+        isFromImage: false,
+        requestId: `gen-${designId}`,
+      });
+      designUrl = genResult.designUrl;
+      finalPrompt = genResult.finalPrompt || enhanced;
+      provider = genResult.provider;
+      // Product mockup is optional — try Cloudflare provider if available (blank product)
+      try {
+        const cfg = getConfig();
+        if (cfg.cloudflare.enabled) {
+          // Use cloudflare provider directly for mockup (non-critical)
+          const { CloudflareProvider } = require('../services/ai-providers/cloudflare.provider');
+          const cf = new CloudflareProvider(cfg);
+          if (cf.isAvailable()) {
+            const mockupPrompt = buildProductMockupPrompt();
+            const mockData = await cf.generateProductMockup({ designId, finalProductPrompt: mockupPrompt });
+            if (mockData) {
+              productMockupUrl = mockData;
+              finalProductPrompt = mockupPrompt;
+            }
           }
-          provider = 'cloudflare';
-        } catch (err) {
-          console.warn(`[AI-Design] Cloudflare generation failed, trying next provider: ${err.message}`);
         }
+      } catch (mockupErr) {
+        console.warn(`[AI-Design] Product mockup failed, continuing: ${mockupErr.message}`);
       }
-
-      if (!designUrl && hasOpenAIConfig()) {
-        try {
-          const result = await generateOpenAIImage(prompt, style, designId);
-          designUrl = result.designUrl;
-          finalPrompt = result.finalPrompt;
-          try {
-            const productResult = await generateOpenAIProductMockup(prompt, style, designId);
-            productMockupUrl = productResult.productMockupUrl;
-            finalProductPrompt = productResult.finalProductPrompt;
-          } catch (mockupErr) {
-            console.warn(`[AI-Design] OpenAI 3D product mockup failed, continuing with print design: ${mockupErr.message}`);
-          }
-          provider = 'openai';
-        } catch (err) {
-          console.warn(`[AI-Design] OpenAI generation failed, using fallback: ${err.message}`);
-        }
-      }
-
-      if (!designUrl) {
-        designUrl = getDesignSvg(style);
-      }
+      if (!designUrl) throw new Error('Provider returned no designUrl');
     } catch (genErr) {
-      console.error(`[AI-Design] Generation failed after credit deduction, refunding: ${genErr.message}`);
-      await refundCreditForGenerate(req.user.id, creditRes.creditType);
-      return res.status(500).json({ success: false, error: 'AI generation failed. Your credit has been refunded.' });
+      // All providers failed → fallback SVG + refund (preserve invariant: deduct once, refund once)
+      if (genErr.code === 'ALL_PROVIDERS_FAILED' || !designUrl) {
+        designUrl = getDesignSvg(style);
+        console.warn(`[AI-Design] All providers failed, serving fallback SVG for style=${style}. Refunding creditType=${creditRes.creditType}. ProviderAttempts: ${genErr.message}`);
+        await refundCreditForGenerate(req.user.id, creditRes.creditType);
+        creditRes._refunded = true;
+        provider = 'mock';
+      } else {
+        console.error(`[AI-Design] Generation failed after credit deduction, refunding: ${genErr.message}`);
+        await refundCreditForGenerate(req.user.id, creditRes.creditType);
+        return res.status(500).json({ success: false, error: 'AI generation failed. Your credit has been refunded.' });
+      }
     }
 
     console.log(`[AI-Design] Generated design ${designId} via ${provider} for prompt: "${prompt}" (style: ${style || DEFAULT_STYLE})`);
@@ -879,35 +916,35 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
     let provider = 'mock';
 
     try {
-      if (hasCloudflareConfig()) {
-        try {
-          const result = await generateCloudflareImage(idea || 'Remix this reference image into an original t-shirt graphic', 'reference remix', designId);
-          designUrl = result.designUrl;
-          finalPrompt = result.finalPrompt;
-          provider = 'cloudflare';
-        } catch (err) {
-          console.warn(`[AI-Design] Cloudflare image generation failed, trying next provider: ${err.message}`);
-        }
-      }
-
-      if (!designUrl && hasOpenAIConfig() && typeof FormData !== 'undefined' && typeof Blob !== 'undefined') {
-        try {
-          const result = await editOpenAIImage(file, idea, designId);
-          designUrl = result.designUrl;
-          finalPrompt = result.finalPrompt;
-          provider = 'openai';
-        } catch (err) {
-          console.warn(`[AI-Design] OpenAI image edit failed, using fallback: ${err.message}`);
-        }
-      }
-
-      if (!designUrl) {
-        designUrl = getFromImageSvg();
-      }
+      let enhancedFrom = null;
+      try { enhancedFrom = await enhanceImagePrompt(idea || 'Remix this reference image into an original t-shirt graphic', 'reference remix', true); } catch (e) { enhancedFrom = null; }
+      const genResult = await generateWithFallback({
+        prompt: idea,
+        style: 'reference remix',
+        designId,
+        file,
+        idea,
+        enhancedPrompt: enhancedFrom,
+        finalPrompt: enhancedFrom,
+        isFromImage: true,
+        requestId: `gen-img-${designId}`,
+      });
+      designUrl = genResult.designUrl;
+      finalPrompt = genResult.finalPrompt || enhancedFrom;
+      provider = genResult.provider;
+      if (!designUrl) throw new Error('Provider returned no designUrl');
     } catch (genErr) {
-      console.error(`[AI-Design] Image generation failed after credit deduction, refunding: ${genErr.message}`);
-      await refundCreditForGenerate(req.user.id, creditResImg.creditType);
-      return res.status(500).json({ success: false, error: 'AI generation failed. Your credit has been refunded.' });
+      if (genErr.code === 'ALL_PROVIDERS_FAILED' || !designUrl) {
+        designUrl = getFromImageSvg();
+        console.warn(`[AI-Design] All providers failed for from-image, serving fallback SVG. Refunding creditType=${creditResImg.creditType}.`);
+        await refundCreditForGenerate(req.user.id, creditResImg.creditType);
+        creditResImg._refunded = true;
+        provider = 'mock';
+      } else {
+        console.error(`[AI-Design] Image generation failed after credit deduction, refunding: ${genErr.message}`);
+        await refundCreditForGenerate(req.user.id, creditResImg.creditType);
+        return res.status(500).json({ success: false, error: 'AI generation failed. Your credit has been refunded.' });
+      }
     }
 
     console.log(`[AI-Design] Generated design ${designId} via ${provider} from image: "${file.filename}" idea: "${idea}"`);
@@ -940,7 +977,7 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
 // ---------------------------------------------------------------------------
 // POST /api/ai-design/:id/share  — Share design to community gallery
 // ---------------------------------------------------------------------------
-router.post('/:id/share', (req, res) => {
+router.post('/:id/share', galleryLimiter, (req, res) => {
   try {
     const designId = decodeURIComponent(req.params.id);
     const { designUrl, frontDesignUrl, backDesignUrl, prompt, style, author, userId, authorUsername } = req.body;
@@ -987,7 +1024,7 @@ router.post('/:id/share', (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /api/ai-design/:id/like  — Toggle like on a design
 // ---------------------------------------------------------------------------
-router.post('/:id/like', (req, res) => {
+router.post('/:id/like', galleryLimiter, (req, res) => {
   try {
     const designId = decodeURIComponent(req.params.id);
     const userId = req.body.userId || 'anonymous';
@@ -1034,7 +1071,7 @@ router.get('/:id/comments', (req, res) => {
   }
 });
 
-router.post('/:id/comments', authenticate, (req, res) => {
+router.post('/:id/comments', galleryLimiter, authenticate, (req, res) => {
   try {
     const designId = decodeURIComponent(req.params.id);
     const { text } = req.body;

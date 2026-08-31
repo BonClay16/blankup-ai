@@ -103,39 +103,62 @@ async function loadProducts() {
     renderProducts(allProducts);
     initProductFilter();
   } catch (err) {
-    console.warn('API not available, using fallback data');
+    console.warn('API not available, using fallback data', err);
     allProducts = getFallbackProducts();
     renderProducts(allProducts);
     initProductFilter();
+    // UX reliability: user must know the live catalog failed to load
+    if (window.showToast) window.showToast('Không tải được danh mục mới nhất — đang hiển thị danh mục mặc định.', 'info');
   }
 }
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function sanitizeColor(c) {
+  const v = String(c || '').trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(v)) return v;
+  if (/^(rgb|hsl)a?\(/i.test(v)) return v.replace(/["'`<>]/g,'');
+  return '#ffffff';
+}
+function sanitizeCategory(cat) {
+  const v = String(cat || 'tshirt').toLowerCase().trim();
+  if (['tshirt','oversize','polo','hoodie'].includes(v)) return v;
+  return 'tshirt';
+}
 function renderProducts(products) {
   const grid = document.getElementById('productsGrid');
   const lang = i18n.currentLang;
   const isVi = lang === 'vi';
 
   grid.innerHTML = products.map(product => {
-    const name = isVi ? product.name : (product.nameEn || product.name);
-    const desc = isVi ? product.description : (product.descriptionEn || product.description);
+    const rawName = isVi ? product.name : (product.nameEn || product.name);
+    const rawDesc = isVi ? product.description : (product.descriptionEn || product.description);
+    const name = escapeHtml(rawName);
+    const desc = escapeHtml(rawDesc);
     const price = isVi
-      ? `${product.price.toLocaleString('vi-VN')}đ`
-      : `$${product.priceUsd || Math.round(product.price / 25000)}`;
+      ? `${Number(product.price||0).toLocaleString('vi-VN')}đ`
+      : `$${escapeHtml(product.priceUsd || Math.round((product.price||0) / 25000))}`;
 
-    const colorsHtml = (product.colors || []).slice(0, 5).map(c =>
-      `<span class="color-dot" style="background:${c}" title="${c}"></span>`
-    ).join('');
+    const colorsHtml = (product.colors || []).slice(0, 5).map(c => {
+      const safe = sanitizeColor(c);
+      return `<span class="color-dot" style="background:${escapeAttr(safe)}" title="${escapeAttr(safe)}"></span>`;
+    }).join('');
 
     const badgeHtml = product.badge
-      ? `<span class="product-badge">${product.badge}</span>`
+      ? `<span class="product-badge">${escapeHtml(product.badge)}</span>`
       : '';
+    const safeCategory = escapeAttr(sanitizeCategory(product.category));
 
-    // SVG t-shirt illustrations by category
-    const mainColor = (product.colors && product.colors[0]) || '#ffffff';
-    const svgVisual = getProductSVG(product.category, mainColor);
+    // SVG t-shirt illustrations by category — sanitize inputs to prevent injection
+    const mainColor = sanitizeColor((product.colors && product.colors[0]) || '#ffffff');
+    const svgVisual = getProductSVG(safeCategory, mainColor);
 
     return `
-      <div class="product-card animate-on-scroll" data-category="${product.category}">
+      <div class="product-card animate-on-scroll" data-category="${safeCategory}">
         <div class="product-image">
           ${badgeHtml}
           <div class="tshirt-visual">${svgVisual}</div>
@@ -281,10 +304,9 @@ function initContactForm() {
         successMsg.classList.remove('show');
       }, 5000);
     } catch (err) {
-      // Show success anyway for demo purposes
-      successMsg.classList.add('show');
-      form.reset();
-      setTimeout(() => successMsg.classList.remove('show'), 5000);
+      if (window.showToast) window.showToast(err.message || 'Gửi liên hệ thất bại. Thử lại sau.', 'error');
+      var errEl = document.getElementById('contactError');
+      if (errEl) { errEl.textContent = err.message || 'Gửi thất bại.'; errEl.style.display = 'block'; setTimeout(function(){ errEl.style.display='none'; }, 4500); }
     }
 
     submitBtn.innerHTML = originalText;

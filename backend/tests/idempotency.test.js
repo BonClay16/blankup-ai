@@ -1,7 +1,8 @@
 const request = require('supertest');
 const fs = require('fs');
-const path = require('path');
 
+jest.mock('../db', () => require('./helpers/testIsolation').dbFactory());
+jest.mock('../utils/fileStore', () => require('./helpers/testIsolation').fileStoreFactory('idempotency'));
 jest.mock('../middleware/rateLimit', () => ({
   apiLimiter: (req, res, next) => next(),
   authLimiter: (req, res, next) => next(),
@@ -10,8 +11,11 @@ jest.mock('../middleware/rateLimit', () => ({
 }));
 
 const app = require('../app');
-const ordersFile = path.join(__dirname, '../data/orders.json');
-let originalOrders;
+const { _testOrdersFile: ordersFile, _testCleanup } = require('../utils/fileStore');
+
+afterAll(() => {
+  _testCleanup();
+});
 
 const SAMPLE_BODY = {
   productType: 'tshirt',
@@ -20,21 +24,8 @@ const SAMPLE_BODY = {
   quantity: 1,
   customer: { name: 'Test User', phone: '0900000001', address: '123 Test St' },
   payment: 'COD',
-  userId: 'u-idem-test',
   authorName: 'IdempotencyTester',
 };
-
-beforeAll(() => {
-  if (fs.existsSync(ordersFile)) {
-    originalOrders = fs.readFileSync(ordersFile, 'utf8');
-  }
-});
-
-afterEach(() => {
-  if (originalOrders !== undefined) {
-    fs.writeFileSync(ordersFile, originalOrders, 'utf8');
-  }
-});
 
 describe('P0-04 Idempotency: Order creation deduplication', () => {
   // --- Test 1: Same key + same body → 1 order, returns same orderId ---

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getPool, sql } = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const { withLock } = require('../utils/fileStore');
 
 const BANK_TRANSFER_INFO = {
   bankId: '970422',
@@ -67,119 +68,134 @@ router.post('/purchase', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Gói này không yêu cầu thanh toán.' });
     }
 
-    // Voucher handling for plan purchase
-    let discountAmount = 0;
-    let bonusHigh = 0;
-    let bonusLow = 0;
-    let voucher = null;
-    if (voucherCode) {
-      const code = String(voucherCode).trim().toUpperCase();
-      const vRes = await pool.request()
-        .input('code', sql.NVarChar, code)
-        .query('SELECT * FROM Vouchers WHERE code = @code');
-      if (vRes.recordset.length === 0) {
-        return res.status(400).json({ success: false, error: 'Mã voucher không tồn tại.' });
-      }
-      voucher = vRes.recordset[0];
-      if (voucher.status !== 'active') {
-        return res.status(400).json({ success: false, error: 'Voucher không hoạt động.' });
-      }
-      const now = new Date();
-      if (voucher.startsAt && new Date(voucher.startsAt) > now) {
-        return res.status(400).json({ success: false, error: 'Voucher chưa bắt đầu.' });
-      }
-      if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
-        return res.status(400).json({ success: false, error: 'Voucher đã hết hạn.' });
-      }
-      if (!['all', 'plan'].includes(voucher.appliesTo)) {
-        return res.status(400).json({ success: false, error: 'Voucher không áp dụng cho gói.' });
-      }
-      if (voucher.eligiblePlanCodes) {
-        const allowed = voucher.eligiblePlanCodes.split(',').map(s => s.trim().toLowerCase());
-        if (!allowed.includes(plan.code.toLowerCase()) && !allowed.includes(plan.id.toLowerCase())) {
-          return res.status(400).json({ success: false, error: 'Voucher không áp dụng cho gói này.' });
+    // P0-09: voucher validation inside withLock to prevent concurrent double-spending
+    const executePurchase = async () => {
+      let discountAmount = 0;
+      let bonusHigh = 0;
+      let bonusLow = 0;
+      let voucher = null;
+      if (voucherCode) {
+        const code = String(voucherCode).trim().toUpperCase();
+        const vRes = await pool.request()
+          .input('code', sql.NVarChar, code)
+          .query('SELECT * FROM Vouchers WHERE code = @code');
+        if (vRes.recordset.length === 0) {
+          return { error: 'Mã voucher không tồn tại.', status: 400 };
         }
+        voucher = vRes.recordset[0];
+        if (voucher.status !== 'active') {
+          return { error: 'Voucher không hoạt động.', status: 400 };
+        }
+        const now = new Date();
+        if (voucher.startsAt && new Date(voucher.startsAt) > now) {
+          return { error: 'Voucher chưa bắt đầu.', status: 400 };
+        }
+        if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
+          return { error: 'Voucher đã hết hạn.', status: 400 };
+        }
+        if (!['all', 'plan'].includes(voucher.appliesTo)) {
+          return { error: 'Voucher không áp dụng cho gói.', status: 400 };
+        }
+        if (voucher.eligiblePlanCodes) {
+          const allowed = voucher.eligiblePlanCodes.split(',').map(s => s.trim().toLowerCase());
+          if (!allowed.includes(plan.code.toLowerCase()) && !allowed.includes(plan.id.toLowerCase())) {
+            return { error: 'Voucher không áp dụng cho gói này.', status: 400 };
+          }
+        }
+        if (voucher.totalUsageLimit && voucher.usedCount >= voucher.totalUsageLimit) {
+          return { error: 'Voucher đã hết lượt sử dụng.', status: 400 };
+        }
+        const perUserRes = await pool.request()
+          .input('voucherId', sql.NVarChar, voucher.id)
+          .input('userId', sql.NVarChar, userId)
+          .query('SELECT COUNT(*) as cnt FROM VoucherRedemptions WHERE voucherId = @voucherId AND userId = @userId');
+        if (perUserRes.recordset[0].cnt >= voucher.perUserLimit) {
+          return { error: 'Bạn đã dùng voucher này tối đa số lần cho phép.', status: 400 };
+        }
+        if (voucher.discountType === 'fixed') {
+          discountAmount = Number(voucher.discountValue) || 0;
+        } else if (voucher.discountType === 'percent') {
+          discountAmount = Math.round(plan.priceVnd * (Number(voucher.discountValue) || 0) / 100);
+          if (voucher.maxDiscountAmount) discountAmount = Math.min(discountAmount, voucher.maxDiscountAmount);
+        }
+        discountAmount = Math.min(discountAmount, plan.priceVnd);
+        bonusHigh = Number(voucher.bonusHighCredits) || 0;
+        bonusLow = Number(voucher.bonusLowCredits) || 0;
       }
-      if (voucher.totalUsageLimit && voucher.usedCount >= voucher.totalUsageLimit) {
-        return res.status(400).json({ success: false, error: 'Voucher đã hết lượt sử dụng.' });
-      }
-      const perUserRes = await pool.request()
-        .input('voucherId', sql.NVarChar, voucher.id)
-        .input('userId', sql.NVarChar, userId)
-        .query('SELECT COUNT(*) as cnt FROM VoucherRedemptions WHERE voucherId = @voucherId AND userId = @userId');
-      if (perUserRes.recordset[0].cnt >= voucher.perUserLimit) {
-        return res.status(400).json({ success: false, error: 'Bạn đã dùng voucher này tối đa số lần cho phép.' });
-      }
-      if (voucher.discountType === 'fixed') {
-        discountAmount = Number(voucher.discountValue) || 0;
-      } else if (voucher.discountType === 'percent') {
-        discountAmount = Math.round(plan.priceVnd * (Number(voucher.discountValue) || 0) / 100);
-        if (voucher.maxDiscountAmount) discountAmount = Math.min(discountAmount, voucher.maxDiscountAmount);
-      }
-      discountAmount = Math.min(discountAmount, plan.priceVnd);
-      bonusHigh = Number(voucher.bonusHighCredits) || 0;
-      bonusLow = Number(voucher.bonusLowCredits) || 0;
-    }
-    const finalAmount = Math.max(0, plan.priceVnd - discountAmount);
-    const totalHigh = plan.highCredits + bonusHigh;
-    const totalLow = plan.bonusLowCredits + bonusLow;
+      const finalAmount = Math.max(0, plan.priceVnd - discountAmount);
+      const totalHigh = plan.highCredits + bonusHigh;
+      const totalLow = plan.bonusLowCredits + bonusLow;
 
-    // Create purchase record
-    const purchaseId = 'purchase-' + Date.now().toString(36).toUpperCase();
-    const transferContent = `BLANKUP-AI-${plan.code.toUpperCase()}`;
+      // Create purchase record
+      const purchaseId = 'purchase-' + Date.now().toString(36).toUpperCase();
+      const transferContent = `BLANKUP-AI-${plan.code.toUpperCase()}`;
 
-    await pool.request()
-      .input('id', sql.NVarChar, purchaseId)
-      .input('userId', sql.NVarChar, userId)
-      .input('planId', sql.NVarChar, plan.id)
-      .input('priceVnd', sql.Int, plan.priceVnd)
-      .input('highCreditsAdded', sql.Int, totalHigh)
-      .input('lowCreditsAdded', sql.Int, totalLow)
-      .input('finalAmount', sql.Int, finalAmount)
-      .input('transferContent', sql.NVarChar, transferContent)
-      .input('paymentMethod', sql.NVarChar, 'BANK_TRANSFER')
-      .input('voucherCode', sql.NVarChar, voucher ? voucher.code : null)
-      .input('discountAmount', sql.Int, discountAmount)
-      .query(`
-        INSERT INTO AiPlanPurchases (
-          id, userId, planId, priceVnd, highCreditsAdded, lowCreditsAdded,
-          finalAmount, transferContent, paymentMethod, paymentStatus, voucherCode, discountAmount
-        )
-        VALUES (
-          @id, @userId, @planId, @priceVnd, @highCreditsAdded, @lowCreditsAdded,
-          @finalAmount, @transferContent, @paymentMethod, 'pending', @voucherCode, @discountAmount
-        )
-      `);
-
-    // Record voucher redemption if used
-    if (voucher) {
-      const redemptionId = 'vr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
       await pool.request()
-        .input('id', sql.NVarChar, redemptionId)
-        .input('voucherId', sql.NVarChar, voucher.id)
-        .input('voucherCode', sql.NVarChar, voucher.code)
+        .input('id', sql.NVarChar, purchaseId)
         .input('userId', sql.NVarChar, userId)
-        .input('purchaseId', sql.NVarChar, purchaseId)
-        .input('appliesTo', sql.NVarChar, 'plan')
-        .input('originalAmount', sql.Int, plan.priceVnd)
+        .input('planId', sql.NVarChar, plan.id)
+        .input('priceVnd', sql.Int, plan.priceVnd)
+        .input('highCreditsAdded', sql.Int, totalHigh)
+        .input('lowCreditsAdded', sql.Int, totalLow)
+        .input('finalAmount', sql.Int, finalAmount)
+        .input('transferContent', sql.NVarChar, transferContent)
+        .input('paymentMethod', sql.NVarChar, 'BANK_TRANSFER')
+        .input('voucherCode', sql.NVarChar, voucher ? voucher.code : null)
         .input('discountAmount', sql.Int, discountAmount)
-        .input('bonusHigh', sql.Int, bonusHigh)
+        .query(`
+          INSERT INTO AiPlanPurchases (
+            id, userId, planId, priceVnd, highCreditsAdded, lowCreditsAdded,
+            finalAmount, transferContent, paymentMethod, paymentStatus, voucherCode, discountAmount
+          )
+          VALUES (
+            @id, @userId, @planId, @priceVnd, @highCreditsAdded, @lowCreditsAdded,
+            @finalAmount, @transferContent, @paymentMethod, 'pending', @voucherCode, @discountAmount
+          )
+        `);
+
+      // Record voucher redemption if used
+      if (voucher) {
+        const redemptionId = 'vr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+        await pool.request()
+          .input('id', sql.NVarChar, redemptionId)
+          .input('voucherId', sql.NVarChar, voucher.id)
+          .input('voucherCode', sql.NVarChar, voucher.code)
+          .input('userId', sql.NVarChar, userId)
+          .input('purchaseId', sql.NVarChar, purchaseId)
+          .input('appliesTo', sql.NVarChar, 'plan')
+          .input('originalAmount', sql.Int, plan.priceVnd)
+          .input('discountAmount', sql.Int, discountAmount)
+          .input('bonusHigh', sql.Int, bonusHigh)
         .input('bonusLow', sql.Int, bonusLow)
         .query(`
           INSERT INTO VoucherRedemptions (id, voucherId, voucherCode, userId, purchaseId, appliesTo, originalAmount, discountAmount, bonusHighCredits, bonusLowCredits, redeemedAt)
           VALUES (@id, @voucherId, @voucherCode, @userId, @purchaseId, @appliesTo, @originalAmount, @discountAmount, @bonusHigh, @bonusLow, GETDATE());
           UPDATE Vouchers SET usedCount = usedCount + 1, updatedAt = GETDATE() WHERE id = @voucherId;
         `);
+      }
+
+      return { purchaseId, transferContent, amount: plan.priceVnd, planName: plan.name };
+    };
+
+    let result;
+    if (voucherCode) {
+      result = await withLock('voucher-redeem-plan', executePurchase);
+    } else {
+      result = await executePurchase();
     }
 
-    console.log(`[AI-Plans] Purchase created: ${purchaseId} (${plan.code}) by user ${userId}`);
+    if (result && result.error) {
+      return res.status(result.status).json({ success: false, error: result.error });
+    }
+
+    console.log(`[AI-Plans] Purchase created: ${result.purchaseId} (${plan.code}) by user ${userId}`);
 
     res.status(201).json({
       success: true,
-      purchaseId,
-      transferContent,
-      amount: plan.priceVnd,
-      planName: plan.name,
+      purchaseId: result.purchaseId,
+      transferContent: result.transferContent,
+      amount: result.amount,
+      planName: result.planName,
       bankInfo: BANK_TRANSFER_INFO,
       message: 'Quét QR để thanh toán. Sau khi xác nhận, credit sẽ được cộng tự động.',
     });
@@ -241,103 +257,115 @@ router.post('/purchase/:purchaseId/confirm', authenticate, requireAdmin, async (
     }
 
     const pool = getPool();
-    const result = await pool.request()
-      .input('purchaseId', sql.NVarChar, purchaseId)
-      .query('SELECT * FROM AiPlanPurchases WHERE id = @purchaseId');
-
-    if (result.recordset.length === 0) {
-      return res.status(404).json({ success: false, error: 'Đơn mua không tồn tại.' });
-    }
-
-    const purchase = result.recordset[0];
-    if (purchase.paymentStatus === 'paid') {
-      return res.status(400).json({ success: false, error: 'Đơn này đã được xác nhận thanh toán.' });
-    }
 
     if (paymentStatus === 'paid') {
-      // Add credits to user account
-      const accountResult = await pool.request()
-        .input('userId', sql.NVarChar, purchase.userId)
-        .query('SELECT * FROM UserAiAccounts WHERE userId = @userId');
+      // P0-07: Atomic transaction — mark paid + issue credit. Concurrent confirms: only one succeeds financially.
+      const transaction = pool.transaction();
+      try {
+        await transaction.begin();
 
-      let account = accountResult.recordset[0];
-      if (!account) {
-        // Create account if not exists
-        await pool.request()
-          .input('userId', sql.NVarChar, purchase.userId)
+        // Atomic mark: only pending → paid. Concurrent callers get empty recordset.
+        const markResult = await transaction.request()
+          .input('purchaseId', sql.NVarChar, purchaseId)
           .query(`
-            INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank)
-            VALUES (@userId, N'plan-free', 0)
+            UPDATE AiPlanPurchases
+            SET paymentStatus = 'paid',
+                paymentDescription = @note,
+                paymentCheckedAt = GETDATE(),
+                paidAt = GETDATE()
+            OUTPUT inserted.*
+            WHERE id = @purchaseId AND paymentStatus = 'pending'
           `);
-        account = { highCredits: 0, bonusLowCredits: 0 };
+
+        if (markResult.recordset.length === 0) {
+          await transaction.rollback();
+          const check = await pool.request()
+            .input('purchaseId', sql.NVarChar, purchaseId)
+            .query('SELECT paymentStatus FROM AiPlanPurchases WHERE id = @purchaseId');
+          if (check.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Đơn mua không tồn tại.' });
+          }
+          return res.status(400).json({ success: false, error: 'Đơn này đã được xác nhận hoặc xử lý.' });
+        }
+
+        const purchase = markResult.recordset[0];
+
+        const accountResult = await transaction.request()
+          .input('userId', sql.NVarChar, purchase.userId)
+          .query('SELECT * FROM UserAiAccounts WHERE userId = @userId');
+
+        let account = accountResult.recordset[0];
+        if (!account) {
+          await transaction.request()
+            .input('userId', sql.NVarChar, purchase.userId)
+            .query(`INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank) VALUES (@userId, N'plan-free', 0)`);
+          account = { highCredits: 0, bonusLowCredits: 0 };
+        }
+
+        const newHighCredits = (account.highCredits || 0) + purchase.highCreditsAdded;
+        const newLowCredits = (account.bonusLowCredits || 0) + purchase.lowCreditsAdded;
+
+        await transaction.request()
+          .input('userId', sql.NVarChar, purchase.userId)
+          .input('highCredits', sql.Int, newHighCredits)
+          .input('lowCredits', sql.Int, newLowCredits)
+          .input('planId', sql.NVarChar, purchase.planId)
+          .query(`
+            UPDATE UserAiAccounts
+            SET highCredits = @highCredits,
+                bonusLowCredits = @lowCredits,
+                displayPlanId = @planId,
+                updatedAt = GETDATE()
+            WHERE userId = @userId
+          `);
+
+        const ledgerIdHigh = 'ledger-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        const ledgerIdLow = ledgerIdHigh + '-low';
+        await transaction.request()
+          .input('ledgerIdHigh', sql.NVarChar, ledgerIdHigh)
+          .input('ledgerIdLow', sql.NVarChar, ledgerIdLow)
+          .input('userId', sql.NVarChar, purchase.userId)
+          .input('highCredits', sql.Int, purchase.highCreditsAdded)
+          .input('lowCredits', sql.Int, purchase.lowCreditsAdded)
+          .input('balanceHigh', sql.Int, newHighCredits)
+          .input('balanceLow', sql.Int, newLowCredits)
+          .input('purchaseId', sql.NVarChar, purchaseId)
+          .input('note', sql.NVarChar, `Mua gói - Đơn ${purchaseId}`)
+          .query(`
+            INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
+            VALUES (@ledgerIdHigh, @userId, 'high', 'high', @highCredits, @balanceHigh, 'plan_purchase', 'purchase', @purchaseId, @note);
+            INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
+            VALUES (@ledgerIdLow, @userId, 'low', 'low', @lowCredits, @balanceLow, 'plan_purchase', 'purchase', @purchaseId, @note);
+          `);
+
+        await transaction.commit();
+        console.log(`[AI-Plans] Purchase ${purchaseId} confirmed. Credits added: ${purchase.highCreditsAdded} high, ${purchase.lowCreditsAdded} low`);
+      } catch (txErr) {
+        await transaction.rollback();
+        throw txErr;
       }
-
-      // Update plan purchase status
-      await pool.request()
-        .input('purchaseId', sql.NVarChar, purchaseId)
-        .input('paymentStatus', sql.NVarChar, paymentStatus)
-        .input('note', sql.NVarChar, note || null)
-        .query(`
-          UPDATE AiPlanPurchases
-          SET paymentStatus = @paymentStatus,
-              paymentDescription = @note,
-              paymentCheckedAt = GETDATE(),
-              paidAt = GETDATE()
-          WHERE id = @purchaseId
-        `);
-
-      // Add credits + update plan
-      const newHighCredits = (account.highCredits || 0) + purchase.highCreditsAdded;
-      const newLowCredits = (account.bonusLowCredits || 0) + purchase.lowCreditsAdded;
-
-      await pool.request()
-        .input('userId', sql.NVarChar, purchase.userId)
-        .input('highCredits', sql.Int, newHighCredits)
-        .input('lowCredits', sql.Int, newLowCredits)
-        .input('planId', sql.NVarChar, purchase.planId)
-        .query(`
-          UPDATE UserAiAccounts
-          SET highCredits = @highCredits,
-              bonusLowCredits = @lowCredits,
-              displayPlanId = @planId,
-              updatedAt = GETDATE()
-          WHERE userId = @userId
-        `);
-
-      // Log to ledger with correct balanceAfter
-      const ledgerIdHigh = 'ledger-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-      const ledgerIdLow = ledgerIdHigh + '-low';
-      await pool.request()
-        .input('ledgerIdHigh', sql.NVarChar, ledgerIdHigh)
-        .input('ledgerIdLow', sql.NVarChar, ledgerIdLow)
-        .input('userId', sql.NVarChar, purchase.userId)
-        .input('highCredits', sql.Int, purchase.highCreditsAdded)
-        .input('lowCredits', sql.Int, purchase.lowCreditsAdded)
-        .input('balanceHigh', sql.Int, newHighCredits)
-        .input('balanceLow', sql.Int, newLowCredits)
-        .input('purchaseId', sql.NVarChar, purchaseId)
-        .input('note', sql.NVarChar, `Mua gói - Đơn ${purchaseId}`)
-        .query(`
-          INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
-          VALUES (@ledgerIdHigh, @userId, 'high', 'high', @highCredits, @balanceHigh, 'plan_purchase', 'purchase', @purchaseId, @note);
-          INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
-          VALUES (@ledgerIdLow, @userId, 'low', 'low', @lowCredits, @balanceLow, 'plan_purchase', 'purchase', @purchaseId, @note);
-        `);
-
-      console.log(`[AI-Plans] Purchase ${purchaseId} confirmed. Credits added: ${purchase.highCreditsAdded} high, ${purchase.lowCreditsAdded} low`);
     } else {
-      // Just mark as failed
-      await pool.request()
+      // Mark as failed — atomic guard: only pending can be failed
+      const failResult = await pool.request()
         .input('purchaseId', sql.NVarChar, purchaseId)
-        .input('paymentStatus', sql.NVarChar, paymentStatus)
         .input('note', sql.NVarChar, note || null)
         .query(`
           UPDATE AiPlanPurchases
-          SET paymentStatus = @paymentStatus,
+          SET paymentStatus = 'failed',
               paymentDescription = @note,
               paymentCheckedAt = GETDATE()
-          WHERE id = @purchaseId
+          WHERE id = @purchaseId AND paymentStatus = 'pending'
         `);
+
+      if (failResult.rowsAffected[0] === 0) {
+        const check = await pool.request()
+          .input('purchaseId', sql.NVarChar, purchaseId)
+          .query('SELECT paymentStatus FROM AiPlanPurchases WHERE id = @purchaseId');
+        if (check.recordset.length === 0) {
+          return res.status(404).json({ success: false, error: 'Đơn mua không tồn tại.' });
+        }
+        return res.status(400).json({ success: false, error: 'Đơn này đã được xác nhận hoặc xử lý.' });
+      }
     }
 
     res.json({
@@ -376,75 +404,104 @@ router.post('/webhook/sepay', async (req, res) => {
       return res.json({ success: true, message: 'Not a Blankup transaction' });
     }
 
-    const planCode = match[1].toLowerCase();
     const pool = getPool();
 
-    // Find pending purchase with matching transferContent
-    const purchaseResult = await pool.request()
-      .input('transferContent', sql.NVarChar, content)
-      .query(`
-        SELECT p.*, pl.code AS planCode, pl.name AS planName
-        FROM AiPlanPurchases p
-        JOIN AiPlans pl ON pl.id = p.planId
-        WHERE p.transferContent = @transferContent
-          AND p.paymentStatus = 'pending'
-      `);
+    // P0-08: Atomic transaction — mark paid + issue credit. Concurrent webhooks: only one wins.
+    const transaction = pool.transaction();
+    try {
+      await transaction.begin();
 
-    if (purchaseResult.recordset.length === 0) {
-      console.log(`[AI-Plans] No pending purchase found for: ${content}`);
-      return res.json({ success: true, message: 'No matching purchase' });
-    }
+      // Atomic mark: only pending → paid. Concurrent callers get empty recordset.
+      const markResult = await transaction.request()
+        .input('transferContent', sql.NVarChar, content)
+        .input('transactionId', sql.NVarChar, transactionId || null)
+        .query(`
+          UPDATE AiPlanPurchases
+          SET paymentStatus = 'paid',
+              paymentTransactionId = @transactionId,
+              paymentCheckedAt = GETDATE(),
+              paidAt = GETDATE()
+          OUTPUT inserted.*
+          WHERE transferContent = @transferContent
+            AND paymentStatus = 'pending'
+        `);
 
-    const purchase = purchaseResult.recordset[0];
+      if (markResult.recordset.length === 0) {
+        await transaction.rollback();
+        const existing = await pool.request()
+          .input('transferContent', sql.NVarChar, content)
+          .query('SELECT paymentStatus FROM AiPlanPurchases WHERE transferContent = @transferContent');
+        if (existing.recordset.length === 0) {
+          return res.json({ success: true, message: 'No matching purchase' });
+        }
+        return res.json({ success: true, message: 'Payment already processed' });
+      }
 
-    // Verify amount
-    if (Number(amount) !== purchase.finalAmount) {
-      console.log(`[AI-Plans] Amount mismatch: expected ${purchase.finalAmount}, got ${amount}`);
-      return res.json({ success: true, message: 'Amount mismatch' });
-    }
+      const purchase = markResult.recordset[0];
 
-    // Auto-confirm: same logic as manual confirm
-    const accountResult = await pool.request()
-      .input('userId', sql.NVarChar, purchase.userId)
-      .query('SELECT * FROM UserAiAccounts WHERE userId = @userId');
+      // Amount check after mark — strict: missing or mismatched amount → rollback, no credit.
+      // We mark first (to grab the row lock + claim the state), then verify amount. Rollback
+      // on mismatch leaves the row as pending so a correct retry can still succeed.
+      if (amount == null || Number(amount) !== purchase.finalAmount) {
+        await transaction.rollback();
+        return res.json({ success: true, message: 'Amount mismatch' });
+      }
 
-    const account = accountResult.recordset[0];
-    if (!account) {
-      await pool.request()
+      const accountResult = await transaction.request()
         .input('userId', sql.NVarChar, purchase.userId)
-        .query(`INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank) VALUES (@userId, N'plan-free', 0)`);
+        .query('SELECT * FROM UserAiAccounts WHERE userId = @userId');
+
+      let account = accountResult.recordset[0];
+      if (!account) {
+        await transaction.request()
+          .input('userId', sql.NVarChar, purchase.userId)
+          .query(`INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank) VALUES (@userId, N'plan-free', 0)`);
+        account = { highCredits: 0, bonusLowCredits: 0 };
+      }
+
+      const newHighCredits = (account.highCredits || 0) + purchase.highCreditsAdded;
+      const newLowCredits = (account.bonusLowCredits || 0) + purchase.lowCreditsAdded;
+
+      await transaction.request()
+        .input('userId', sql.NVarChar, purchase.userId)
+        .input('highCredits', sql.Int, newHighCredits)
+        .input('lowCredits', sql.Int, newLowCredits)
+        .input('planId', sql.NVarChar, purchase.planId)
+        .query(`
+          UPDATE UserAiAccounts
+          SET highCredits = @highCredits,
+              bonusLowCredits = @lowCredits,
+              displayPlanId = @planId,
+              updatedAt = GETDATE()
+          WHERE userId = @userId
+        `);
+
+      const ledgerIdHigh = 'ledger-sepay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const ledgerIdLow = ledgerIdHigh + '-low';
+      await transaction.request()
+        .input('ledgerIdHigh', sql.NVarChar, ledgerIdHigh)
+        .input('ledgerIdLow', sql.NVarChar, ledgerIdLow)
+        .input('userId', sql.NVarChar, purchase.userId)
+        .input('highCredits', sql.Int, purchase.highCreditsAdded)
+        .input('lowCredits', sql.Int, purchase.lowCreditsAdded)
+        .input('balanceHigh', sql.Int, newHighCredits)
+        .input('balanceLow', sql.Int, newLowCredits)
+        .input('purchaseId', sql.NVarChar, purchase.id)
+        .input('note', sql.NVarChar, `Thanh toán QR - Đơn ${purchase.id}`)
+        .query(`
+          INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
+          VALUES (@ledgerIdHigh, @userId, 'high', 'high', @highCredits, @balanceHigh, 'plan_purchase', 'purchase', @purchaseId, @note);
+          INSERT INTO AiCreditLedger (id, userId, creditType, quality, amount, balanceAfter, reason, referenceType, referenceId, note)
+          VALUES (@ledgerIdLow, @userId, 'low', 'low', @lowCredits, @balanceLow, 'plan_purchase', 'purchase', @purchaseId, @note);
+        `);
+
+      await transaction.commit();
+      console.log(`[AI-Plans] Sepay auto-confirmed: ${purchase.id}. Credits added.`);
+      res.json({ success: true, message: 'Payment confirmed' });
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
     }
-
-    const acc = account || { highCredits: 0, bonusLowCredits: 0 };
-
-    await pool.request()
-      .input('purchaseId', sql.NVarChar, purchase.id)
-      .input('transactionId', sql.NVarChar, transactionId || null)
-      .query(`
-        UPDATE AiPlanPurchases
-        SET paymentStatus = 'paid',
-            paymentTransactionId = @transactionId,
-            paymentCheckedAt = GETDATE(),
-            paidAt = GETDATE()
-        WHERE id = @purchaseId
-      `);
-
-    await pool.request()
-      .input('userId', sql.NVarChar, purchase.userId)
-      .input('highCredits', sql.Int, (acc.highCredits || 0) + purchase.highCreditsAdded)
-      .input('lowCredits', sql.Int, (acc.bonusLowCredits || 0) + purchase.lowCreditsAdded)
-      .input('planId', sql.NVarChar, purchase.planId)
-      .query(`
-        UPDATE UserAiAccounts
-        SET highCredits = @highCredits,
-            bonusLowCredits = @lowCredits,
-            displayPlanId = @planId,
-            updatedAt = GETDATE()
-        WHERE userId = @userId
-      `);
-
-    console.log(`[AI-Plans] Sepay auto-confirmed: ${purchase.id}. Credits added.`);
-    res.json({ success: true, message: 'Payment confirmed' });
   } catch (err) {
     console.error('[AI-Plans] Sepay webhook error:', err.message);
     res.status(500).json({ success: false, error: 'Webhook processing failed' });

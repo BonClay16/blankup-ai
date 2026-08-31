@@ -16,6 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let pendingVerifyUserId = null;
   let pendingVerifyMethods = [];
 
+  // UX reliability: busy guards prevent double-submit / duplicate OTP sends
+  const _busy = new Set();
+  function busyGuard(key) { if (_busy.has(key)) return true; _busy.add(key); return false; }
+  function busyRelease(key) { _busy.delete(key); }
+
   // ---- Login/Register form elements ----
   const form = document.getElementById('loginForm');
   const title = document.getElementById('loginTitle');
@@ -286,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
     verifyForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!pendingVerifyUserId) return;
+      if (busyGuard('verifyForm')) return; // duplicate action prevention
 
       verifyErrorMsg.style.display = 'none';
       verifySuccessMsg.style.display = 'none';
@@ -344,6 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyErrorMsg.textContent = err.message;
         verifyErrorMsg.style.display = 'block';
       } finally {
+        busyRelease('verifyForm');
         verifySubmitBtn.disabled = false;
         verifySubmitBtn.innerHTML = origHtml;
       }
@@ -354,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (resendEmailBtn) {
     resendEmailBtn.addEventListener('click', async () => {
       if (!pendingVerifyUserId) return;
+      if (busyGuard('resendEmail')) return; // duplicate OTP prevention
       resendEmailBtn.disabled = true;
       resendEmailBtn.textContent = 'Đang gửi...';
       try {
@@ -369,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyErrorMsg.textContent = err.message || 'Không thể gửi lại mã.';
         verifyErrorMsg.style.display = 'block';
       } finally {
+        busyRelease('resendEmail');
         resendEmailBtn.disabled = false;
         resendEmailBtn.textContent = 'Gửi lại mã';
       }
@@ -379,6 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (resendPhoneBtn) {
     resendPhoneBtn.addEventListener('click', async () => {
       if (!pendingVerifyUserId) return;
+      if (busyGuard('resendPhone')) return; // duplicate OTP prevention
       resendPhoneBtn.disabled = true;
       resendPhoneBtn.textContent = 'Đang gửi...';
       try {
@@ -394,6 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyErrorMsg.textContent = err.message || 'Không thể gửi lại mã.';
         verifyErrorMsg.style.display = 'block';
       } finally {
+        busyRelease('resendPhone');
         resendPhoneBtn.disabled = false;
         resendPhoneBtn.textContent = 'Gửi lại mã';
       }

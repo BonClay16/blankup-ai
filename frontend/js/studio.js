@@ -1,12 +1,7 @@
 // frontend/js/studio.js — v2 Redesign
 const API_BASE = window.location.origin + '/api';
 
-/* ============================================================
-   TOAST NOTIFICATIONS — intentionally disabled
-   ============================================================ */
-function showToast() {
-  /* Toasts removed globally. Keep signature for existing call sites. */
-}
+/* Toast — provided by js/toast.js */
 
 /* ============================================================
    CONSTANTS
@@ -157,14 +152,79 @@ function formatAiError(data) { if (data?.error) return data.error; if (data?.mes
 /* ============================================================
    AUTH GUARD — must be logged in to use studio
    ============================================================ */
-function requireAuth() {
-  if (auth.isLoggedIn()) return false;
+function isJwtExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp && Date.now() >= payload.exp * 1000) return true;
+  } catch {}
+  return false;
+}
+
+function isStudioAuthenticated() {
+  // Use existing BlankUp auth state: token + user, plus client-side expiry check
+  if (typeof auth === 'undefined' || !auth) return false;
+  if (!auth.isLoggedIn()) return false;
+  if (auth.token && isJwtExpired(auth.token)) return false;
+  return true;
+}
+
+window._studioAuthPromptShown = window._studioAuthPromptShown || false;
+function showStudioAuthPrompt(reason = 'login-required') {
+  if (window._studioAuthPromptShown) return;
+  window._studioAuthPromptShown = true;
   const modal = document.getElementById('authRequiredModal');
   if (modal) {
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
   }
+  if (window.showToast) {
+    window.showToast('Vui lòng đăng nhập để sử dụng Studio.', 'warning', 5000);
+  }
+  // Also ensure toast system is ready: if showToast not yet, retry once
+  else {
+    setTimeout(() => {
+      if (window.showToast) window.showToast('Vui lòng đăng nhập để sử dụng Studio.', 'warning', 5000);
+    }, 300);
+  }
+}
+
+function hideStudioAuthPrompt() {
+  window._studioAuthPromptShown = false;
+  const modal = document.getElementById('authRequiredModal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function requireAuth() {
+  if (isStudioAuthenticated()) return false;
+  showStudioAuthPrompt('requireAuth');
   return true;
+}
+
+function checkStudioAuthOnEntry() {
+  // Immediate check after Studio init — entry guard, not button guard
+  if (!isStudioAuthenticated()) {
+    showStudioAuthPrompt('entry');
+    return;
+  }
+  // If token exists but server says invalid (async), handle after checkSession
+  // Do light async verification without spamming: single fetch, deduped
+  if (auth.token) {
+    fetch(`${API_BASE}/auth/me`, { headers: auth.getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) {
+          // Token invalid/expired on server → clear and prompt
+          if (typeof auth.clearSession === 'function') auth.clearSession();
+          showStudioAuthPrompt('expired');
+        } else {
+          // Valid → ensure prompt not shown
+          hideStudioAuthPrompt();
+        }
+      })
+      .catch(() => {
+        // Network slow/fail → do not spam, keep current state (already checked isLoggedIn)
+      });
+  }
 }
 
 /* ============================================================
@@ -281,7 +341,11 @@ async function buildCompositePrintUrl(designUrl, side = state.currentView) {
         const x = size * (0.5 + ip.x / 100) - w / 2, y = size * (0.44 + ip.y / 100) - h / 2;
         ctx.drawImage(img, x, y, w, h);
       }
-    } catch (e) { console.warn('Composite print error:', e); }
+    } catch (e) {
+      console.warn('Composite print error:', e);
+      // UX reliability: composite failure must not be silent — design may not render on mockup
+      if (window.showToast) window.showToast('Không thể dựng bản in trên mockup. Vui lòng thử lại.', 'warning');
+    }
   }
   if (sideText) {
     const text = sideText.toUpperCase();
@@ -1317,11 +1381,11 @@ async function submitOrder() {
   };
 
   try {
-    const resp = await fetch(`${API_BASE}/orders`, {
+    const resp = await fetchWithTimeout(`${API_BASE}/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
       body: JSON.stringify(orderData),
-    });
+    }, 15000);
     const data = await resp.json();
     if (!resp.ok || data.success === false) throw new Error(data.error || 'Đặt hàng thất bại.');
 
@@ -1331,29 +1395,35 @@ async function submitOrder() {
     if (payment === 'VNPAY') {
       showOrderSuccess(orderId, payment, data.transferContent);
       try {
-        const payResp = await fetch(`${API_BASE}/payment/create`, {
+        const payResp = await fetchWithTimeout(`${API_BASE}/payment/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
           body: JSON.stringify({ orderId, paymentMethod: 'VNPAY' }),
-        });
+        }, 12000);
         const payData = await payResp.json();
         if (payData.success && payData.paymentUrl) {
           window.location.href = payData.paymentUrl;
           return;
         }
-        showToast('Không thể tạo link thanh toán. Vui lòng thử lại.', 'error');
-      } catch {
-        showToast('Không thể kết nối cổng thanh toán.', 'error');
+        showToast(payData.error || 'Không thể tạo link thanh toán. Vui lòng thử lại.', 'error');
+      } catch (err) {
+        const msg = err && err.name === 'TimeoutError' ? 'Kết nối cổng thanh toán quá hạn. Vui lòng thử lại.' : 'Không thể kết nối cổng thanh toán.';
+        showToast(msg, 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Xác nhận đặt hàng';
       }
       return;
     }
 
     showOrderSuccess(orderId, payment, data.transferContent);
   } catch (e) {
-    showToast(e.message || 'Đặt hàng thất bại. Thử lại sau.', 'error', 7000);
+    const msg = e && e.name === 'TimeoutError' ? 'Đặt hàng quá hạn (mạng chậm). Kiểm tra Tài khoản → Đơn hàng trước khi đặt lại.' : (e.message || 'Đặt hàng thất bại. Thử lại sau.');
+    showToast(msg, 'error', 7000);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Xác nhận đặt hàng';
   }
-  submitBtn.disabled = false;
-  submitBtn.textContent = 'Xác nhận đặt hàng';
 }
 
 function showOrderSuccess(orderId, payment, transferContent) {
@@ -1712,20 +1782,64 @@ document.addEventListener('DOMContentLoaded', () => {
   initOnboarding();
   loadCommunityDesigns();
   updatePrice();
+  // Entry guard: must notify immediately if not authenticated (fix: Studio login-entry)
+  // Use rAF + timeout to ensure auth.js init has run and toast.js ready, deduped
+  requestAnimationFrame(() => setTimeout(checkStudioAuthOnEntry, 80));
 
-  // Handle payment return from VNPay
-  const urlParams = new URLSearchParams(window.location.search);
-  const paymentStatus = urlParams.get('payment');
-  if (paymentStatus === 'success') {
+  // Also re-check when auth state changes (e.g., logout then back, or login via modal)
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'blankup_token' || e.key === 'blankup_user') {
+      if (isStudioAuthenticated()) hideStudioAuthPrompt();
+      else showStudioAuthPrompt('storage');
+    }
+  });
+
+  // Handle payment return from VNPay — NEVER trust query param alone. Verify via backend.
+  (async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentStatus = urlParams.get('payment');
+    if (!paymentStatus) return;
     const orderId = urlParams.get('orderId');
-    showToast(`Thanh toán thành công! Mã đơn: ${orderId}`, 'success', 8000);
-  } else if (paymentStatus === 'failed') {
-    showToast(`Thanh toán thất bại (mã: ${urlParams.get('code') || 'unknown'}). Vui lòng thử lại.`, 'error', 8000);
-  }
-  if (paymentStatus) {
     const cleanUrl = window.location.pathname + window.location.hash;
+    // Strip query immediately to avoid replay on refresh, but keep orderId for verification
     window.history.replaceState({}, '', cleanUrl);
-  }
+    if (!orderId) {
+      showToast('Thiếu mã đơn hàng trong kết quả thanh toán. Vui lòng kiểm tra Tài khoản → Đơn hàng.', 'warning', 8000);
+      return;
+    }
+    try {
+      const headers = {};
+      if (typeof auth !== 'undefined' && auth.token) headers['Authorization'] = `Bearer ${auth.token}`;
+      const resp = await fetch(`${API_BASE}/payment/status/${encodeURIComponent(orderId)}`, { headers });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      const realStatus = data.paymentStatus || data.status;
+      const backendStatus = data.status;
+      if (data.paymentStatus === 'paid' || data.status === 'processing') {
+        showToast(`Thanh toán thành công! Mã đơn: ${orderId}`, 'success', 8000);
+      } else if (data.paymentStatus === 'failed' || backendStatus === 'payment_failed') {
+        showToast(`Thanh toán thất bại cho đơn ${orderId}. Vui lòng thử lại.`, 'error', 8000);
+      } else if (paymentStatus === 'success' && data.paymentStatus !== 'paid') {
+        // Query claimed success but backend not paid → show backend truth
+        showToast(`Đơn ${orderId} chưa được xác nhận thanh toán (trạng thái: ${data.paymentStatus || backendStatus || 'chưa rõ'}). Vui lòng kiểm tra lại.`, 'warning', 8000);
+      } else if (paymentStatus === 'failed') {
+        showToast(`Thanh toán thất bại (mã: ${urlParams.get('code') || 'unknown'}). Vui lòng thử lại.`, 'error', 8000);
+      } else {
+        showToast(`Trạng thái thanh toán đơn ${orderId}: ${data.paymentStatus || backendStatus || paymentStatus}`, data.paymentStatus === 'paid' ? 'success' : 'info', 8000);
+      }
+    } catch (e) {
+      console.warn('[Payment] verify return failed:', e);
+      // Fallback: do not claim success if verification fails
+      if (paymentStatus === 'success') {
+        showToast(`Không thể xác thực thanh toán cho đơn ${orderId || ''}. Vui lòng kiểm tra Tài khoản → Đơn hàng.`, 'warning', 8000);
+      } else {
+        showToast(`Thanh toán thất bại (mã: ${urlParams.get('code') || 'unknown'}). Vui lòng thử lại.`, 'error', 8000);
+      }
+    }
+  })();
 
   // Load design from URL params
   const params = new URLSearchParams(window.location.search);

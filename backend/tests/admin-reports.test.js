@@ -1,41 +1,9 @@
 const request = require('supertest');
 const fs = require('fs');
-const path = require('path');
 const { generateTestToken, generateAdminToken, authHeader } = require('./helpers/setup');
 
-jest.mock('../db', () => {
-  function createChain() {
-    const inputs = {};
-    return {
-      input: jest.fn().mockImplementation(function(name, type, value) {
-        inputs[name] = value;
-        return this;
-      }),
-      query: jest.fn().mockImplementation((sql) => {
-        if (sql.includes('FROM Users WHERE id')) {
-          const userId = inputs.id || 'u-test';
-          const isAdmin = userId === 'u-admin';
-          return Promise.resolve({
-            recordset: [{
-              id: userId,
-              username: isAdmin ? 'admin' : 'testuser',
-              fullName: isAdmin ? 'Admin User' : 'Test User',
-              email: isAdmin ? 'admin@test.com' : 'test@test.com',
-              avatar: null, provider: 'local',
-              role: isAdmin ? 'admin' : 'user',
-            }],
-          });
-        }
-        return Promise.resolve({ recordset: [] });
-      }),
-    };
-  }
-  return {
-    getPool: jest.fn(() => ({ request: jest.fn(() => createChain()) })),
-    sql: { NVarChar: 'NVarChar', Int: 'Int', DateTime: 'DateTime', Bit: 'Bit' },
-  };
-});
-
+jest.mock('../db', () => require('./helpers/testIsolation').dbFactory());
+jest.mock('../utils/fileStore', () => require('./helpers/testIsolation').fileStoreFactory('admin-reports'));
 jest.mock('../middleware/rateLimit', () => ({
   apiLimiter: (req, res, next) => next(),
   authLimiter: (req, res, next) => next(),
@@ -43,24 +11,13 @@ jest.mock('../middleware/rateLimit', () => ({
 }));
 
 const app = require('../app');
-const ordersFile = path.join(__dirname, '../data/orders.json');
-let originalOrders;
+const { _testOrdersFile: ordersFile, _testCleanup } = require('../utils/fileStore');
 
-beforeAll(() => {
-  if (fs.existsSync(ordersFile)) {
-    originalOrders = fs.readFileSync(ordersFile, 'utf8');
-  }
+afterAll(() => {
+  _testCleanup();
 });
 
-afterEach(() => {
-  if (originalOrders !== undefined) {
-    fs.writeFileSync(ordersFile, originalOrders, 'utf8');
-  } else if (fs.existsSync(ordersFile)) {
-    fs.writeFileSync(ordersFile, '[]', 'utf8');
-  }
-});
-
-function seedOrders() {
+function seedLocalOrders() {
   const orders = [
     // Jan 2026 - 2 completed, 1 pending
     {
@@ -168,7 +125,7 @@ describe('GET /api/admin/reports', () => {
   });
 
   it('should return monthly aggregation for 2026', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports?period=month&year=2026').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -206,7 +163,7 @@ describe('GET /api/admin/reports', () => {
   });
 
   it('should accept monthly alias', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports?period=monthly&year=2026').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -214,7 +171,7 @@ describe('GET /api/admin/reports', () => {
   });
 
   it('should return quarterly aggregation for 2026', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports?period=quarter&year=2026').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -232,7 +189,7 @@ describe('GET /api/admin/reports', () => {
   });
 
   it('should return yearly aggregation', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports?period=year').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -252,7 +209,7 @@ describe('GET /api/admin/reports', () => {
   });
 
   it('should accept yearly alias annual', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports?period=annual').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -260,7 +217,7 @@ describe('GET /api/admin/reports', () => {
   });
 
   it('should default to current year for month period when year not supplied', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports?period=month').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -287,7 +244,7 @@ describe('GET /api/admin/reports/export', () => {
   });
 
   it('should export CSV for monthly period', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports/export?period=month&year=2026').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -305,7 +262,7 @@ describe('GET /api/admin/reports/export', () => {
   });
 
   it('should export CSV for quarterly period', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports/export?period=quarter&year=2026').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -314,7 +271,7 @@ describe('GET /api/admin/reports/export', () => {
   });
 
   it('should export CSV for yearly period', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports/export?period=year').set(authHeader(token));
     expect(res.status).toBe(200);
@@ -323,7 +280,7 @@ describe('GET /api/admin/reports/export', () => {
   });
 
   it('should include correct revenue values in CSV', async () => {
-    seedOrders();
+    seedLocalOrders();
     const token = generateAdminToken();
     const res = await request(app).get('/api/admin/reports/export?period=month&year=2026').set(authHeader(token));
     const lines = res.text.split('\n');

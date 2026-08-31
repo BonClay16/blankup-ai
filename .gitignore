@@ -7,6 +7,8 @@ backend/coverage/
 
 # Runtime data and generated AI images
 backend/uploads/*
+backend/data/users.json
+backend/data/contacts.json
 backend/data/designs.json
 backend/*.log
 

@@ -606,26 +606,41 @@ function initGalleryEvents(designs, userId) {
     });
   });
 
+  const likeBusy = new Set();
   grid.querySelectorAll('.gallery-card-like').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       const designId = btn.dataset.id;
       if (!designId) return;
+      if (likeBusy.has(designId)) return;
+      likeBusy.add(designId);
+      const prevDisabled = btn.disabled;
+      btn.disabled = true;
       try {
         const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/like`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId }),
         });
-        const data = await resp.json();
-        if (data.success) {
-          btn.classList.toggle('liked', data.liked);
-          const heart = btn.querySelector('svg');
-          if (heart) heart.setAttribute('fill', data.liked ? 'currentColor' : 'none');
-          const label = btn.querySelector('span');
-          if (label) label.textContent = data.likes;
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.success) {
+          const msg = data.error || (resp.status===429 ? 'Bạn thao tác quá nhanh, thử lại sau.' : 'Không thể cập nhật lượt thích.');
+          if (window.showToast) window.showToast(msg, resp.status===429 ? 'warning' : 'error');
+          else console.warn('[Blankup] Like failed:', msg);
+          return;
         }
-      } catch (e) { console.warn('[Blankup] Like failed:', e); }
+        btn.classList.toggle('liked', data.liked);
+        const heart = btn.querySelector('svg');
+        if (heart) heart.setAttribute('fill', data.liked ? 'currentColor' : 'none');
+        const label = btn.querySelector('span');
+        if (label) label.textContent = data.likes;
+      } catch (e) {
+        console.warn('[Blankup] Like failed:', e);
+        if (window.showToast) window.showToast('Không thể kết nối máy chủ. Vui lòng thử lại.', 'error');
+      } finally {
+        btn.disabled = prevDisabled;
+        likeBusy.delete(designId);
+      }
     });
   });
 
@@ -718,11 +733,22 @@ function initCommentsModal() {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && overlay.classList.contains('open')) close(); });
 
+  let commentSubmitting = false;
   document.getElementById('commentsSubmitBtn')?.addEventListener('click', async () => {
+    if (commentSubmitting) return;
+    const btn = document.getElementById('commentsSubmitBtn');
     const input = document.getElementById('commentsInput');
     const text = (input?.value || '').trim();
-    if (!text || !commentsState.designId) return;
-
+    if (!text || !commentsState.designId) {
+      if (window.showToast) window.showToast('Vui lòng nhập nội dung bình luận.', 'warning');
+      return;
+    }
+    if (text.length > 500) {
+      if (window.showToast) window.showToast('Bình luận tối đa 500 ký tự.', 'warning');
+      return;
+    }
+    commentSubmitting = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Đang gửi…'; }
     const headers = { 'Content-Type': 'application/json' };
     if (typeof auth !== 'undefined' && auth.token) headers.Authorization = `Bearer ${auth.token}`;
 
@@ -732,8 +758,8 @@ function initCommentsModal() {
         headers,
         body: JSON.stringify({ text }),
       });
-      const data = await resp.json();
-      if (!data.success) throw new Error(data.error || 'Gửi bình luận thất bại');
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.success) throw new Error(data.error || (resp.status===429 ? 'Bạn bình luận quá nhanh, thử lại sau.' : 'Gửi bình luận thất bại'));
       commentsState.list.push(data.data);
       const list = document.getElementById('commentsList');
       renderCommentsList(list);
@@ -747,9 +773,14 @@ function initCommentsModal() {
           if (label) label.textContent = commentsState.list.length;
         }
       });
+      if (window.showToast) window.showToast('Đã gửi bình luận.', 'success');
     } catch (e) {
       const list = document.getElementById('commentsList');
       if (list) list.insertAdjacentHTML('afterbegin', `<div class="comments-error">${escapeHtml(e.message)}</div>`);
+      if (window.showToast) window.showToast(e.message || 'Gửi bình luận thất bại.', 'error');
+    } finally {
+      commentSubmitting = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Gửi bình luận'; }
     }
   });
 }

@@ -136,6 +136,8 @@ async function toggleFollow() {
     creatorData.stats.followersCount = next ? creatorData.stats.followersCount + 1 : creatorData.stats.followersCount - 1;
   } catch (err) {
     console.error('Follow error:', err);
+    // UX reliability: follow action must never fail silently
+    if (window.showToast) window.showToast('Không thể cập nhật theo dõi. Vui lòng thử lại.', 'error');
   }
 }
 

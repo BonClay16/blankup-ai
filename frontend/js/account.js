@@ -1,10 +1,7 @@
 // frontend/js/account.js
 const API_BASE = window.location.origin + '/api';
 
-/* ---------- Toast — intentionally disabled (no corner popups) ---------- */
-function showToast() {
-  /* Toasts removed globally. Keep signature for existing call sites. */
-}
+/* ---------- Toast — delegated to js/toast.js ---------- */
 
 function escapeHtml(str) {
   const div = document.createElement('div');

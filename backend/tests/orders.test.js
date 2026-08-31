@@ -1,42 +1,8 @@
 ﻿const request = require('supertest');
-const fs = require('fs');
-const path = require('path');
 const { generateTestToken, generateAdminToken, authHeader } = require('./helpers/setup');
 
-// Mock db.js — capture input params to determine user role
-jest.mock('../db', () => {
-  function createChain() {
-    const inputs = {};
-    return {
-      input: jest.fn().mockImplementation(function(name, type, value) {
-        inputs[name] = value;
-        return this;
-      }),
-      query: jest.fn().mockImplementation((sql) => {
-        if (sql.includes('FROM Users WHERE id')) {
-          const userId = inputs.id || 'u-test';
-          const isAdmin = userId === 'u-admin';
-          return Promise.resolve({
-            recordset: [{
-              id: userId,
-              username: isAdmin ? 'admin' : 'testuser',
-              fullName: isAdmin ? 'Admin User' : 'Test User',
-              email: isAdmin ? 'admin@example.com' : 'test@example.com',
-              avatar: null, provider: 'local',
-              role: isAdmin ? 'admin' : 'user',
-            }],
-          });
-        }
-        return Promise.resolve({ recordset: [] });
-      }),
-    };
-  }
-  return {
-    getPool: jest.fn(() => ({ request: jest.fn(() => createChain()) })),
-    sql: { NVarChar: 'NVarChar' },
-  };
-});
-
+jest.mock('../db', () => require('./helpers/testIsolation').dbFactory());
+jest.mock('../utils/fileStore', () => require('./helpers/testIsolation').fileStoreFactory('orders'));
 jest.mock('../middleware/rateLimit', () => ({
   apiLimiter: (req, res, next) => next(),
   authLimiter: (req, res, next) => next(),
@@ -44,19 +10,10 @@ jest.mock('../middleware/rateLimit', () => ({
 }));
 
 const app = require('../app');
-const ordersFile = path.join(__dirname, '../data/orders.json');
-let originalOrders;
+const { _testOrdersFile: ordersFile, _testCleanup } = require('../utils/fileStore');
 
-beforeAll(() => {
-  if (fs.existsSync(ordersFile)) {
-    originalOrders = fs.readFileSync(ordersFile, 'utf8');
-  }
-});
-
-afterEach(() => {
-  if (originalOrders !== undefined) {
-    fs.writeFileSync(ordersFile, originalOrders, 'utf8');
-  }
+afterAll(() => {
+  _testCleanup();
 });
 
 const testOrder = {
@@ -115,8 +72,7 @@ describe('GET /api/orders', () => {
 describe('GET /api/orders/:id', () => {
   it('should return an order by orderId for owner', async () => {
     const token = generateTestToken({ id: 'u-owner', username: 'owner', role: 'user' });
-    const orderWithUser = { ...testOrder, userId: 'u-owner' };
-    const createRes = await request(app).post('/api/orders').send(orderWithUser);
+    const createRes = await request(app).post('/api/orders').set(authHeader(token)).send(testOrder);
     const orderId = createRes.body.orderId;
     const res = await request(app).get(`/api/orders/${orderId}`).set(authHeader(token));
     expect(res.status).toBe(200);
@@ -126,17 +82,15 @@ describe('GET /api/orders/:id', () => {
   it('should return 403 when non-owner tries to access order', async () => {
     const ownerToken = generateTestToken({ id: 'u-owner2', username: 'owner2', role: 'user' });
     const otherToken = generateTestToken({ id: 'u-other', username: 'other', role: 'user' });
-    const orderWithUser = { ...testOrder, userId: 'u-owner2' };
-    const createRes = await request(app).post('/api/orders').send(orderWithUser);
+    const createRes = await request(app).post('/api/orders').set(authHeader(ownerToken)).send(testOrder);
     const orderId = createRes.body.orderId;
     const res = await request(app).get(`/api/orders/${orderId}`).set(authHeader(otherToken));
     expect(res.status).toBe(403);
   });
 
   it('should return 401 without token', async () => {
-    const token = generateTestToken({ id: 'u-owner3', username: 'owner3', role: 'user' });
-    const orderWithUser = { ...testOrder, userId: 'u-owner3' };
-    const createRes = await request(app).post('/api/orders').send(orderWithUser);
+    const ownerToken = generateTestToken({ id: 'u-owner3', username: 'owner3', role: 'user' });
+    const createRes = await request(app).post('/api/orders').set(authHeader(ownerToken)).send(testOrder);
     const orderId = createRes.body.orderId;
     const res = await request(app).get(`/api/orders/${orderId}`);
     expect(res.status).toBe(401);
