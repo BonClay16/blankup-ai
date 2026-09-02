@@ -24,7 +24,7 @@ async function deductCreditForGenerate(userId) {
 
   const transaction = new sql.Transaction(pool);
   try {
-    await transaction.begin(sql.IsolationLevels.Serializable);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
     let req = new sql.Request(transaction);
     let accountRes = await req
@@ -127,7 +127,7 @@ async function refundCreditForGenerate(userId, creditType) {
 
   try {
     const transaction = new sql.Transaction(pool);
-    await transaction.begin(sql.IsolationLevels.Serializable);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
     let updateSql = '';
     if (creditType === 'daily') {

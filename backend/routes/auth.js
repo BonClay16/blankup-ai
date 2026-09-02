@@ -13,8 +13,92 @@ const { signToken } = require('../services/jwt.service');
 const { verifyCode, createVerificationCode, OTP_EXPIRY_MINUTES, isAlreadyVerified } = require('../services/otp.service');
 const { generateResetAuthToken, validateResetAuthToken } = require('../services/reset-auth.service');
 const { authenticate } = require('../middleware/auth');
+const crypto = require('crypto');
 
 const router = express.Router();
+
+// ---------------------------------------------------------------------------
+// Facebook OAuth — server-side Authorization Code flow (state store)
+// ---------------------------------------------------------------------------
+const FACEBOOK_OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const facebookOAuthStates = new Map(); // state -> { createdAt, redirectTo }
+
+function isFacebookEnabled() {
+  return String(process.env.FACEBOOK_ENABLED || '').toLowerCase() === 'true';
+}
+
+function getFacebookConfig(req) {
+  const appId = process.env.FACEBOOK_APP_ID || '';
+  const appSecret = process.env.FACEBOOK_APP_SECRET || '';
+  const graphVersion = process.env.FACEBOOK_GRAPH_VERSION || 'v18.0';
+  let redirectUri = process.env.FACEBOOK_REDIRECT_URI || '';
+  if (!redirectUri && req) {
+    // Default local redirect URI derived from request host, fallback to localhost:3000
+    const host = req.get('host') || `localhost:${process.env.PORT || 3000}`;
+    const protocol = req.protocol || 'http';
+    redirectUri = `${protocol}://${host}/api/auth/facebook/callback`;
+  }
+  if (!redirectUri) {
+    redirectUri = `http://localhost:${process.env.PORT || 3000}/api/auth/facebook/callback`;
+  }
+  return { appId, appSecret, graphVersion, redirectUri };
+}
+
+function createFacebookState(redirectTo) {
+  const state = crypto.randomBytes(32).toString('hex');
+  facebookOAuthStates.set(state, { createdAt: Date.now(), redirectTo: redirectTo || '' });
+  // Cleanup expired entries (lazy)
+  for (const [k, v] of facebookOAuthStates.entries()) {
+    if (Date.now() - v.createdAt > FACEBOOK_OAUTH_STATE_TTL_MS) facebookOAuthStates.delete(k);
+  }
+  return state;
+}
+
+function consumeFacebookState(state) {
+  const entry = facebookOAuthStates.get(state);
+  if (!entry) return null;
+  // Single-use: delete immediately
+  facebookOAuthStates.delete(state);
+  if (Date.now() - entry.createdAt > FACEBOOK_OAUTH_STATE_TTL_MS) return null;
+  return entry;
+}
+
+function getSafeRedirectPath(redirectTo, req) {
+  if (!redirectTo) return '/';
+  try {
+    const target = new URL(redirectTo, `${req.protocol}://${req.get('host')}`);
+    if (target.origin !== `${req.protocol}://${req.get('host')}`) return '/';
+    if (target.pathname.includes('login.html') && target.pathname.includes('facebook')) return '/';
+    return target.pathname + target.search + target.hash;
+  } catch {
+    return '/';
+  }
+}
+
+function renderFacebookSuccessHtml(token, user, redirectTo) {
+  const safeUser = JSON.stringify(user).replace(/</g, '\\u003c');
+  const safeRedirect = JSON.stringify(redirectTo || '/').replace(/</g, '\\u003c');
+  const safeToken = JSON.stringify(token).replace(/</g, '\\u003c');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Blankup — Facebook Login</title></head><body><script>
+    (function(){
+      try {
+        localStorage.setItem('blankup_token', ${safeToken});
+        localStorage.setItem('blankup_user', ${safeUser});
+      } catch(e) {}
+      window.location.href = ${safeRedirect};
+    })();
+  </script><p>Đăng nhập Facebook thành công, đang chuyển hướng...</p></body></html>`;
+}
+
+function renderFacebookErrorHtml(message, redirectTo) {
+  const safeMsg = String(message || 'Đăng nhập Facebook thất bại.').replace(/</g, '&lt;');
+  const loginUrl = redirectTo && redirectTo.startsWith('/') ? '/login.html' : '/login.html';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Blankup — Facebook Login Failed</title></head><body style="font-family:Arial,sans-serif;max-width:480px;margin:40px auto;padding:24px;text-align:center;">
+    <h2 style="color:#b43e12;">Đăng nhập Facebook thất bại</h2>
+    <p>${safeMsg}</p>
+    <p><a href="${loginUrl}" style="color:#b43e12;">Quay lại đăng nhập</a></p>
+  </body></html>`;
+}
 
 // ---------------------------------------------------------------------------
 // Lightweight in-process mutex for reset-password (prevents race condition)
@@ -798,6 +882,197 @@ router.post('/reset-password', async (req, res) => {
   } catch (err) {
     console.error('[Auth] Reset password error:', err.message);
     res.status(500).json({ success: false, error: 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/auth/facebook — Redirect to Facebook OAuth dialog
+// ---------------------------------------------------------------------------
+router.get('/facebook', (req, res) => {
+  try {
+    if (!isFacebookEnabled()) {
+      return res.status(503).send(renderFacebookErrorHtml('Đăng nhập Facebook chưa được cấu hình.', '/login.html'));
+    }
+    const { appId, graphVersion, redirectUri } = getFacebookConfig(req);
+    if (!appId) {
+      console.error('[Auth] Facebook App ID missing');
+      return res.status(500).send(renderFacebookErrorHtml('Cấu hình Facebook chưa hoàn tất.', '/login.html'));
+    }
+    const redirectTo = typeof req.query.redirect === 'string' ? req.query.redirect : '';
+    const safeRedirectTo = getSafeRedirectPath(redirectTo, req);
+    const state = createFacebookState(safeRedirectTo);
+
+    const params = new URLSearchParams({
+      client_id: appId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'public_profile,email',
+      state,
+    });
+    const authUrl = `https://www.facebook.com/${graphVersion}/dialog/oauth?${params.toString()}`;
+    return res.redirect(authUrl);
+  } catch (err) {
+    console.error('[Auth] Facebook redirect error:', err.message);
+    return res.status(500).send(renderFacebookErrorHtml('Không thể khởi tạo đăng nhập Facebook.', '/login.html'));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/auth/facebook/callback — OAuth code exchange + profile + JWT
+// ---------------------------------------------------------------------------
+router.get('/facebook/callback', async (req, res) => {
+  try {
+    if (!isFacebookEnabled()) {
+      return res.status(503).send(renderFacebookErrorHtml('Đăng nhập Facebook chưa được cấu hình.', '/login.html'));
+    }
+    const { code, state, error, error_description } = req.query;
+
+    // User denied
+    if (error) {
+      console.warn('[Auth] Facebook callback error param:', error, error_description);
+      return res.status(400).send(renderFacebookErrorHtml('Bạn đã hủy đăng nhập Facebook.', '/login.html'));
+    }
+
+    if (!state || typeof state !== 'string') {
+      console.warn('[Auth] Facebook callback missing state');
+      return res.status(400).send(renderFacebookErrorHtml('Thiếu thông tin xác thực (state).', '/login.html'));
+    }
+    const stateEntry = consumeFacebookState(state);
+    if (!stateEntry) {
+      console.warn('[Auth] Facebook callback invalid/expired state');
+      return res.status(400).send(renderFacebookErrorHtml('Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.', '/login.html'));
+    }
+
+    if (!code || typeof code !== 'string') {
+      console.warn('[Auth] Facebook callback missing code');
+      return res.status(400).send(renderFacebookErrorHtml('Thiếu mã xác thực từ Facebook.', '/login.html'));
+    }
+
+    const { appId, appSecret, graphVersion, redirectUri } = getFacebookConfig(req);
+    if (!appId || !appSecret) {
+      console.error('[Auth] Facebook App ID/Secret missing at callback');
+      return res.status(500).send(renderFacebookErrorHtml('Cấu hình Facebook chưa hoàn tất.', '/login.html'));
+    }
+
+    // Exchange code for access token
+    const tokenUrl = new URL(`https://graph.facebook.com/${graphVersion}/oauth/access_token`);
+    tokenUrl.searchParams.set('client_id', appId);
+    tokenUrl.searchParams.set('client_secret', appSecret);
+    tokenUrl.searchParams.set('redirect_uri', redirectUri);
+    tokenUrl.searchParams.set('code', code);
+
+    let tokenData;
+    try {
+      const tokenRes = await fetch(tokenUrl.toString());
+      const text = await tokenRes.text();
+      try { tokenData = JSON.parse(text); } catch { tokenData = null; }
+      if (!tokenRes.ok || !tokenData || tokenData.error) {
+        const msg = tokenData?.error?.message || text || `Token exchange failed: ${tokenRes.status}`;
+        console.warn('[Auth] Facebook token exchange failed:', tokenRes.status, msg.slice(0,200));
+        return res.status(400).send(renderFacebookErrorHtml('Không thể xác thực với Facebook. Vui lòng thử lại.', '/login.html'));
+      }
+    } catch (fetchErr) {
+      console.error('[Auth] Facebook token fetch error:', fetchErr.message);
+      return res.status(502).send(renderFacebookErrorHtml('Không thể kết nối tới Facebook. Vui lòng thử lại.', '/login.html'));
+    }
+
+    const accessToken = tokenData.access_token;
+    if (!accessToken) {
+      console.warn('[Auth] Facebook token missing access_token');
+      return res.status(400).send(renderFacebookErrorHtml('Không thể xác thực với Facebook.', '/login.html'));
+    }
+
+    // Fetch verified profile
+    const profileUrl = new URL(`https://graph.facebook.com/${graphVersion}/me`);
+    profileUrl.searchParams.set('fields', 'id,name,email,picture.width(256)');
+    profileUrl.searchParams.set('access_token', accessToken);
+
+    let profile;
+    try {
+      const profileRes = await fetch(profileUrl.toString());
+      const text = await profileRes.text();
+      try { profile = JSON.parse(text); } catch { profile = null; }
+      if (!profileRes.ok || !profile || profile.error) {
+        const msg = profile?.error?.message || text || `Profile fetch failed: ${profileRes.status}`;
+        console.warn('[Auth] Facebook profile fetch failed:', profileRes.status, msg.slice(0,200));
+        return res.status(400).send(renderFacebookErrorHtml('Không thể lấy thông tin Facebook.', '/login.html'));
+      }
+    } catch (fetchErr) {
+      console.error('[Auth] Facebook profile fetch error:', fetchErr.message);
+      return res.status(502).send(renderFacebookErrorHtml('Không thể lấy thông tin Facebook.', '/login.html'));
+    }
+
+    if (!profile.id) {
+      console.warn('[Auth] Facebook profile missing id');
+      return res.status(400).send(renderFacebookErrorHtml('Không thể xác thực tài khoản Facebook.', '/login.html'));
+    }
+
+    const providerId = String(profile.id);
+    const fullName = String(profile.name || 'Facebook User');
+    const email = profile.email ? String(profile.email) : null;
+    const avatar = profile.picture?.data?.url ? String(profile.picture.data.url) : null;
+
+    // Find or create user by provider + providerId
+    const pool = getPool();
+    const existing = await pool.request()
+      .input('provider', sql.NVarChar, 'facebook')
+      .input('providerId', sql.NVarChar, providerId)
+      .query('SELECT id, username, fullName, email, avatar, provider, role FROM Users WHERE provider = @provider AND providerId = @providerId');
+
+    let user;
+    if (existing.recordset.length > 0) {
+      user = existing.recordset[0];
+      await pool.request()
+        .input('id', sql.NVarChar, user.id)
+        .input('fullName', sql.NVarChar, fullName)
+        .input('avatar', sql.NVarChar, avatar || null)
+        .input('email', sql.NVarChar, email || null)
+        .query('UPDATE Users SET fullName = @fullName, avatar = @avatar, email = @email WHERE id = @id');
+      user.fullName = fullName;
+      user.avatar = avatar;
+      user.email = email;
+      console.log(`[Auth] Facebook login (returning user): ${fullName} (${providerId})`);
+    } else {
+      const newId = 'u-' + Date.now();
+      const username = `facebook_${providerId.slice(0, 10)}`;
+      await pool.request()
+        .input('id', sql.NVarChar, newId)
+        .input('username', sql.NVarChar, username)
+        .input('fullName', sql.NVarChar, fullName)
+        .input('email', sql.NVarChar, email || null)
+        .input('avatar', sql.NVarChar, avatar || null)
+        .input('provider', sql.NVarChar, 'facebook')
+        .input('providerId', sql.NVarChar, providerId)
+        .input('role', sql.NVarChar, 'user')
+        .query(`
+          INSERT INTO Users (id, username, fullName, email, avatar, provider, providerId, role)
+          VALUES (@id, @username, @fullName, @email, @avatar, @provider, @providerId, @role)
+        `);
+      user = { id: newId, username, fullName, email, avatar, provider: 'facebook', role: 'user' };
+      console.log(`[Auth] Facebook login (new user): ${fullName} (${providerId})`);
+    }
+
+    const token = signToken(user);
+    const redirectTo = getSafeRedirectPath(stateEntry.redirectTo, req) || '/';
+    // Ensure UserAiAccounts exists for credits
+    try {
+      await pool.request()
+        .input('userId', sql.NVarChar, user.id)
+        .query(`IF NOT EXISTS (SELECT 1 FROM UserAiAccounts WHERE userId = @userId) INSERT INTO UserAiAccounts (userId, displayPlanId, highestPlanRank) VALUES (@userId, N'plan-free', 0)`);
+    } catch {}
+
+    return res.send(renderFacebookSuccessHtml(token, {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      email: user.email,
+      avatar: user.avatar,
+      role: user.role,
+      provider: user.provider,
+    }, redirectTo));
+  } catch (err) {
+    console.error('[Auth] Facebook callback error:', err.message);
+    return res.status(500).send(renderFacebookErrorHtml('Đăng nhập Facebook thất bại. Vui lòng thử lại.', '/login.html'));
   }
 });
 

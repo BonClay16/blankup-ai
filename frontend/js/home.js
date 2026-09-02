@@ -461,21 +461,81 @@ const STYLE_LABELS = {
   'reference remix': 'Remix ảnh',
 };
 
+function renderGallerySkeleton(count = 6) {
+  const grid = document.getElementById('galleryGrid');
+  if (!grid) return;
+  // Match .gallery-card dimensions, no layout shift, responsive grid already handles it
+  grid.innerHTML = Array.from({length: count}, () => `
+    <div class="skeleton-card" aria-hidden="true">
+      <div class="skeleton-media"></div>
+      <div class="skeleton-body">
+        <div class="skeleton-line mid"></div>
+        <div class="skeleton-line short"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function revealStagger(container, selector) {
+  const els = container.querySelectorAll(selector);
+  if (!els.length) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) {
+    els.forEach(el => {
+      el.classList.remove('reveal-ready');
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+    return;
+  }
+  // Cap stagger so last card not too late: max 300ms total
+  const maxDelay = 300;
+  const step = Math.min(42, maxDelay / Math.max(1, els.length));
+  els.forEach((el, i) => {
+    el.classList.add('reveal-ready');
+    // Use WAAPI, transform/opacity only
+    const delay = Math.min(i * step, maxDelay);
+    el.animate(
+      [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'translateY(0)' }],
+      { duration: 420, delay, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'forwards' }
+    );
+    // Clean class after animation
+    setTimeout(() => el.classList.remove('reveal-ready'), 600 + delay);
+  });
+}
+
 async function loadGallery() {
   const grid = document.getElementById('galleryGrid');
   if (!grid) return;
 
+  // Sprint 1: skeleton → gallery (no spinner + skeleton together, no flash)
+  renderGallerySkeleton(6);
+
   let designs = [];
+  let error = null;
   try {
     const resp = await fetch(`${API_BASE}/ai-design/gallery`);
     if (!resp.ok) throw new Error('Failed');
     const result = await resp.json();
     designs = (result.data || []).slice(0, 24);
-  } catch (e) { console.warn('[Blankup] Gallery fetch failed:', e); }
+  } catch (e) { console.warn('[Blankup] Gallery fetch failed:', e); error = e; }
 
   applyCollectionArtwork(designs);
 
   const userId = (typeof auth !== 'undefined' && auth.user?.id) || localStorage.getItem('guest_id') || '';
+
+  if (error && !designs.length) {
+    // Skeleton → Error state with retry (no infinite skeleton)
+    grid.innerHTML = `
+      <div class="gallery-empty">
+        <div class="gallery-empty-icon" aria-hidden="true">!</div>
+        <h3>Không tải được gallery</h3>
+        <p>Vui lòng kiểm tra kết nối và thử lại.</p>
+        <button class="hero-btn-primary" id="galleryRetryBtn">Thử lại</button>
+      </div>`;
+    document.getElementById('galleryRetryBtn')?.addEventListener('click', loadGallery);
+    return;
+  }
 
   if (!designs.length) {
     renderGalleryEmpty();
@@ -487,6 +547,8 @@ async function loadGallery() {
   initGalleryEvents(designs, userId);
   initGalleryTilt();
   initScrollAnimations();
+  // Stagger reveal: gallery-card
+  revealStagger(grid, '.gallery-card');
 }
 
 /* ============================================================
@@ -594,15 +656,96 @@ function initGalleryEvents(designs, userId) {
   const grid = document.getElementById('galleryGrid');
   if (!filters || !grid) return;
 
+  // Sprint 1: FLIP filter — transform/opacity only, cancel previous, reduced-motion
+  let flipAnims = [];
+  let flipFrame = null;
+  function applyGalleryFilter(style) {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cards = Array.from(grid.querySelectorAll('.gallery-card'));
+    if (!cards.length) return;
+    // No change → no animation
+    const active = filters.querySelector('.gallery-filter-chip.active');
+    if (active && active.dataset.style === style) return;
+
+    // Cancel previous
+    flipAnims.forEach(a => { try{ a.cancel(); }catch{} });
+    flipAnims = [];
+    if (flipFrame) cancelAnimationFrame(flipFrame);
+
+    if (reduce) {
+      cards.forEach(card => {
+        const match = style === 'all' || card.dataset.style === style;
+        card.style.display = match ? '' : 'none';
+        card.style.opacity = '';
+        card.style.transform = '';
+      });
+      return;
+    }
+
+    // First: capture
+    const firstRects = new Map();
+    cards.forEach(card => {
+      // Ensure card is in layout for measurement (display '' if hidden previously)
+      const wasHidden = card.style.display === 'none';
+      if (wasHidden) {
+        card.style.display = '';
+        card.style.visibility = 'hidden';
+      }
+      firstRects.set(card, card.getBoundingClientRect());
+      if (wasHidden) {
+        card.style.display = 'none';
+        card.style.visibility = '';
+      }
+    });
+
+    // Update display
+    cards.forEach(card => {
+      const match = style === 'all' || card.dataset.style === style;
+      card.style.display = match ? '' : 'none';
+    });
+
+    // Force layout
+    grid.offsetHeight;
+
+    // Last
+    const lastRects = new Map();
+    cards.forEach(card => {
+      if (card.style.display !== 'none') {
+        lastRects.set(card, card.getBoundingClientRect());
+      }
+    });
+
+    // Invert & Play for visible cards
+    cards.forEach(card => {
+      if (card.style.display === 'none') {
+        // Hidden: fade out already (display none, so just ensure no transform)
+        card.style.willChange = '';
+        return;
+      }
+      const first = firstRects.get(card);
+      const last = lastRects.get(card);
+      if (!first || !last) return;
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      if (dx === 0 && dy === 0) return;
+      card.style.willChange = 'transform';
+      const anim = card.animate(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }],
+        { duration: 360, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'both' }
+      );
+      flipAnims.push(anim);
+      anim.onfinish = () => { card.style.willChange = ''; };
+    });
+
+    // Hidden cards fade (optional, already display none, but we can animate opacity before hiding)
+    // We handled via display none directly for simplicity; to avoid flash we already measured hidden -> visible
+  }
+
   filters.querySelectorAll('.gallery-filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       filters.querySelectorAll('.gallery-filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      const style = chip.dataset.style;
-      grid.querySelectorAll('.gallery-card').forEach(card => {
-        const match = style === 'all' || card.dataset.style === style;
-        card.style.display = match ? '' : 'none';
-      });
+      applyGalleryFilter(chip.dataset.style);
     });
   });
 

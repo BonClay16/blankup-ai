@@ -12,6 +12,9 @@ backend/data/contacts.json
 backend/data/designs.json
 backend/*.log
 
+# Test artifacts
+backend/tests/__bad_json__*
+
 # Only the optimized web model is needed by the app.
 frontend/assets/models/tshirt.glb
 frontend/assets/models/tshirt-optimized.glb
@@ -19,3 +22,6 @@ frontend/assets/models/tshirt-optimized.glb
 
 # Local agent config
 .claude/
+.agents/
+.opencode/
+skills-lock.json

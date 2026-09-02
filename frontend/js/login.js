@@ -131,32 +131,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (facebookBtn) {
     facebookBtn.addEventListener('click', () => {
       errorMsg.style.display = 'none';
-      if (!socialCfg.facebookAppId) {
-        showSocialError('Đăng nhập Facebook chưa được kích hoạt. Vui lòng đăng nhập bằng tài khoản thường.');
-        return;
-      }
-      if (typeof FB === 'undefined') {
-        showSocialError('Không thể tải Facebook SDK. Vui lòng thử lại.');
-        return;
-      }
-      FB.login((response) => {
-        if (!response.authResponse) {
-          showSocialError('Bạn đã hủy đăng nhập Facebook.');
-          return;
-        }
-        FB.api('/me', { fields: 'id,name,email,picture.width(256)' }, (profile) => {
-          if (!profile || profile.error) {
-            showSocialError('Không thể lấy thông tin Facebook.');
-            return;
-          }
-          completeSocialLogin('facebook', {
-            providerId: profile.id,
-            email: profile.email,
-            fullName: profile.name,
-            avatar: profile.picture?.data?.url || null,
-          });
-        });
-      }, { scope: 'public_profile,email' });
+      // Server-side OAuth: redirect to backend which then redirects to Facebook
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect') || '';
+      const target = '/api/auth/facebook' + (redirect ? `?redirect=${encodeURIComponent(redirect)}` : '');
+      window.location.href = target;
     });
   }
 

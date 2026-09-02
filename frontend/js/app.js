@@ -92,20 +92,61 @@ function initScrollAnimations() {
    ============================================================ */
 let allProducts = [];
 
+function renderProductsSkeleton(count = 8) {
+  const grid = document.getElementById('productsGrid');
+  if (!grid) return;
+  grid.innerHTML = Array.from({length: count}, () => `
+    <div class="skeleton-card" aria-hidden="true">
+      <div class="skeleton-media" style="aspect-ratio:4/5;"></div>
+      <div class="skeleton-body">
+        <div class="skeleton-line mid"></div>
+        <div class="skeleton-line short"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function revealProductsStagger() {
+  const grid = document.getElementById('productsGrid');
+  if (!grid) return;
+  const els = grid.querySelectorAll('.product-card');
+  if (!els.length) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) {
+    els.forEach(el => el.classList.remove('reveal-ready'));
+    return;
+  }
+  const maxDelay = 320;
+  const step = Math.min(40, maxDelay / Math.max(1, els.length));
+  els.forEach((el, i) => {
+    el.classList.add('reveal-ready');
+    const delay = Math.min(i * step, maxDelay);
+    el.animate(
+      [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'translateY(0)' }],
+      { duration: 400, delay, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'forwards' }
+    );
+    setTimeout(() => el.classList.remove('reveal-ready'), 600 + delay);
+  });
+}
+
 async function loadProducts() {
   const grid = document.getElementById('productsGrid');
   if (!grid) return;
+
+  renderProductsSkeleton(8);
 
   try {
     const response = await fetch(`${API_BASE}/products`);
     if (!response.ok) throw new Error('Failed to fetch');
     allProducts = await response.json();
     renderProducts(allProducts);
+    revealProductsStagger();
     initProductFilter();
   } catch (err) {
     console.warn('API not available, using fallback data', err);
     allProducts = getFallbackProducts();
     renderProducts(allProducts);
+    revealProductsStagger();
     initProductFilter();
     // UX reliability: user must know the live catalog failed to load
     if (window.showToast) window.showToast('Không tải được danh mục mới nhất — đang hiển thị danh mục mặc định.', 'info');
@@ -128,6 +169,31 @@ function sanitizeCategory(cat) {
   const v = String(cat || 'tshirt').toLowerCase().trim();
   if (['tshirt','oversize','polo','hoodie'].includes(v)) return v;
   return 'tshirt';
+}
+function shakeButton(btn){
+  if(!btn) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce) return;
+  btn.classList.remove('shake'); void btn.offsetWidth; btn.classList.add('shake');
+  btn.addEventListener('animationend', ()=> btn.classList.remove('shake'), {once:true});
+}
+function setBtnLoading(btn, loading){
+  if(!btn) return;
+  btn.classList.toggle('is-loading', loading);
+  btn.classList.toggle('loading', loading);
+  btn.disabled = !!loading;
+  if(loading) btn.style.willChange = 'transform';
+  else setTimeout(()=> btn.style.willChange='', 200);
+}
+function setBtnSuccess(btn, label){
+  if(!btn) return;
+  btn.classList.add('is-success');
+  const prev = btn.dataset.prevLabel || btn.textContent;
+  btn.dataset.prevLabel = prev;
+  if(label) btn.textContent = label;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!reduce) btn.animate([{transform:'scale(1)'},{transform:'scale(1.02)'},{transform:'scale(1)'}],{duration:220, easing:'cubic-bezier(0.34,1.56,0.64,1)'});
+  setTimeout(()=>{ btn.classList.remove('is-success'); if(btn.dataset.prevLabel) btn.textContent = btn.dataset.prevLabel; }, 1400);
 }
 function renderProducts(products) {
   const grid = document.getElementById('productsGrid');
@@ -184,17 +250,62 @@ function renderProducts(products) {
 
 function initProductFilter() {
   const filterBtns = document.querySelectorAll('.filter-btn');
+  const grid = document.getElementById('productsGrid');
+  let flipAnims = [];
+  function applyProductFilter(category) {
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll('.product-card'));
+    if (!cards.length) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // No change check via active button already handled
+    flipAnims.forEach(a => { try{ a.cancel(); }catch{} });
+    flipAnims = [];
+    if (reduce) {
+      cards.forEach(card => {
+        const match = category === 'all' || card.dataset.category === category;
+        card.style.display = match ? '' : 'none';
+        card.style.transform = '';
+        card.style.willChange = '';
+      });
+      return;
+    }
+    const firstRects = new Map();
+    cards.forEach(card => {
+      const wasHidden = card.style.display === 'none';
+      if (wasHidden) { card.style.display = ''; card.style.visibility = 'hidden'; }
+      firstRects.set(card, card.getBoundingClientRect());
+      if (wasHidden) { card.style.display = 'none'; card.style.visibility = ''; }
+    });
+    cards.forEach(card => {
+      const match = category === 'all' || card.dataset.category === category;
+      card.style.display = match ? '' : 'none';
+    });
+    grid.offsetHeight;
+    cards.forEach(card => {
+      if (card.style.display === 'none') { card.style.willChange = ''; return; }
+      const first = firstRects.get(card);
+      const last = card.getBoundingClientRect();
+      if (!first) return;
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      if (dx === 0 && dy === 0) return;
+      card.style.willChange = 'transform';
+      const anim = card.animate(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }],
+        { duration: 340, easing: 'cubic-bezier(0.16,1,0.3,1)', fill: 'both' }
+      );
+      flipAnims.push(anim);
+      anim.onfinish = () => { card.style.willChange = ''; };
+    });
+  }
+
   filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
+      const wasActive = btn.classList.contains('active');
+      if (wasActive) return;
       filterBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-
-      const category = btn.dataset.category;
-      if (category === 'all') {
-        renderProducts(allProducts);
-      } else {
-        renderProducts(allProducts.filter(p => p.category === category));
-      }
+      applyProductFilter(btn.dataset.category);
     });
   });
 }
@@ -276,16 +387,20 @@ function initContactForm() {
 
     const submitBtn = document.getElementById('contactSubmitBtn');
     const successMsg = document.getElementById('contactSuccess');
-    const originalText = submitBtn.innerHTML;
+    const originalText = submitBtn.textContent;
+    // Basic validation -> shake, not loading
+    const nameVal = document.getElementById('contactName').value.trim();
+    const msgVal = document.getElementById('contactMessage').value.trim();
+    if (!nameVal || !msgVal) { shakeButton(submitBtn); if(window.showToast) window.showToast('Vui lòng điền đủ họ tên và tin nhắn.', 'warning'); return; }
 
-    submitBtn.innerHTML = `<span>${i18n.t('contact.sending')}</span>`;
-    submitBtn.disabled = true;
+    setBtnLoading(submitBtn, true);
+    submitBtn.textContent = i18n.t('contact.sending') || 'Đang gửi...';
 
     const data = {
-      name: document.getElementById('contactName').value,
+      name: nameVal,
       email: document.getElementById('contactEmail').value,
       phone: document.getElementById('contactPhone').value,
-      message: document.getElementById('contactMessage').value,
+      message: msgVal,
     };
 
     try {
@@ -299,18 +414,19 @@ function initContactForm() {
 
       successMsg.classList.add('show');
       form.reset();
-
-      setTimeout(() => {
-        successMsg.classList.remove('show');
-      }, 5000);
+      setBtnLoading(submitBtn, false);
+      setBtnSuccess(submitBtn, '✓ Đã gửi');
+      setTimeout(() => { successMsg.classList.remove('show'); }, 5000);
+      return;
     } catch (err) {
+      shakeButton(submitBtn);
       if (window.showToast) window.showToast(err.message || 'Gửi liên hệ thất bại. Thử lại sau.', 'error');
       var errEl = document.getElementById('contactError');
       if (errEl) { errEl.textContent = err.message || 'Gửi thất bại.'; errEl.style.display = 'block'; setTimeout(function(){ errEl.style.display='none'; }, 4500); }
     }
 
-    submitBtn.innerHTML = originalText;
-    submitBtn.disabled = false;
+    setBtnLoading(submitBtn, false);
+    submitBtn.textContent = originalText;
   });
 }
 

@@ -3087,3 +3087,60 @@ a.comment-author:hover { color: var(--hp-accent, #b43e12); text-decoration: unde
   padding-top: 12px;
 }
 .comments-login-prompt a { color: var(--hp-accent, #b43e12); font-weight: 600; }
+
+/* ============================================================
+   SKELETON — Gallery & Products (Sprint 1)
+   transform/opacity only, shimmer, no layout shift
+   ============================================================ */
+.skeleton-card {
+  border-radius: var(--hp-radius);
+  overflow: hidden;
+  border: 1px solid var(--hp-border);
+  background: var(--hp-card);
+  display: flex;
+  flex-direction: column;
+}
+.skeleton-media {
+  aspect-ratio: 1;
+  background: linear-gradient(90deg,
+    var(--hp-card) 25%,
+    var(--hp-border) 50%,
+    var(--hp-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skeleton-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg,
+    var(--hp-card) 25%,
+    var(--hp-border) 50%,
+    var(--hp-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skeleton-line.short { width: 55%; }
+.skeleton-line.mid { width: 78%; }
+
+/* Staggered reveal — applied via JS with --stagger-delay */
+.gallery-card.reveal-ready,
+.product-card.reveal-ready {
+  opacity: 0;
+  transform: translateY(12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-media,
+  .skeleton-line { animation: none !important; }
+  .gallery-card.reveal-ready,
+  .product-card.reveal-ready {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

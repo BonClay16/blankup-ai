@@ -694,6 +694,25 @@
   pointer-events: none;
   opacity: 0.85;
   background: var(--s-accent);
+  transform: scale(0.98);
+  will-change: transform;
+}
+.generate-btn.is-success {
+  background: #059669 !important;
+  border-color: #059669 !important;
+}
+.generate-btn.shake {
+  animation: btnShake 280ms cubic-bezier(.36,.07,.19,.97) both;
+}
+@keyframes btnShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(1px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .generate-btn.loading { transform: none !important; }
+  .generate-btn.shake { animation: none !important; }
 }
 
 .generate-btn-loading { display: none; }
@@ -739,6 +758,48 @@
   background: var(--s-accent-glow);
   transform: translateY(-2px);
   box-shadow: var(--s-shadow-md);
+}
+
+/* Sprint 1: state machine — dragging scale, error shake, preview reveal */
+.upload-zone.is-dragging {
+  transform: scale(1.015);
+  border-color: var(--s-accent);
+  background: var(--s-accent-glow);
+  box-shadow: var(--s-shadow-md);
+  will-change: transform;
+}
+.upload-zone.is-error {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.06);
+}
+@keyframes shakeX {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(1px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+.upload-zone.shake {
+  animation: shakeX 280ms cubic-bezier(.36,.07,.19,.97) both;
+}
+.upload-preview.entering {
+  animation: previewIn 300ms cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes previewIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1); }
+}
+.upload-preview.leaving {
+  animation: previewOut 220ms ease both;
+}
+@keyframes previewOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.94); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .upload-zone.is-dragging { transform: none !important; }
+  .upload-zone.shake { animation: none !important; }
+  .upload-preview.entering,
+  .upload-preview.leaving { animation: none !important; }
 }
 
 .upload-zone svg { color: var(--s-text-muted); transition: var(--s-transition); }
@@ -2160,12 +2221,13 @@
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (max-width: 1200px) {
+@media (max-width: 1100px) {
   .studio-layout { grid-template-columns: 1fr; }
   .studio-left, .studio-right {
     position: static;
     height: auto;
     border: none;
+    overflow: visible;
   }
   .studio-canvas { order: -1; }
   .studio-left { border-bottom: 1px solid var(--s-border); }

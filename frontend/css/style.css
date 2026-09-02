@@ -27,6 +27,45 @@
 .toast-msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .toast-close { flex: 0 0 auto; width: 22px; height: 22px; border: 0; border-radius: 999px; background: transparent; color: var(--paper-mute, #8a8272); font-size: 16px; line-height: 1; cursor: pointer; }
 .toast-close:hover { background: var(--rust-tint, #f7e4da); color: var(--rust, #b43e12); }
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none !important; }
+  .toast--in { transform: none !important; opacity: 1 !important; }
+  .toast--exit { transform: none !important; opacity: 0 !important; }
+}
+
+/* Sprint 1: Button micro-interactions — loading stable, success checkmark, error shake */
+.btn.is-loading,
+.generate-btn.is-loading {
+  transform: scale(0.98);
+  transition: transform 120ms ease, opacity 150ms ease;
+  will-change: transform;
+}
+.btn.is-success {
+  background: var(--success, #4a5a3f) !important;
+  border-color: var(--success, #4a5a3f) !important;
+  color: #fff !important;
+}
+.btn.shake,
+.generate-btn.shake {
+  animation: btnShake 280ms cubic-bezier(.36,.07,.19,.97) both;
+}
+@keyframes btnShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(1px); }
+  30%, 50%, 70% { transform: translateX(-3px); }
+  40%, 60% { transform: translateX(3px); }
+}
+.btn .btn-check {
+  display: none;
+  width: 16px; height: 16px;
+  vertical-align: middle;
+}
+.btn.is-success .btn-check { display: inline-block; }
+.btn.is-success .btn-label { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .btn.is-loading, .generate-btn.is-loading { transform: none !important; }
+  .btn.shake, .generate-btn.shake { animation: none !important; }
+}
 
 /* ---------- Design Tokens ---------- */
 :root {
@@ -441,6 +480,22 @@ ul { list-style: none; }
   .hero-stats { flex-direction: column; gap: 16px; }
   .hero-stat:not(:last-child) { border-right: none; border-bottom: 1px solid var(--line-strong); padding-bottom: 16px; }
 }
+
+/* ============================================================
+   SKELETON — Products (Sprint 1, shared)
+   ============================================================ */
+.skeleton-card { border-radius: var(--radius-cards); overflow: hidden; border: 1px solid var(--card-border); background: var(--card-bg); display: flex; flex-direction: column; }
+.skeleton-media { aspect-ratio: 4/5; background: linear-gradient(90deg, var(--card-bg) 25%, var(--border) 50%, var(--card-bg) 75%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.skeleton-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.skeleton-line { height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--card-bg) 25%, var(--border) 50%, var(--card-bg) 75%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.skeleton-line.short { width: 55%; }
+.skeleton-line.mid { width: 78%; }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-media, .skeleton-line { animation: none !important; }
+  .gallery-card.reveal-ready, .product-card.reveal-ready { opacity: 1 !important; transform: none !important; }
+}
+.product-card.reveal-ready { opacity: 0; transform: translateY(12px); }
 
 /* ============================================================
    LOGIN PAGE
