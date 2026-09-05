@@ -1,7 +1,7 @@
 // frontend/js/auth.js
 // Immediate Theme Initialization (prevents page flicker)
 (function() {
-  const currentTheme = localStorage.getItem('blankup_theme') || 'dark';
+  const currentTheme = localStorage.getItem('blankup_theme') || 'light';
   document.documentElement.setAttribute('data-theme', currentTheme);
 })();
 

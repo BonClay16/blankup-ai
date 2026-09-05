@@ -4,28 +4,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38'%3E%3Crect width='38' height='38' rx='8' fill='%23b43e12'/%3E%3Cpath d='M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z' fill='%23f6f3ec' opacity='0.92'/%3E%3Cpath d='M16 10 L19 6 L22 10' stroke='%23f6f3ec' stroke-width='1.5' fill='none'/%3E%3C/svg%3E">
-  <meta name="theme-color" content="#b43e12">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38'%3E%3Crect width='38' height='38' rx='8' fill='%230f0c09'/%3E%3Cpath d='M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z' fill='%23f5f2eb' opacity='0.92'/%3E%3Cpath d='M16 10 L19 6 L22 10' stroke='%23f5f2eb' stroke-width='1.5' fill='none'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#f5f2eb">
   <title>AI Design Studio — Blankup</title>
   <meta name="description" content="Tạo thiết kế áo thun độc nhất với AI. Viết prompt hoặc upload ảnh để AI thiết kế cho bạn.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/tokens.css?v=v5">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/studio.css?v=v2">
+  <link rel="stylesheet" href="css/studio.css?v=v5">
 </head>
-<body>
+<body class="bk-grain">
 
   <!-- ====== NAVIGATION ====== -->
   <nav class="navbar scrolled" id="navbar">
     <div class="container">
       <a href="/" class="navbar-logo">
         <svg class="logo-icon" viewBox="0 0 38 38" fill="none">
-          <rect width="38" height="38" rx="10" fill="#ff6b00"/>
-          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.9"/>
-          <path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/>
-          <path d="M22 18 L28 12" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="29" cy="11" r="2" fill="white"/>
+          <rect width="38" height="38" rx="10" fill="#0f0c09"/>
+          <path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="#f5f2eb" opacity="0.9"/>
+          <path d="M16 10 L19 6 L22 10" stroke="#c19856" stroke-width="1.5" fill="none"/>
+          <path d="M22 18 L28 12" stroke="#c19856" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="29" cy="11" r="2" fill="#f5f2eb"/>
         </svg>
         <span>BLANK<span class="logo-highlight">UP</span></span>
       </a>
@@ -610,7 +608,7 @@
   <div id="authRequiredModal" class="auth-modal-overlay" style="display:none;">
     <div class="auth-modal">
       <div class="auth-modal-icon">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c19856" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
           <polyline points="10 17 15 12 10 7"/>
           <line x1="15" y1="12" x2="3" y2="12"/>
@@ -689,6 +687,7 @@
     {"imports":{"three":"/vendor/three/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}
   </script>
   <script type="module" src="js/tshirt-360.js?v=15"></script>
-  <script src="js/studio.js?v=v2"></script>
+  <script src="js/motion.js?v=v5"></script>
+  <script src="js/studio.js?v=v5"></script>
 </body>
 </html>

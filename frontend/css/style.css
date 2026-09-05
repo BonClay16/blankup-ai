@@ -1,13 +1,10 @@
 /* frontend/css/style.css */
 /* ============================================================
-   BLANKUP �?" Design System & Main Stylesheet
-   Direction: Fashion-editorial / print-lab.
-   Signature: print registration marks on every framed panel,
-   garment-tag labels as the eyebrow/meta device.
-   Type: Fraunces (display) + DM Sans (body) + DM Mono (labels/data)
-
-   Fonts are loaded per-page via <link> in each HTML head
-   (homepage: Archivo + Fraunces; app pages: Fraunces + DM Sans + DM Mono).
+   BLANKUP — Design System & Main Stylesheet (v5 cinematic editorial)
+   Direction: warm paper / ink / champagne gold.
+   Type: Playfair Display (display) + Manrope (body) + DM Mono (labels/data)
+   Fonts are self-hosted via css/tokens.css (vietnamese + latin subsets).
+   Primary CTA = ink/paper (contrast-safe); gold = accent/hover only.
    ============================================================ */
 
 /* ---------- Reset ---------- */
@@ -15,18 +12,18 @@
 
 /* ---------- Toast (shared) ---------- */
 #toast-container { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; width: min(92vw, 420px); }
-.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line, rgba(23,20,15,0.12)); background: var(--paper, #fff); box-shadow: 0 8px 32px rgba(23,20,15,0.12); font-family: 'DM Sans', system-ui, sans-serif; font-size: 13px; line-height: 1.4; color: var(--ink, #17140f); opacity: 0; transform: translateY(-8px) scale(0.98); transition: opacity 180ms ease, transform 180ms ease; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line, rgba(23,20,15,0.12)); background: var(--paper, #fff); box-shadow: 0 8px 32px rgba(23,20,15,0.12); font-family: 'Manrope', system-ui, sans-serif; font-size: 13px; line-height: 1.4; color: var(--ink, #17140f); opacity: 0; transform: translateY(-8px) scale(0.98); transition: opacity 180ms ease, transform 180ms ease; }
 .toast--in { opacity: 1; transform: translateY(0) scale(1); }
 .toast--exit { opacity: 0; transform: translateY(-6px) scale(0.98); }
 .toast-icon { flex: 0 0 auto; display: inline-flex; }
 .toast--success { border-color: rgba(74,90,63,0.22); }
 .toast--success .toast-icon { color: #4a5a3f; }
 .toast--error { border-color: rgba(180,62,18,0.22); }
-.toast--error .toast-icon { color: #b43e12; }
+.toast--error .toast-icon { color: var(--error, #a3341f); }
 .toast--warning { border-color: rgba(180,130,18,0.22); }
 .toast-msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .toast-close { flex: 0 0 auto; width: 22px; height: 22px; border: 0; border-radius: 999px; background: transparent; color: var(--paper-mute, #8a8272); font-size: 16px; line-height: 1; cursor: pointer; }
-.toast-close:hover { background: var(--rust-tint, #f7e4da); color: var(--rust, #b43e12); }
+.toast-close:hover { background: var(--rust-tint); color: var(--rust); }
 @media (prefers-reduced-motion: reduce) {
   .toast { transition: none !important; }
   .toast--in { transform: none !important; opacity: 1 !important; }
@@ -81,10 +78,10 @@
   --paper-dim: #6b6355;
   --paper-mute: #8a8272;
 
-  /* Accent — flat, no gradients. Used sparingly: CTAs, one italic word, small marks. */
-  --rust: #b43e12;
-  --rust-deep: #8a2f0d;
-  --rust-tint: #f7e4da;
+  /* Accent — champagne gold. Ink carries CTAs (contrast); gold is accent/hover. */
+  --rust: #a37c3a;
+  --rust-deep: #7d5f2c;
+  --rust-tint: rgba(193, 152, 86, 0.14);
   --moss: #4a5a3f;
 
   /* App surfaces (studio/admin/product cards/forms) */
@@ -116,25 +113,25 @@
   /* Radius scale — aligned to the Air reference: inputs tightest, buttons
      slightly rounder, cards/images softest, pills reserved for toggles only */
   --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
   --radius-full: 999px;
-  --radius-inputs: 4px;
-  --radius-buttons: 8px;
-  --radius-cards: 12px;
-  --radius-images: 11px;
+  --radius-inputs: 2px;
+  --radius-buttons: 2px;
+  --radius-cards: 3px;
+  --radius-images: 3px;
 
   --transition-fast: 0.15s ease;
   --transition-base: 0.25s ease;
   --transition-slow: 0.45s cubic-bezier(.2,.7,.3,1);
 
-  --font-display: 'Fraunces', 'Iowan Old Style', serif;
-  --font-heading: 'DM Sans', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-heading: 'Manrope', system-ui, sans-serif;
+  --font-body: 'Manrope', system-ui, sans-serif;
   --font-mono: 'DM Mono', 'SFMono-Regular', monospace;
-  --font-poster: 'Bebas Neue', 'Anton', 'DM Sans', sans-serif;
+  --font-poster: 'Playfair Display', Georgia, serif;
 
   /* legacy alias some component files still read */
   --accent: var(--rust);
@@ -155,7 +152,7 @@ img { max-width: 100%; height: auto; display: block; }
 button { font-family: var(--font-body); cursor: pointer; border: none; outline: none; background: none; }
 input, textarea, select { font-family: var(--font-body); outline: none; border: none; }
 ul { list-style: none; }
-::selection { background: var(--rust); color: var(--paper); }
+::selection { background: var(--rust); color: #0f0c09; }
 
 :focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
 
@@ -206,8 +203,8 @@ ul { list-style: none; }
    BUTTONS
    ============================================================ */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; padding: 14px 26px; border-radius: var(--radius-buttons); transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast); white-space: nowrap; }
-.btn-primary { background: var(--rust); color: #fff; }
-.btn-primary:hover { background: var(--rust-deep); }
+.btn-primary { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); }
+.btn-primary:hover { background: var(--rust); border-color: var(--rust); color: #0f0c09; }
 .btn-secondary { background: transparent; color: var(--ink); border: 1px solid var(--line-strong); }
 .btn-secondary:hover { border-color: var(--ink); }
 .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line-strong); }
@@ -245,7 +242,7 @@ ul { list-style: none; }
 /* User menu (injected by auth.js) */
 .user-menu { position: relative; }
 .user-menu-trigger { display: flex; align-items: center; gap: 10px; color: var(--ink); }
-.avatar-circle { width: 30px; height: 30px; border-radius: 50%; background: var(--rust); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.7rem; }
+.avatar-circle { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--paper); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.7rem; }
 .user-trigger-copy { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
 .user-trigger-label { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--paper-mute); }
 .user-name-text { font-size: 0.82rem; }
@@ -571,3 +568,131 @@ body.login-page-body { background: var(--paper-alt); min-height: 100vh; }
 .social-btn:active { transform: translateY(0); }
 .social-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 .social-btn svg { flex-shrink: 0; }
+
+/* ============================================================
+   AUTH CINEMATIC LAYER (v5) — scoped to login-family pages only.
+   All login.js / forgot-password.js / reset-password.js ids kept.
+   ============================================================ */
+body.login-page-body {
+  background:
+    radial-gradient(circle at 82% 8%, rgba(193, 152, 86, 0.2), transparent 26%),
+    radial-gradient(circle at 8% 85%, rgba(255, 255, 255, 0.75), transparent 30%),
+    linear-gradient(115deg, #f5f2eb, #fffdf8 52%, #ead9c0);
+  font-family: 'Manrope', system-ui, sans-serif;
+}
+body.login-page-body .login-header {
+  background: transparent;
+  border-bottom: 1px solid rgba(15, 12, 9, 0.12);
+}
+body.login-page-body .navbar-logo {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+  font-weight: 600;
+}
+body.login-page-body .logo-highlight { color: #a37c3a; font-style: normal; }
+body.login-page-body .lang-toggle { font-family: 'DM Mono', monospace; }
+body.login-page-body .lang-toggle span.active { background: #0f0c09; color: #f5f2eb; }
+body.login-page-body .login-card {
+  background: #fffdf8;
+  border: 1px solid rgba(15, 12, 9, 0.16);
+  border-top: 3px solid #c19856;
+  border-radius: 3px;
+  box-shadow: 0 28px 70px rgba(15, 12, 9, 0.14);
+  padding: 48px 44px;
+}
+body.login-page-body .login-card .tag {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #a37c3a;
+  border: none;
+  padding: 0;
+}
+body.login-page-body .login-card .tag::before { display: none; }
+body.login-page-body .login-card-header h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 500;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+body.login-page-body .login-card-header p { font-family: 'DM Mono', monospace; }
+body.login-page-body .form-group label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+body.login-page-body .login-card .form-input {
+  border: none;
+  border-bottom: 1px solid rgba(15, 12, 9, 0.28);
+  border-radius: 0;
+  padding: 12px 2px;
+  background: transparent;
+}
+body.login-page-body .login-card .form-input:focus { border-color: #c19856; }
+body.login-page-body .login-card .btn-primary {
+  background: #0f0c09;
+  border: 1px solid #0f0c09;
+  border-radius: 2px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 16px;
+}
+body.login-page-body .login-card .btn-primary:hover {
+  background: #c19856;
+  border-color: #c19856;
+  color: #0f0c09;
+}
+body.login-page-body .social-divider { font-family: 'DM Mono', monospace; }
+body.login-page-body .social-btn {
+  border: 1px solid rgba(15, 12, 9, 0.2);
+  border-radius: 2px;
+  font-family: 'Manrope', sans-serif;
+}
+body.login-page-body .social-btn:hover {
+  border-color: #0f0c09;
+  background: #f7f1e3;
+  transform: translateY(-1px);
+}
+body.login-page-body .auth-switch button { color: #a37c3a; }
+body.login-page-body .auth-error {
+  border-radius: 2px;
+  border-color: rgba(163, 52, 31, 0.35);
+}
+body.login-page-body #verifySuccessMsg,
+body.login-page-body #forgotSuccessMsg { border-radius: 2px !important; }
+
+/* Editorial side panel (desktop only, decorative — no copy, no handlers) */
+@media (min-width: 1024px) {
+  body.login-page-body::before {
+    content: '';
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    width: 40vw;
+    background: #1d1b18 url('../assets/img/studio.jpg') center 30% / cover no-repeat;
+    z-index: 0;
+  }
+  body.login-page-body::after {
+    content: '';
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    width: 40vw;
+    background: linear-gradient(to top, rgba(10, 8, 6, 0.55), transparent 55%);
+    z-index: 0;
+    pointer-events: none;
+  }
+  body.login-page-body .login-header,
+  body.login-page-body .login-main { position: relative; z-index: 1; }
+  body.login-page-body .login-main {
+    justify-content: flex-end;
+    padding-right: 9vw;
+    padding-left: 44vw;
+  }
+  body.login-page-body .login-card { width: 100%; max-width: 440px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.login-page-body .social-btn:hover { transform: none; }
+}

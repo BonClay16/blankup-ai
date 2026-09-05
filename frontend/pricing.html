@@ -4,28 +4,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38'%3E%3Crect width='38' height='38' rx='8' fill='%23b43e12'/%3E%3Cpath d='M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z' fill='%23f6f3ec' opacity='0.92'/%3E%3Cpath d='M16 10 L19 6 L22 10' stroke='%23f6f3ec' stroke-width='1.5' fill='none'/%3E%3C/svg%3E">
-  <meta name="theme-color" content="#0a0a0f">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 38 38'%3E%3Crect width='38' height='38' rx='4' fill='%230f0c09'/%3E%3Cpath d='M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z' fill='%23f5f2eb' opacity='0.94'/%3E%3Cpath d='M16 10 L19 6 L22 10' stroke='%23c19856' stroke-width='1.8' fill='none'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#f5f2eb">
   <title>Gói AI — Blankup</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css?v=v5">
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/pricing.css?v=1">
+  <link rel="stylesheet" href="css/pricing.css?v=v5">
 </head>
-<body>
-  <nav class="navbar" id="navbar" style="position:sticky; top:0; z-index:50; background:var(--bg, #fff); border-bottom:1px solid var(--border);">
-    <div class="container" style="display:flex; align-items:center; justify-content:space-between; padding:14px 20px;">
-      <a href="/" class="navbar-logo" style="display:flex; align-items:center; gap:10px; font-weight:800; text-decoration:none; color:var(--text-heading);">
-        <svg width="32" height="32" viewBox="0 0 38 38" fill="none"><rect width="38" height="38" rx="10" fill="#b43e12"/><path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="white" opacity="0.92"/><path d="M16 10 L19 6 L22 10" stroke="white" stroke-width="1.5" fill="none"/></svg>
-        <span>BLANK<span style="color:#b43e12;">UP</span></span>
+<body class="pricing-page bk-grain">
+  <nav class="navbar pricing-nav" id="navbar">
+    <div class="container pricing-nav-inner">
+      <a href="/" class="navbar-logo pricing-logo">
+        <svg width="30" height="30" viewBox="0 0 38 38" fill="none" aria-hidden="true"><rect width="38" height="38" rx="4" fill="#0f0c09"/><path d="M10 14 L14 10 L24 10 L28 14 L26 14 L26 28 L12 28 L12 14 Z" fill="#f5f2eb" opacity="0.94"/><path d="M16 10 L19 6 L22 10" stroke="#c19856" stroke-width="1.8" fill="none"/></svg>
+        <span class="pricing-wordmark">Blankup</span>
       </a>
-      <div style="display:flex; gap:18px; align-items:center;">
-        <a href="/" style="text-decoration:none; color:var(--text-muted); font-size:0.9rem;">Trang chủ</a>
-        <a href="pricing.html" style="text-decoration:none; color:var(--rust); font-weight:700; font-size:0.9rem;">Gói AI</a>
-        <a href="studio.html" style="text-decoration:none; color:var(--text-muted); font-size:0.9rem;">AI Studio</a>
-        <a href="account.html" id="pricingAccountLink" style="text-decoration:none; color:var(--text-muted); font-size:0.9rem;">Tài khoản</a>
-        <a href="login.html" id="pricingLoginLink" class="btn btn-primary btn-sm" style="padding:8px 14px;">Đăng nhập</a>
+      <div class="pricing-nav-links">
+        <a href="/">Trang chủ</a>
+        <a href="pricing.html" class="active">Gói AI</a>
+        <a href="studio.html">AI Studio</a>
+        <a href="account.html" id="pricingAccountLink">Tài khoản</a>
+        <a href="login.html" id="pricingLoginLink" class="btn btn-primary btn-sm">Đăng nhập</a>
       </div>
     </div>
   </nav>
@@ -79,58 +77,63 @@
     </section>
   </main>
 
-  <!-- Purchase modal (mirror account) -->
-  <div id="pricingPurchaseModal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); align-items:center; justify-content:center; z-index:9999; padding:20px;">
-    <div class="modal-content" style="max-width:480px; width:100%; padding:28px; border-radius:16px; background:#fff; position:relative; max-height:90vh; overflow:auto;">
-      <button id="pricingPurchaseClose" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
-      <h3 id="pricingPurchaseTitle" style="margin:0 0 12px; font-size:1.15rem; font-weight:800;">Thanh toán</h3>
-      <div id="pricingVoucherSection" style="margin-bottom:14px; padding:12px; border:1px dashed var(--border); border-radius:10px; background:#faf7f1;">
-        <div style="font-weight:700; font-size:0.86rem; margin-bottom:8px;">Voucher</div>
-        <div id="pricingVoucherList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;"></div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <input id="pricingVoucherInput" placeholder="Nhập mã voucher" style="flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:8px; text-transform:uppercase; font-size:0.88rem;">
+  <!-- Purchase modal (mirror account) — all ids preserved for pricing.js -->
+  <div id="pricingPurchaseModal" class="modal-overlay pm-overlay" style="display:none;">
+    <div class="modal-content pm-card">
+      <button id="pricingPurchaseClose" class="pm-close" aria-label="Đóng">✕</button>
+      <p class="pm-eyebrow">Blankup AI / Thanh toán</p>
+      <h3 id="pricingPurchaseTitle" class="pm-title">Thanh toán</h3>
+      <div id="pricingVoucherSection" class="pm-section">
+        <div class="pm-section-title">Voucher</div>
+        <div id="pricingVoucherList" class="pm-voucher-list"></div>
+        <div class="pm-voucher-row">
+          <input id="pricingVoucherInput" class="pm-input" placeholder="Nhập mã voucher" aria-label="Mã voucher">
           <button id="pricingVoucherApply" class="btn btn-secondary btn-sm">Áp dụng</button>
           <button id="pricingVoucherClear" class="btn btn-ghost btn-sm">Bỏ voucher</button>
         </div>
-        <div id="pricingVoucherStatus" style="margin-top:8px; font-size:0.82rem; min-height:18px;"></div>
-        <div id="pricingQuotePreview" style="display:none; margin-top:10px; padding:10px; background:#fff; border:1px solid var(--border); border-radius:8px; font-size:0.86rem;">
-          <div>Giá: <span id="pricingQuotePrice" style="font-weight:700;"></span> — Giảm: <span id="pricingQuoteDiscount" style="color:#16a34a; font-weight:700;"></span> = <strong id="pricingQuoteFinal" style="color:#b43e12;"></strong></div>
+        <div id="pricingVoucherStatus" class="pm-status"></div>
+        <div id="pricingQuotePreview" class="pm-quote" style="display:none;">
+          <div>Giá: <span id="pricingQuotePrice" class="pm-strong"></span> — Giảm: <span id="pricingQuoteDiscount" class="pm-discount"></span> = <strong id="pricingQuoteFinal" class="pm-final"></strong></div>
           <div>Nhận: <span id="pricingQuoteCredits"></span></div>
         </div>
       </div>
-      <div id="pricingBreakdown" style="background:#faf7f1; border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:14px; font-size:0.88rem; display:none;">
-        <div style="display:flex; justify-content:space-between;"><span>Gói</span><strong id="pricingBreakdownName">—</strong></div>
-        <div style="display:flex; justify-content:space-between;"><span>Giá niêm yết</span><span id="pricingBreakdownPrice">—</span></div>
-        <div id="pricingBreakdownDiscountRow" style="display:flex; justify-content:space-between; color:#16a34a;"><span>Voucher <span id="pricingBreakdownVoucher"></span></span><span id="pricingBreakdownDiscount">—</span></div>
-        <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border); margin-top:8px; padding-top:8px;"><span>Tổng thanh toán</span><strong id="pricingBreakdownFinal" style="color:#b43e12;">—</strong></div>
-        <div style="display:flex; justify-content:space-between; color:var(--text-muted); font-size:0.84rem;"><span>Nhận</span><span id="pricingBreakdownCredits">—</span></div>
+      <div id="pricingBreakdown" class="pm-section" style="display:none;">
+        <div class="pm-row"><span>Gói</span><strong id="pricingBreakdownName">—</strong></div>
+        <div class="pm-row"><span>Giá niêm yết</span><span id="pricingBreakdownPrice">—</span></div>
+        <div id="pricingBreakdownDiscountRow" class="pm-row pm-discount"><span>Voucher <span id="pricingBreakdownVoucher"></span></span><span id="pricingBreakdownDiscount">—</span></div>
+        <div class="pm-row pm-total"><span>Tổng thanh toán</span><strong id="pricingBreakdownFinal">—</strong></div>
+        <div class="pm-row pm-muted"><span>Nhận</span><span id="pricingBreakdownCredits">—</span></div>
       </div>
-      <div id="pricingQrSection" style="text-align:center; display:none; margin-bottom:12px;">
-        <img id="pricingQrImg" src="" alt="QR" style="max-width:280px; width:100%; border-radius:8px; border:1px solid var(--border);">
+      <div id="pricingQrSection" class="pm-center" style="display:none;">
+        <img id="pricingQrImg" class="pm-qr" src="" alt="Mã QR thanh toán VietQR">
       </div>
-      <div id="pricingTransferSection" style="text-align:center; display:none; margin-bottom:12px;">
-        <div style="font-size:0.82rem; color:var(--text-muted);">Nội dung chuyển khoản</div>
-        <div id="pricingTransferContent" style="font-weight:800; font-size:1rem; letter-spacing:0.5px;"></div>
+      <div id="pricingTransferSection" class="pm-center" style="display:none;">
+        <div class="pm-muted">Nội dung chuyển khoản</div>
+        <div id="pricingTransferContent" class="pm-transfer"></div>
       </div>
-      <div id="pricingPaymentBox" style="text-align:center; display:none; margin-bottom:12px;">
-        <div id="pricingPaymentText" style="font-weight:700;"></div>
-        <div id="pricingPaymentHint" style="font-size:0.82rem; color:var(--text-muted); margin-top:6px;"></div>
-        <div id="pricingPollingInfo" style="font-size:0.78rem; color:var(--text-muted); margin-top:8px;"></div>
+      <div id="pricingPaymentBox" class="pm-center" style="display:none;">
+        <div id="pricingPaymentText" class="pm-strong"></div>
+        <div id="pricingPaymentHint" class="pm-muted"></div>
+        <div id="pricingPollingInfo" class="pm-poll"></div>
       </div>
-      <button id="pricingConfirmBtn" class="btn btn-primary" style="width:100%; display:none;">Tạo đơn & lấy QR</button>
-      <div id="pricingPostActions" style="display:none; gap:10px; justify-content:center; margin-top:12px;">
+      <button id="pricingConfirmBtn" class="btn btn-primary pm-full" style="display:none;">Tạo đơn & lấy QR</button>
+      <div id="pricingPostActions" class="pm-actions" style="display:none;">
         <button id="pricingCheckAgainBtn" class="btn btn-secondary btn-sm">Kiểm tra lại</button>
         <button id="pricingDoneBtn" class="btn btn-primary btn-sm">Hoàn tất</button>
       </div>
     </div>
   </div>
 
-  <footer class="footer" style="border-top:1px solid var(--border); padding:28px 0; margin-top:32px;">
-    <div class="container" style="text-align:center; color:var(--text-muted); font-size:0.85rem;">© 2024 Blankup. Mọi quyền được bảo lưu. · <a href="account.html#credits" style="color:var(--rust);">Tài khoản → Credits</a></div>
+  <footer class="footer pricing-footer">
+    <div class="container pricing-footer-inner">
+      <span class="pricing-footer-brand">Blankup</span>
+      <span>© 2026 Blankup · <a href="account.html#credits">Tài khoản → Credits</a></span>
+    </div>
   </footer>
 
   <script src="js/auth.js"></script>
   <script src="js/toast.js"></script>
+  <script src="js/motion.js?v=v5"></script>
   <script src="js/pricing.js"></script>
 </body>
 </html>
