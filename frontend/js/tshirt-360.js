@@ -4,12 +4,69 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
+// ---------------------------------------------------------------------------
+// GARMENT REGISTRY — single source of truth for 3D product availability.
+// ---------------------------------------------------------------------------
+// To add a future real asset (e.g. hoodie-web.glb / polo-web.glb):
+//   1. Drop the file into frontend/assets/models/
+//   2. Set its `modelUrl` below and flip `available3D` to true
+//   3. Optionally tune decalTarget / decal / camera for that garment
+// No core render-engine changes are needed. NEVER point an unavailable
+// garment at another garment's model — unavailable must stay unavailable.
+// ---------------------------------------------------------------------------
+const GARMENT_REGISTRY = {
+  tshirt: {
+    id: 'tshirt',
+    name: 'T-Shirt',
+    modelUrl: 'assets/models/tshirt-web.glb',
+    available3D: true,
+    // Mesh mapping for this garment's printable area.
+    decalTarget: /FRONT/i,
+    // Decal placement relative to model bounds (chest print area).
+    decal: { scaleX: 0.42, scaleY: 0.36, depthK: 1.8, liftY: 0.06, liftZ: 0.012 },
+    // Camera framing relative to model bounds.
+    camera: { distanceK: 2.45, heightK: 0.06 },
+    printArea: { configured: true },
+  },
+  hoodie: {
+    id: 'hoodie',
+    name: 'Hoodie',
+    modelUrl: null, // <-- set to 'assets/models/hoodie-web.glb' when the real asset lands
+    available3D: false,
+    decalTarget: null,
+    decal: null,
+    camera: null,
+    printArea: { configured: false },
+  },
+  polo: {
+    id: 'polo',
+    name: 'Polo',
+    modelUrl: null, // <-- set to 'assets/models/polo-web.glb' when the real asset lands
+    available3D: false,
+    decalTarget: null,
+    decal: null,
+    camera: null,
+    printArea: { configured: false },
+  },
+};
+
+function debug3d(...args) {
+  try {
+    if (localStorage.getItem('blankup_3d_debug') === '1') console.debug('[3D]', ...args);
+  } catch { /* ignore */ }
+}
+
 const viewer = {
   ready: false,
+  productType: 'tshirt',
+  modelUrl: null,
+  modelLoading: false,
+  loadToken: 0,
   pendingDesignUrl: null,
   pendingColor: '#ffffff',
   decalMeshes: [],
   shirtMeshes: [],
+  appliedDesignUrl: null,
 };
 
 window.tshirt360Viewer = {
@@ -29,6 +86,33 @@ window.tshirt360Viewer = {
   },
   setRemoveWhiteBg(enabled) {
     return setRemoveWhiteBg(enabled);
+  },
+  // --- Multi-garment API (Phase 3D.1) ---
+  // setProduct('hoodie') with no asset does NOT load another garment's
+  // model. It enters a controlled unavailable state and reports it.
+  setProduct(productType) {
+    return setProduct(productType);
+  },
+  isAvailable(productType) {
+    const entry = GARMENT_REGISTRY[productType];
+    return !!(entry && entry.available3D && entry.modelUrl);
+  },
+  getProductState() {
+    return {
+      current: viewer.productType,
+      available3D: this.isAvailable(viewer.productType),
+      modelLoaded: viewer.ready,
+      modelUrl: viewer.modelUrl,
+      loading: viewer.modelLoading,
+    };
+  },
+  getRegistry() {
+    // Snapshot for UI badges (no live references).
+    return Object.values(GARMENT_REGISTRY).map((g) => ({
+      id: g.id,
+      name: g.name,
+      available3D: !!(g.available3D && g.modelUrl),
+    }));
   },
 };
 
@@ -79,25 +163,6 @@ function initializeViewer() {
   viewer.controls = controls;
   viewer.floor = floor;
 
-  const loader = new GLTFLoader();
-  loader.setMeshoptDecoder(MeshoptDecoder);
-  loader.load(
-    'assets/models/tshirt-web.glb',
-    (gltf) => onModelLoaded(gltf.scene),
-    undefined,
-    (error) => {
-      container.classList.remove('viewer-loading');
-      container.classList.add('viewer-fallback');
-      const fallbackMsg = document.createElement('div');
-      fallbackMsg.className = 'viewer-error-msg';
-      fallbackMsg.textContent = 'Không thể tải mô hình 3D — đang hiển thị bản xem 2D.';
-      fallbackMsg.setAttribute('role', 'status');
-      container.appendChild(fallbackMsg);
-      console.warn('Could not load 3D t-shirt model:', error);
-      if (window.showToast) window.showToast('Không thể tải mô hình 3D, đã chuyển sang xem 2D.', 'warning');
-    }
-  );
-
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
@@ -113,14 +178,122 @@ function initializeViewer() {
     controls.update();
     renderer.render(scene, camera);
   });
+
+  // Default garment (T-Shirt). ONE renderer + ONE loop for the page lifetime.
+  setProduct('tshirt');
 }
 
-function onModelLoaded(model) {
+// ---------------------------------------------------------------------------
+// Garment model lifecycle
+// ---------------------------------------------------------------------------
+function setProduct(productType) {
+  const entry = GARMENT_REGISTRY[productType];
+  if (!entry) {
+    debug3d('setProduct: unknown product', productType);
+    return { status: 'error', productType, reason: 'unknown-product' };
+  }
+  if (viewer.productType === entry.id && viewer.ready && viewer.modelUrl === (entry.modelUrl || null)) {
+    return { status: 'ready', productType: entry.id, cached: true };
+  }
+  if (!entry.available3D || !entry.modelUrl) {
+    enterUnavailableState(entry);
+    return { status: 'unavailable', productType: entry.id };
+  }
+  viewer.productType = entry.id;
+  loadGarmentModel(entry);
+  return { status: viewer.ready && viewer.modelUrl === entry.modelUrl ? 'ready' : 'loading', productType: entry.id };
+}
+
+function enterUnavailableState(entry) {
+  // Controlled state: do NOT touch another garment's model as a fake.
+  // Dispose the current model so the canvas never shows the wrong garment.
+  debug3d('setProduct: unavailable, entering controlled state', entry.id);
+  viewer.loadToken += 1; // invalidate any in-flight load
+  viewer.productType = entry.id;
+  disposeCurrentModel();
+  viewer.ready = false;
+  viewer.modelLoading = false;
+  container.classList.remove('viewer-loading', 'has-real-3d');
+  container.classList.add('garment-unavailable');
+  const msg = container.querySelector('.garment-unavailable-msg');
+  if (msg) {
+    msg.hidden = false;
+    msg.textContent = `Mẫu 3D ${entry.name} đang được bổ sung — bạn vẫn xem trước 2D và đặt hàng bình thường.`;
+  }
+}
+
+function exitUnavailableState() {
+  container.classList.remove('garment-unavailable');
+  const msg = container.querySelector('.garment-unavailable-msg');
+  if (msg) msg.hidden = true;
+}
+
+function disposeCurrentModel() {
+  clearDecals();
+  if (viewer.model) {
+    viewer.model.traverse((object) => {
+      if (!object.isMesh) return;
+      if (object.geometry) object.geometry.dispose();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach((material) => {
+        if (!material) return;
+        Object.values(material).forEach((value) => {
+          if (value && value.isTexture) value.dispose();
+        });
+        material.dispose();
+      });
+    });
+    viewer.scene.remove(viewer.model);
+    viewer.model = null;
+  }
+  viewer.shirtMeshes = [];
+  viewer.bounds = null;
+}
+
+function loadGarmentModel(entry) {
+  const token = ++viewer.loadToken;
+  viewer.modelLoading = true;
+  viewer.ready = false;
+  exitUnavailableState();
+  container.classList.remove('has-real-3d');
+  container.classList.add('viewer-loading');
+  debug3d('loadGarmentModel: start', entry.id, entry.modelUrl);
+
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  loader.load(
+    entry.modelUrl,
+    (gltf) => {
+      if (token !== viewer.loadToken) {
+        debug3d('loadGarmentModel: stale load ignored', entry.id);
+        return; // a newer setProduct() superseded this load
+      }
+      onModelLoaded(gltf.scene, entry);
+    },
+    undefined,
+    (error) => {
+      if (token !== viewer.loadToken) return;
+      viewer.modelLoading = false;
+      container.classList.remove('viewer-loading');
+      container.classList.add('viewer-fallback');
+      const fallbackMsg = document.createElement('div');
+      fallbackMsg.className = 'viewer-error-msg';
+      fallbackMsg.textContent = 'Không thể tải mô hình 3D — đang hiển thị bản xem 2D.';
+      fallbackMsg.setAttribute('role', 'status');
+      container.appendChild(fallbackMsg);
+      console.warn('Could not load 3D garment model:', entry.id, error);
+      if (window.showToast) window.showToast('Không thể tải mô hình 3D, đã chuyển sang xem 2D.', 'warning');
+    }
+  );
+}
+
+function onModelLoaded(model, entry) {
+  const targetRe = entry.decalTarget instanceof RegExp ? entry.decalTarget : null;
   model.traverse((object) => {
     if (!object.isMesh) return;
     object.castShadow = true;
     object.receiveShadow = true;
-    if (/FRONT/i.test(object.name)) viewer.shirtMeshes.push(object);
+    if (targetRe && targetRe.test(object.name || '')) viewer.shirtMeshes.push(object);
   });
 
   if (!viewer.shirtMeshes.length) {
@@ -130,16 +303,20 @@ function onModelLoaded(model) {
   }
 
   viewer.model = model;
+  viewer.modelUrl = entry.modelUrl;
   viewer.scene.add(model);
-  frameModel();
+  frameModel('front', entry);
   viewer.ready = true;
+  viewer.modelLoading = false;
   container.classList.remove('viewer-loading');
   container.classList.add('has-real-3d');
+  debug3d('loadGarmentModel: ready', entry.id, 'meshes=', viewer.shirtMeshes.length);
   applyColor(viewer.pendingColor);
   if (viewer.pendingDesignUrl) applyDesign(viewer.pendingDesignUrl);
 }
 
-function frameModel(side = 'front') {
+function frameModel(side = 'front', entry) {
+  const cfg = (entry && entry.camera) || { distanceK: 2.45, heightK: 0.06 };
   const box = new THREE.Box3().setFromObject(viewer.model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
@@ -147,7 +324,7 @@ function frameModel(side = 'front') {
 
   viewer.bounds = { box, size, center };
   const direction = side === 'back' ? -1 : 1;
-  viewer.camera.position.set(center.x, center.y + size.y * 0.06, center.z + direction * largest * 2.45);
+  viewer.camera.position.set(center.x, center.y + size.y * cfg.heightK, center.z + direction * largest * cfg.distanceK);
   viewer.controls.target.set(center.x, center.y, center.z);
   viewer.controls.update();
   viewer.floor.position.set(center.x, box.min.y - size.y * 0.02, center.z);
@@ -162,7 +339,7 @@ function applyColor(color) {
   });
 }
 
-function applyDesign(url) {
+function clearDecals() {
   viewer.decalMeshes.forEach((mesh) => {
     mesh.geometry.dispose();
     mesh.material.dispose();
@@ -170,18 +347,41 @@ function applyDesign(url) {
   });
   viewer.decalMeshes = [];
   viewer.decalUniforms = [];
+  viewer.appliedDesignUrl = null;
+}
 
-  if (!url) return;
+function applyDesign(url) {
+  // Decal clipping runs on the main thread over a dense garment mesh, so
+  // re-running it for an identical URL (color/product/position changes)
+  // would wedge the UI for seconds. Skip when nothing changed.
+  if (!url) {
+    if (viewer.decalMeshes.length) clearDecals();
+    return;
+  }
+  if (url === viewer.appliedDesignUrl && viewer.decalMeshes.length) return;
+  clearDecals();
+
   new THREE.TextureLoader().load(url, (texture) => {
+    // Stale-callback guard: the garment may have been disposed (product
+    // switch) while the texture was in flight — never crash on dead state.
+    if (!viewer.bounds || !viewer.shirtMeshes.length) return;
+    // A newer design request superseded this load; drop it quietly instead
+    // of painting an outdated design.
+    if (viewer.pendingDesignUrl !== url) {
+      texture.dispose();
+      return;
+    }
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.flipY = true;
     texture.anisotropy = Math.min(8, viewer.renderer.capabilities.getMaxAnisotropy());
     texture.needsUpdate = true;
 
+    const entry = GARMENT_REGISTRY[viewer.productType];
+    const decalCfg = (entry && entry.decal) || { scaleX: 0.42, scaleY: 0.36, depthK: 1.8, liftY: 0.06, liftZ: 0.012 };
     const { box, size, center } = viewer.bounds;
-    const position = new THREE.Vector3(center.x, center.y + size.y * 0.06, box.max.z + size.z * 0.012);
+    const position = new THREE.Vector3(center.x, center.y + size.y * decalCfg.liftY, box.max.z + size.z * decalCfg.liftZ);
     const orientation = new THREE.Euler(0, 0, 0);
-    const decalSize = new THREE.Vector3(size.x * 0.42, size.y * 0.36, Math.max(0.08, size.z * 1.8));
+    const decalSize = new THREE.Vector3(size.x * decalCfg.scaleX, size.y * decalCfg.scaleY, Math.max(0.08, size.z * decalCfg.depthK));
 
     viewer.shirtMeshes.forEach((target) => {
       const geometry = new DecalGeometry(target, position, orientation, decalSize);
@@ -226,6 +426,7 @@ function applyDesign(url) {
       viewer.decalMeshes.push(decal);
       viewer.decalUniforms.push(uniforms);
     });
+    viewer.appliedDesignUrl = url;
   }, undefined, (err) => {
     console.warn('[3D] Failed to load decal texture:', url, err);
     if (window.showToast) window.showToast('Không thể tải họa tiết lên mô hình 3D.', 'warning');

@@ -99,7 +99,15 @@ class AuthManager {
       }
 
       if (data.requiresVerification) {
-        return { success: true, requiresVerification: true, userId: data.userId, verificationMethods: data.verificationMethods };
+        return {
+          success: true,
+          requiresVerification: true,
+          userId: data.userId,
+          verificationMethods: data.verificationMethods,
+          resendAvailableAt: data.resendAvailableAt || null,
+          emailSent: data.emailSent,
+          deliveryWarning: data.deliveryWarning || null,
+        };
       }
 
       this.token = data.token;
@@ -319,6 +327,7 @@ class AuthManager {
 }
 
 const auth = new AuthManager();
+window.auth = auth;
 document.addEventListener('DOMContentLoaded', () => {
   auth.init();
 });

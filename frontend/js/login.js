@@ -217,6 +217,12 @@ document.addEventListener('DOMContentLoaded', () => {
           pendingVerifyUserId = result.userId;
           pendingVerifyMethods = result.verificationMethods || [];
           showVerificationForm();
+          // Initial send just happened server-side: start UX cooldown now.
+          applyResendAvailableAt(result.resendAvailableAt, pendingVerifyMethods);
+          if (result.deliveryWarning) {
+            verifyErrorMsg.textContent = result.deliveryWarning;
+            verifyErrorMsg.style.display = 'block';
+          }
         } else {
           auth.updateNavbar();
           redirectAfterLogin();
@@ -231,6 +237,68 @@ document.addEventListener('DOMContentLoaded', () => {
         errorMsg.style.display = 'block';
       }
     });
+  }
+
+  // ---- Resend cooldown (UX only — backend enforces 120s per pending+channel) ----
+  // Deadline persists in localStorage so reload/new tab keeps the countdown.
+  // The backend remains the source of truth (429 + retryAfterSeconds).
+  const RESEND_COOLDOWN_SECONDS = 120;
+  const cooldownTimers = {};
+
+  function resendDeadlineKey(type) {
+    return `blankup_resend_${pendingVerifyUserId || 'unknown'}_${type}`;
+  }
+
+  function remainingCooldown(type) {
+    try {
+      const deadline = Number(localStorage.getItem(resendDeadlineKey(type)) || 0);
+      return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    } catch {
+      return 0;
+    }
+  }
+
+  function resendButtonFor(type) {
+    return type === 'email' ? resendEmailBtn : resendPhoneBtn;
+  }
+
+  function startCooldown(type, seconds) {
+    const btn = resendButtonFor(type);
+    if (!btn) return;
+    const secs = Math.max(0, Math.min(RESEND_COOLDOWN_SECONDS, Number(seconds) || RESEND_COOLDOWN_SECONDS));
+    try {
+      localStorage.setItem(resendDeadlineKey(type), String(Date.now() + secs * 1000));
+    } catch {}
+    if (cooldownTimers[type]) clearInterval(cooldownTimers[type]);
+    const tick = () => {
+      const left = remainingCooldown(type);
+      if (left <= 0) {
+        clearInterval(cooldownTimers[type]);
+        delete cooldownTimers[type];
+        btn.disabled = false;
+        btn.textContent = 'Gửi lại mã';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = `Gửi lại (${left}s)`;
+    };
+    tick();
+    cooldownTimers[type] = setInterval(tick, 1000);
+  }
+
+  function restoreCooldowns() {
+    for (const type of pendingVerifyMethods) {
+      if (remainingCooldown(type) > 0) startCooldown(type, remainingCooldown(type));
+    }
+  }
+
+  function applyResendAvailableAt(resendAvailableAt, types) {
+    if (!resendAvailableAt) return;
+    const waitMs = new Date(resendAvailableAt).getTime() - Date.now();
+    if (waitMs <= 0) return;
+    for (const type of (types || pendingVerifyMethods)) {
+      startCooldown(type, Math.ceil(waitMs / 1000));
+    }
   }
 
   // ---- Verification Form ----
@@ -251,6 +319,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pendingVerifyMethods.includes('phone')) {
       verifyPhoneHint.textContent = 'Mã hết hạn sau 2 phút';
     }
+
+    // Resume any active resend cooldown (reload-safe UX; backend enforces truth)
+    restoreCooldowns();
 
     // Clear previous state
     if (verifyEmailCode) verifyEmailCode.value = '';
@@ -336,58 +407,67 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  async function handleResend(type) {
+    if (!pendingVerifyUserId) return;
+    const btn = resendButtonFor(type);
+    const hint = type === 'email' ? verifyEmailHint : verifyPhoneHint;
+    // UX guard only — backend 120s cooldown is the real enforcement.
+    const left = remainingCooldown(type);
+    if (left > 0) {
+      if (hint) hint.textContent = `Vui lòng chờ ${left}s trước khi gửi lại mã.`;
+      return;
+    }
+    const busyKey = type === 'email' ? 'resendEmail' : 'resendPhone';
+    if (busyGuard(busyKey)) return; // duplicate OTP prevention
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Đang gửi...';
+    }
+    try {
+      const res = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: pendingVerifyUserId, type }),
+      });
+      const data = await res.json();
+      if (res.status === 429) {
+        // Backend cooldown — sync UX countdown from server truth.
+        const wait = Number(data.retryAfterSeconds) || RESEND_COOLDOWN_SECONDS;
+        startCooldown(type, wait);
+        if (hint) hint.textContent = `Vui lòng chờ ${wait}s trước khi gửi lại mã.`;
+        return;
+      }
+      if (!res.ok) throw new Error(data.error);
+      if (data.deliveryWarning && hint) {
+        hint.textContent = data.deliveryWarning;
+      } else if (hint) {
+        hint.textContent = 'Đã gửi mã mới! Hết hạn sau 2 phút';
+      }
+      if (data.resendAvailableAt) {
+        applyResendAvailableAt(data.resendAvailableAt, [type]);
+      } else {
+        startCooldown(type, RESEND_COOLDOWN_SECONDS);
+      }
+    } catch (err) {
+      verifyErrorMsg.textContent = err.message || 'Không thể gửi lại mã.';
+      verifyErrorMsg.style.display = 'block';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Gửi lại mã';
+      }
+    } finally {
+      busyRelease(busyKey);
+    }
+  }
+
   // Resend email OTP
   if (resendEmailBtn) {
-    resendEmailBtn.addEventListener('click', async () => {
-      if (!pendingVerifyUserId) return;
-      if (busyGuard('resendEmail')) return; // duplicate OTP prevention
-      resendEmailBtn.disabled = true;
-      resendEmailBtn.textContent = 'Đang gửi...';
-      try {
-        const res = await fetch('/api/auth/send-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: pendingVerifyUserId, type: 'email' }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        verifyEmailHint.textContent = 'Đã gửi mã mới! Hết hạn sau 2 phút';
-      } catch (err) {
-        verifyErrorMsg.textContent = err.message || 'Không thể gửi lại mã.';
-        verifyErrorMsg.style.display = 'block';
-      } finally {
-        busyRelease('resendEmail');
-        resendEmailBtn.disabled = false;
-        resendEmailBtn.textContent = 'Gửi lại mã';
-      }
-    });
+    resendEmailBtn.addEventListener('click', () => handleResend('email'));
   }
 
   // Resend phone OTP
   if (resendPhoneBtn) {
-    resendPhoneBtn.addEventListener('click', async () => {
-      if (!pendingVerifyUserId) return;
-      if (busyGuard('resendPhone')) return; // duplicate OTP prevention
-      resendPhoneBtn.disabled = true;
-      resendPhoneBtn.textContent = 'Đang gửi...';
-      try {
-        const res = await fetch('/api/auth/send-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: pendingVerifyUserId, type: 'phone' }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        verifyPhoneHint.textContent = 'Đã gửi mã mới! Hết hạn sau 2 phút';
-      } catch (err) {
-        verifyErrorMsg.textContent = err.message || 'Không thể gửi lại mã.';
-        verifyErrorMsg.style.display = 'block';
-      } finally {
-        busyRelease('resendPhone');
-        resendPhoneBtn.disabled = false;
-        resendPhoneBtn.textContent = 'Gửi lại mã';
-      }
-    });
+    resendPhoneBtn.addEventListener('click', () => handleResend('phone'));
   }
 
   // Auto-submit when all 6 digits entered

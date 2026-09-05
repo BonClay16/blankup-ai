@@ -101,7 +101,7 @@ const VALID_PRODUCT_TYPES = new Set(['tshirt', 'oversize', 'polo', 'hoodie']);
 // ---------------------------------------------------------------------------
 router.post('/', _orderRateLimit, optionalAuthenticate, async (req, res) => {
   try {
-    const { designUrl, productType, color, size, quantity, customer, payment, userId: bodyUserId, authorName, voucherCode } = req.body;
+    const { designUrl, frontDesignUrl, backDesignUrl, productType, color, size, quantity, customer, payment, userId: bodyUserId, authorName, voucherCode } = req.body;
 
     if (!customer || !customer.name || !customer.phone || !customer.address) {
       return res.status(400).json({ success: false, error: 'Họ tên, SĐT và địa chỉ nhận hàng là bắt buộc.' });
@@ -228,6 +228,9 @@ router.post('/', _orderRateLimit, optionalAuthenticate, async (req, res) => {
       const newOrder = {
         orderId: 'BU-' + Date.now().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 8),
         designUrl: designUrl || null,
+        // Multi-design: persist per-side print composites (additive; null when absent).
+        frontDesignUrl: frontDesignUrl || null,
+        backDesignUrl: backDesignUrl || null,
         productType: normalizedType,
         color: color || '#ffffff',
         size,

@@ -46,6 +46,35 @@ describe('POST /api/orders', () => {
     const res = await request(app).post('/api/orders').send({ ...testOrder, payment: 'VNPAY' });
     expect(res.status).toBe(201);
   });
+
+  it('should persist front/back side composites when provided', async () => {
+    const token = generateTestToken({ id: 'u-composite', username: 'composite', role: 'user' });
+    const createRes = await request(app).post('/api/orders').set(authHeader(token)).send({
+      ...testOrder,
+      designUrl: 'data:image/png;base64,FRONT',
+      frontDesignUrl: 'data:image/png;base64,FRONT',
+      backDesignUrl: 'data:image/png;base64,BACK',
+    });
+    expect(createRes.status).toBe(201);
+    const res = await request(app).get(`/api/orders/${createRes.body.orderId}`).set(authHeader(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.designUrl).toBe('data:image/png;base64,FRONT');
+    expect(res.body.data.frontDesignUrl).toBe('data:image/png;base64,FRONT');
+    expect(res.body.data.backDesignUrl).toBe('data:image/png;base64,BACK');
+  });
+
+  it('should keep backDesignUrl null when not provided (backward compatible)', async () => {
+    const token = generateTestToken({ id: 'u-legacy', username: 'legacy', role: 'user' });
+    const createRes = await request(app).post('/api/orders').set(authHeader(token)).send({
+      ...testOrder,
+      designUrl: 'data:image/png;base64,ONLY',
+    });
+    expect(createRes.status).toBe(201);
+    const res = await request(app).get(`/api/orders/${createRes.body.orderId}`).set(authHeader(token));
+    expect(res.status).toBe(200);
+    expect(res.body.data.designUrl).toBe('data:image/png;base64,ONLY');
+    expect(res.body.data.backDesignUrl).toBeNull();
+  });
 });
 
 describe('GET /api/orders', () => {

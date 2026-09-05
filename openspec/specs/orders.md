@@ -19,6 +19,13 @@
 - Then order is created with status "pending"
 - And 201 response with order data
 
+### Scenario: Create order with front/back composites (multi-design)
+- Given designUrl + frontDesignUrl + backDesignUrl (full side compositions)
+- When POST /api/orders
+- Then all three URLs are persisted on the order record
+- And GET /api/orders/:orderId returns them unchanged
+- And orders without front/back fields keep them null (backward compatible)
+
 ### Scenario: Create VNPay order
 - Given valid items and payment method "vnpay"
 - When POST /api/orders with vnpay=True

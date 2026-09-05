@@ -1,0 +1,53 @@
+/* frontend/css/pricing.css — Phase 1H premium pricing, not ChatGPT clone */
+.pricing-hero { padding: 80px 0 32px; text-align:center; background: radial-gradient(1200px 400px at 50% -80px, rgba(180,62,18,0.08), transparent), #fff; }
+.pricing-eyebrow { font-family: var(--font-mono); font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--rust); font-weight:700; margin-bottom:12px; }
+.pricing-title { font-family: var(--font-display, Fraunces); font-size: clamp(1.9rem, 4vw, 2.8rem); line-height:1.1; color: #0f172a; max-width:720px; margin:0 auto 12px; }
+.pricing-title .accent { color:#b43e12; font-style:italic; }
+.pricing-subtitle { color: var(--text-muted); max-width:640px; margin:0 auto 14px; font-size:0.98rem; line-height:1.6; }
+.pricing-trust { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; font-size:0.82rem; color:var(--text-muted); }
+.pricing-trust span { display:flex; align-items:center; gap:6px; }
+
+.pricing-plans-section { padding: 28px 0 10px; }
+.pricing-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:18px; }
+@media (max-width:1366px){ .pricing-grid{ grid-template-columns: repeat(3, 1fr);} }
+@media (max-width:1024px){ .pricing-grid{ grid-template-columns: repeat(2, 1fr);} }
+@media (max-width:640px){ .pricing-grid{ grid-template-columns: 1fr; } }
+.pricing-card { border:1px solid var(--border); border-radius:16px; padding:22px; background:#fff; display:flex; flex-direction:column; position:relative; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
+.pricing-card:hover { transform: translateY(-2px); box-shadow:0 10px 30px rgba(15,23,42,0.06); border-color: rgba(180,62,18,0.25); }
+.pricing-card.featured { border-color:#b43e12; box-shadow:0 12px 40px rgba(180,62,18,0.12); }
+.pricing-card.featured::before { content:"Phổ biến nhất"; position:absolute; top:-10px; left:50%; transform:translateX(-50%); background:#b43e12; color:#fff; font-size:0.68rem; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; padding:4px 10px; border-radius:999px; }
+.pricing-card-head { margin-bottom:14px; }
+.pricing-card-name { font-weight:800; font-size:1.05rem; color:#0f172a; }
+.pricing-card-desc { font-size:0.82rem; color:var(--text-muted); margin-top:4px; min-height:32px; }
+.pricing-card-price { margin:14px 0 6px; display:flex; align-items:baseline; gap:8px; }
+.pricing-card-price .amount { font-family: var(--font-mono); font-weight:800; font-size:1.6rem; color:#0f172a; }
+.pricing-card-price .unit { font-size:0.84rem; color:var(--text-muted); }
+.pricing-card-credits { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 14px; }
+.pricing-credit-pill { font-size:0.78rem; font-weight:700; padding:6px 9px; border-radius:999px; border:1px solid; }
+.pricing-credit-pill.high { color:#b45309; border-color:rgba(180,83,9,0.25); background:rgba(180,83,9,0.08); }
+.pricing-credit-pill.low { color:#4f46e5; border-color:rgba(79,70,229,0.25); background:rgba(79,70,229,0.08); }
+.pricing-credit-pill.daily { color:#059669; border-color:rgba(5,150,105,0.2); background:rgba(5,150,105,0.08); }
+.pricing-features { list-style:none; padding:0; margin:0 0 16px; display:flex; flex-direction:column; gap:8px; font-size:0.88rem; color:#0f172a; }
+.pricing-features li { display:flex; gap:8px; align-items:flex-start; }
+.pricing-features li::before { content:"✓"; color:#16a34a; font-weight:800; margin-top:1px; }
+.pricing-cta { margin-top:auto; }
+.pricing-cta .btn { width:100%; }
+.pricing-card-meta { font-size:0.72rem; color:var(--text-muted); margin-top:8px; text-align:center; }
+
+.pricing-compare { padding: 18px 0; }
+.pricing-compare h2 { font-size:1.25rem; margin-bottom:14px; }
+.table-wrap { overflow:auto; border:1px solid var(--border); border-radius:12px; }
+.compare-table { width:100%; border-collapse:collapse; font-size:0.88rem; }
+.compare-table th, .compare-table td { padding:12px 14px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+.compare-table th { background:#faf7f1; font-weight:700; }
+
+.pricing-faq { padding: 18px 0 48px; }
+.pricing-faq h2 { font-size:1.25rem; margin-bottom:14px; }
+.pricing-faq details { border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px; background:#fff; }
+.pricing-faq summary { font-weight:700; cursor:pointer; }
+.pricing-faq p { margin:8px 0 0; color:var(--text-muted); font-size:0.92rem; }
+
+.pricing-loading { grid-column:1/-1; text-align:center; padding:32px; color:var(--text-muted); }
+
+@media (max-width:390px){ .pricing-title{ font-size:1.6rem; } .pricing-card{ padding:18px; } }
+@media (max-width:360px){ .pricing-grid{ gap:12px; } }

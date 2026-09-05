@@ -1,8 +1,10 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { getPool, sql } = require('../db');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const { withLock } = require('../utils/fileStore');
+const { validateVoucherForPlan } = require('../services/voucher.service');
 
 const BANK_TRANSFER_INFO = {
   bankId: '970422',
@@ -10,6 +12,22 @@ const BANK_TRANSFER_INFO = {
   accountName: 'LE LY HUY',
   accountNumber: '0967145402',
 };
+
+// Idempotency store for AiPlan purchase — in-memory, 24h TTL, per-user+key
+const PURCHASE_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const purchaseIdempotency = new Map(); // `${userId}:${key}` -> { bodyHash, response, createdAt }
+
+function cleanupPurchaseIdempotency() {
+  const now = Date.now();
+  for (const [k, v] of purchaseIdempotency) {
+    if (now - v.createdAt > PURCHASE_IDEMPOTENCY_TTL_MS) purchaseIdempotency.delete(k);
+  }
+}
+
+function hashPurchaseBody(body) {
+  const stable = JSON.stringify({ planId: body.planId || null, planCode: body.planCode || null, voucherCode: body.voucherCode ? String(body.voucherCode).trim().toUpperCase() : null });
+  return crypto.createHash('sha256').update(stable).digest('hex');
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/ai-plans — Danh sách gói AI (public)
@@ -32,16 +50,105 @@ router.get('/', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/ai-plans/purchase — Mua gói AI (authenticated)
-// Body: { planId } hoặc { planCode }
+// POST /api/ai-plans/quote — Preview price/discount/final/credits (authenticated, no side effects)
 // ---------------------------------------------------------------------------
-router.post('/purchase', authenticate, async (req, res) => {
+router.post('/quote', authenticate, async (req, res) => {
   try {
+    // Ignore any financial fields the client may try to send
     const { planId, planCode, voucherCode } = req.body;
     const userId = req.user.id;
 
     if (!planId && !planCode) {
       return res.status(400).json({ success: false, error: 'Thiếu planId hoặc planCode.' });
+    }
+
+    const pool = getPool();
+
+    let plan;
+    if (planId) {
+      const r = await pool.request().input('planId', sql.NVarChar, planId).query('SELECT * FROM AiPlans WHERE id = @planId AND isActive = 1');
+      plan = r.recordset[0];
+    } else {
+      const r = await pool.request().input('planCode', sql.NVarChar, planCode).query('SELECT * FROM AiPlans WHERE code = @planCode AND isActive = 1');
+      plan = r.recordset[0];
+    }
+
+    if (!plan) {
+      return res.status(404).json({ success: false, error: 'Gói không tồn tại hoặc đã ngưng.' });
+    }
+
+    // Quote does not create purchase, does not increment usedCount, does not create ledger
+    const voucherResult = await validateVoucherForPlan({ pool, voucherCode, plan, userId, appliesToExpected: 'plan' });
+    if (voucherResult.error) {
+      return res.status(voucherResult.status || 400).json({ success: false, error: voucherResult.error });
+    }
+
+    const discountAmount = voucherResult.discountAmount || 0;
+    const bonusHigh = voucherResult.bonusHigh || 0;
+    const bonusLow = voucherResult.bonusLow || 0;
+    const finalAmount = Math.max(0, Number(plan.priceVnd) - discountAmount);
+    const highCredits = Number(plan.highCredits || 0) + bonusHigh;
+    const lowCredits = Number(plan.bonusLowCredits || 0) + bonusLow;
+
+    const voucher = voucherResult.voucher ? {
+      code: voucherResult.voucher.code,
+      discountType: voucherResult.voucher.discountType,
+      discountValue: voucherResult.voucher.discountValue,
+      maxDiscountAmount: voucherResult.voucher.maxDiscountAmount || null,
+      bonusHighCredits: bonusHigh,
+      bonusLowCredits: bonusLow,
+    } : null;
+
+    return res.json({
+      success: true,
+      data: {
+        planId: plan.id,
+        planCode: plan.code,
+        planName: plan.name,
+        priceVnd: Number(plan.priceVnd),
+        discountAmount,
+        finalAmount,
+        highCredits,
+        lowCredits,
+        voucher,
+      }
+    });
+  } catch (err) {
+    console.error('[AI-Plans] Quote error:', err.message);
+    res.status(500).json({ success: false, error: 'Không thể tính giá.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/ai-plans/purchase — Mua gói AI (authenticated)
+// Body: { planId } hoặc { planCode } + optional { voucherCode }
+// Idempotency-Key header supported
+// ---------------------------------------------------------------------------
+router.post('/purchase', authenticate, async (req, res) => {
+  try {
+    // Explicitly ignore financial fields if client sends them — backend is source of truth
+    const { planId, planCode, voucherCode } = req.body;
+    const userId = req.user.id;
+    const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'] || null;
+    const bodyHash = hashPurchaseBody({ planId, planCode, voucherCode });
+
+    if (!planId && !planCode) {
+      return res.status(400).json({ success: false, error: 'Thiếu planId hoặc planCode.' });
+    }
+
+    if (purchaseIdempotency.size > 200) cleanupPurchaseIdempotency();
+
+    // Fast pre-check for idempotency without lock (optimistic)
+    if (idempotencyKey) {
+      const cacheKey = `${userId}:${String(idempotencyKey)}`;
+      const cached = purchaseIdempotency.get(cacheKey);
+      if (cached) {
+        if (cached.bodyHash !== bodyHash) {
+          return res.status(409).json({ success: false, error: 'Idempotency-Key đã được sử dụng với dữ liệu khác. Vui lòng tạo key mới.' });
+        }
+        // Return cached response 200 (idempotent)
+        return res.status(200).json({ ...cached.response, idempotent: true });
+      }
     }
 
     const pool = getPool();
@@ -64,77 +171,49 @@ router.post('/purchase', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Gói không tồn tại hoặc đã ngưng.' });
     }
 
-    if (!plan.isPaid || plan.priceVnd <= 0) {
+    if (!plan.isPaid || Number(plan.priceVnd) <= 0) {
       return res.status(400).json({ success: false, error: 'Gói này không yêu cầu thanh toán.' });
     }
 
-    // P0-09: voucher validation inside withLock to prevent concurrent double-spending
+    // Execute purchase inside lock when voucher or idempotency present
+    const needsLock = Boolean(voucherCode) || Boolean(idempotencyKey);
+
     const executePurchase = async () => {
-      let discountAmount = 0;
-      let bonusHigh = 0;
-      let bonusLow = 0;
-      let voucher = null;
-      if (voucherCode) {
-        const code = String(voucherCode).trim().toUpperCase();
-        const vRes = await pool.request()
-          .input('code', sql.NVarChar, code)
-          .query('SELECT * FROM Vouchers WHERE code = @code');
-        if (vRes.recordset.length === 0) {
-          return { error: 'Mã voucher không tồn tại.', status: 400 };
-        }
-        voucher = vRes.recordset[0];
-        if (voucher.status !== 'active') {
-          return { error: 'Voucher không hoạt động.', status: 400 };
-        }
-        const now = new Date();
-        if (voucher.startsAt && new Date(voucher.startsAt) > now) {
-          return { error: 'Voucher chưa bắt đầu.', status: 400 };
-        }
-        if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
-          return { error: 'Voucher đã hết hạn.', status: 400 };
-        }
-        if (!['all', 'plan'].includes(voucher.appliesTo)) {
-          return { error: 'Voucher không áp dụng cho gói.', status: 400 };
-        }
-        if (voucher.eligiblePlanCodes) {
-          const allowed = voucher.eligiblePlanCodes.split(',').map(s => s.trim().toLowerCase());
-          if (!allowed.includes(plan.code.toLowerCase()) && !allowed.includes(plan.id.toLowerCase())) {
-            return { error: 'Voucher không áp dụng cho gói này.', status: 400 };
+      // Idempotency check inside lock (serialize)
+      if (idempotencyKey) {
+        const cacheKey = `${userId}:${String(idempotencyKey)}`;
+        const cached = purchaseIdempotency.get(cacheKey);
+        if (cached) {
+          if (cached.bodyHash !== bodyHash) {
+            return { error: 'Idempotency-Key đã được sử dụng với dữ liệu khác. Vui lòng tạo key mới.', status: 409, conflict: true };
           }
+          return { idempotent: true, cached: cached.response };
         }
-        if (voucher.totalUsageLimit && voucher.usedCount >= voucher.totalUsageLimit) {
-          return { error: 'Voucher đã hết lượt sử dụng.', status: 400 };
-        }
-        const perUserRes = await pool.request()
-          .input('voucherId', sql.NVarChar, voucher.id)
-          .input('userId', sql.NVarChar, userId)
-          .query('SELECT COUNT(*) as cnt FROM VoucherRedemptions WHERE voucherId = @voucherId AND userId = @userId');
-        if (perUserRes.recordset[0].cnt >= voucher.perUserLimit) {
-          return { error: 'Bạn đã dùng voucher này tối đa số lần cho phép.', status: 400 };
-        }
-        if (voucher.discountType === 'fixed') {
-          discountAmount = Number(voucher.discountValue) || 0;
-        } else if (voucher.discountType === 'percent') {
-          discountAmount = Math.round(plan.priceVnd * (Number(voucher.discountValue) || 0) / 100);
-          if (voucher.maxDiscountAmount) discountAmount = Math.min(discountAmount, voucher.maxDiscountAmount);
-        }
-        discountAmount = Math.min(discountAmount, plan.priceVnd);
-        bonusHigh = Number(voucher.bonusHighCredits) || 0;
-        bonusLow = Number(voucher.bonusLowCredits) || 0;
       }
-      const finalAmount = Math.max(0, plan.priceVnd - discountAmount);
-      const totalHigh = plan.highCredits + bonusHigh;
-      const totalLow = plan.bonusLowCredits + bonusLow;
+
+      const voucherResult = await validateVoucherForPlan({ pool, voucherCode, plan, userId, appliesToExpected: 'plan' });
+      if (voucherResult.error) {
+        return { error: voucherResult.error, status: voucherResult.status || 400 };
+      }
+
+      const discountAmount = voucherResult.discountAmount || 0;
+      const bonusHigh = voucherResult.bonusHigh || 0;
+      const bonusLow = voucherResult.bonusLow || 0;
+      const voucher = voucherResult.voucher || null;
+
+      const finalAmount = Math.max(0, Number(plan.priceVnd) - discountAmount);
+      const totalHigh = Number(plan.highCredits || 0) + bonusHigh;
+      const totalLow = Number(plan.bonusLowCredits || 0) + bonusLow;
 
       // Create purchase record
-      const purchaseId = 'purchase-' + Date.now().toString(36).toUpperCase();
-      const transferContent = `BLANKUP-AI-${plan.code.toUpperCase()}`;
+      const purchaseId = 'purchase-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const transferContent = `BLANKUP-AI-${String(plan.code).toUpperCase()}-${purchaseId.slice(-6)}`;
 
       await pool.request()
         .input('id', sql.NVarChar, purchaseId)
         .input('userId', sql.NVarChar, userId)
         .input('planId', sql.NVarChar, plan.id)
-        .input('priceVnd', sql.Int, plan.priceVnd)
+        .input('priceVnd', sql.Int, Number(plan.priceVnd))
         .input('highCreditsAdded', sql.Int, totalHigh)
         .input('lowCreditsAdded', sql.Int, totalLow)
         .input('finalAmount', sql.Int, finalAmount)
@@ -163,42 +242,68 @@ router.post('/purchase', authenticate, async (req, res) => {
           .input('userId', sql.NVarChar, userId)
           .input('purchaseId', sql.NVarChar, purchaseId)
           .input('appliesTo', sql.NVarChar, 'plan')
-          .input('originalAmount', sql.Int, plan.priceVnd)
+          .input('originalAmount', sql.Int, Number(plan.priceVnd))
           .input('discountAmount', sql.Int, discountAmount)
           .input('bonusHigh', sql.Int, bonusHigh)
-        .input('bonusLow', sql.Int, bonusLow)
-        .query(`
-          INSERT INTO VoucherRedemptions (id, voucherId, voucherCode, userId, purchaseId, appliesTo, originalAmount, discountAmount, bonusHighCredits, bonusLowCredits, redeemedAt)
-          VALUES (@id, @voucherId, @voucherCode, @userId, @purchaseId, @appliesTo, @originalAmount, @discountAmount, @bonusHigh, @bonusLow, GETDATE());
-          UPDATE Vouchers SET usedCount = usedCount + 1, updatedAt = GETDATE() WHERE id = @voucherId;
-        `);
+          .input('bonusLow', sql.Int, bonusLow)
+          .query(`
+            INSERT INTO VoucherRedemptions (id, voucherId, voucherCode, userId, purchaseId, appliesTo, originalAmount, discountAmount, bonusHighCredits, bonusLowCredits, redeemedAt)
+            VALUES (@id, @voucherId, @voucherCode, @userId, @purchaseId, @appliesTo, @originalAmount, @discountAmount, @bonusHigh, @bonusLow, GETDATE());
+            UPDATE Vouchers SET usedCount = usedCount + 1, updatedAt = GETDATE() WHERE id = @voucherId;
+          `);
       }
 
-      return { purchaseId, transferContent, amount: plan.priceVnd, planName: plan.name };
+      const responsePayload = {
+        success: true,
+        purchaseId,
+        planId: plan.id,
+        planCode: plan.code,
+        planName: plan.name,
+        priceVnd: Number(plan.priceVnd),
+        discountAmount,
+        finalAmount,
+        voucherCode: voucher ? voucher.code : null,
+        highCreditsAdded: totalHigh,
+        lowCreditsAdded: totalLow,
+        transferContent,
+        paymentMethod: 'BANK_TRANSFER',
+        bankInfo: BANK_TRANSFER_INFO,
+        message: 'Quét QR để thanh toán. Sau khi xác nhận, credit sẽ được cộng tự động.',
+      };
+
+      // Store idempotency
+      if (idempotencyKey) {
+        const cacheKey = `${userId}:${String(idempotencyKey)}`;
+        purchaseIdempotency.set(cacheKey, { bodyHash, response: responsePayload, createdAt: Date.now() });
+      }
+
+      return responsePayload;
     };
 
     let result;
-    if (voucherCode) {
-      result = await withLock('voucher-redeem-plan', executePurchase);
+    if (needsLock) {
+      // Use voucher-redeem-plan lock to preserve existing concurrency semantics, plus idempotency
+      const lockKey = voucherCode ? 'voucher-redeem-plan' : `purchase-${userId}`;
+      result = await withLock(lockKey, executePurchase);
     } else {
       result = await executePurchase();
     }
 
     if (result && result.error) {
-      return res.status(result.status).json({ success: false, error: result.error });
+      const status = result.status || 400;
+      return res.status(status).json({ success: false, error: result.error });
     }
 
-    console.log(`[AI-Plans] Purchase created: ${result.purchaseId} (${plan.code}) by user ${userId}`);
+    if (result && result.idempotent && result.cached) {
+      console.log(`[AI-Plans] Idempotent replay: ${result.cached.purchaseId} for user ${userId}`);
+      return res.status(200).json({ ...result.cached, idempotent: true });
+    }
 
-    res.status(201).json({
-      success: true,
-      purchaseId: result.purchaseId,
-      transferContent: result.transferContent,
-      amount: result.amount,
-      planName: result.planName,
-      bankInfo: BANK_TRANSFER_INFO,
-      message: 'Quét QR để thanh toán. Sau khi xác nhận, credit sẽ được cộng tự động.',
-    });
+    console.log(`[AI-Plans] Purchase created: ${result.purchaseId} (${plan.code}) by user ${userId} final=${result.finalAmount} discount=${result.discountAmount}`);
+
+    // Return appropriate status: 201 for new, 200 for idempotent replay
+    const isIdempotent = result.idempotent === true;
+    res.status(isIdempotent ? 200 : 201).json(result);
   } catch (err) {
     console.error('[AI-Plans] Purchase error:', err.message);
     res.status(500).json({ success: false, error: 'Không thể tạo đơn mua gói.' });
@@ -229,9 +334,13 @@ router.get('/purchase/:purchaseId/status', authenticate, async (req, res) => {
     res.json({
       success: true,
       purchaseId: purchase.id,
+      planId: purchase.planId,
       planCode: purchase.planCode,
       planName: purchase.planName,
+      priceVnd: purchase.priceVnd,
+      discountAmount: purchase.discountAmount,
       amount: purchase.finalAmount,
+      finalAmount: purchase.finalAmount,
       paymentStatus: purchase.paymentStatus,
       transferContent: purchase.transferContent,
       createdAt: purchase.createdAt,
@@ -259,14 +368,13 @@ router.post('/purchase/:purchaseId/confirm', authenticate, requireAdmin, async (
     const pool = getPool();
 
     if (paymentStatus === 'paid') {
-      // P0-07: Atomic transaction — mark paid + issue credit. Concurrent confirms: only one succeeds financially.
       const transaction = pool.transaction();
       try {
         await transaction.begin();
 
-        // Atomic mark: only pending → paid. Concurrent callers get empty recordset.
         const markResult = await transaction.request()
           .input('purchaseId', sql.NVarChar, purchaseId)
+          .input('note', sql.NVarChar, note || null)
           .query(`
             UPDATE AiPlanPurchases
             SET paymentStatus = 'paid',
@@ -345,7 +453,6 @@ router.post('/purchase/:purchaseId/confirm', authenticate, requireAdmin, async (
         throw txErr;
       }
     } else {
-      // Mark as failed — atomic guard: only pending can be failed
       const failResult = await pool.request()
         .input('purchaseId', sql.NVarChar, purchaseId)
         .input('note', sql.NVarChar, note || null)
@@ -383,7 +490,6 @@ router.post('/purchase/:purchaseId/confirm', authenticate, requireAdmin, async (
 // ---------------------------------------------------------------------------
 router.post('/webhook/sepay', async (req, res) => {
   try {
-    // Auth: if SEPAY_WEBHOOK_SECRET is set, require matching header
     if (process.env.SEPAY_WEBHOOK_SECRET) {
       const provided = req.headers['x-sepay-secret'] || req.headers['x-webhook-secret'] || (req.headers['authorization'] && req.headers['authorization'].replace('Bearer ', ''));
       if (provided !== process.env.SEPAY_WEBHOOK_SECRET) {
@@ -392,26 +498,21 @@ router.post('/webhook/sepay', async (req, res) => {
       }
     }
 
-    // Sepay sends transaction data when payment is detected
     const { transactionId, amount, content, bankAccount, status } = req.body;
 
     console.log(`[AI-Plans] Sepay webhook received:`, { transactionId, amount, content, bankAccount, status });
 
-    // Match transferContent pattern: BLANKUP-AI-{planCode}
     const match = content?.match(/^BLANKUP-AI-(.+)$/i);
     if (!match) {
-      // Not our transaction, ignore
       return res.json({ success: true, message: 'Not a Blankup transaction' });
     }
 
     const pool = getPool();
 
-    // P0-08: Atomic transaction — mark paid + issue credit. Concurrent webhooks: only one wins.
     const transaction = pool.transaction();
     try {
       await transaction.begin();
 
-      // Atomic mark: only pending → paid. Concurrent callers get empty recordset.
       const markResult = await transaction.request()
         .input('transferContent', sql.NVarChar, content)
         .input('transactionId', sql.NVarChar, transactionId || null)
@@ -439,9 +540,6 @@ router.post('/webhook/sepay', async (req, res) => {
 
       const purchase = markResult.recordset[0];
 
-      // Amount check after mark — strict: missing or mismatched amount → rollback, no credit.
-      // We mark first (to grab the row lock + claim the state), then verify amount. Rollback
-      // on mismatch leaves the row as pending so a correct retry can still succeed.
       if (amount == null || Number(amount) !== purchase.finalAmount) {
         await transaction.rollback();
         return res.json({ success: true, message: 'Amount mismatch' });
@@ -505,6 +603,24 @@ router.post('/webhook/sepay', async (req, res) => {
   } catch (err) {
     console.error('[AI-Plans] Sepay webhook error:', err.message);
     res.status(500).json({ success: false, error: 'Webhook processing failed' });
+  }
+});
+
+// GET /api/ai-plans/vouchers/available — Vouchers applicable to current user/plans
+router.get('/vouchers/available', authenticate, async (req, res) => {
+  try {
+    const pool = getPool();
+    const result = await pool.request().query(`
+      SELECT id, code, title, description, discountType, discountValue, maxDiscountAmount, minOrderAmount, appliesTo, eligiblePlanCodes, bonusHighCredits, bonusLowCredits, perUserLimit, totalUsageLimit, usedCount, startsAt, expiresAt, status
+      FROM Vouchers
+      WHERE status='active'
+      ORDER BY createdAt DESC
+    `);
+    // Return all active, frontend will filter via quote; backend still validates at quote/purchase
+    res.json({ success: true, data: result.recordset });
+  } catch (err) {
+    console.error('[AI-Plans] Available vouchers error:', err.message);
+    res.status(500).json({ success: false, error: 'Không thể tải voucher.' });
   }
 });
 

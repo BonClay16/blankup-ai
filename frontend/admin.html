@@ -8,23 +8,7 @@
   <meta name="theme-color" content="#b43e12">
   <title>Admin Dashboard - Blankup</title>
 
-  <script>
-    (function() {
-      var token = localStorage.getItem('blankup_token');
-      var userStr = localStorage.getItem('blankup_user');
-      var isAdmin = false;
-      if (token && userStr) {
-        try {
-          var user = JSON.parse(userStr);
-          isAdmin = user.role === 'admin';
-        } catch (e) {}
-      }
-      if (!isAdmin) {
-        document.write('<div style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;"><div style="background:#fff;border-radius:20px;max-width:400px;width:100%;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,0.25);text-align:center;"><div style="padding:40px 32px 0;"><div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#dc2626,#ef4444);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 24px rgba(220,38,38,0.3);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><h3 style="font-size:1.35rem;font-weight:800;margin:0 0 10px;color:#1a1a2e;">Truy c?p b? t? ch?i</h3><p style="font-size:0.95rem;color:#64748b;margin:0;">B?n c?n dang nh?p b?ng t�i kho?n <strong>Admin</strong> d? truy c?p trang n�y.</p></div><div style="padding:24px 32px 32px;"><a href="/login.html" style="display:block;padding:14px 24px;border-radius:12px;background:linear-gradient(135deg,#ff6b00,#e65c00);color:#fff;font-weight:700;font-size:1rem;text-decoration:none;text-align:center;">�ang nh?p l?i</a></div></div></div>');
-        document.close();
-      }
-    })();
-  </script>
+  <script src="js/guard-admin.js"></script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,9 +33,9 @@
           <span class="lang-vi active" data-lang="vi">VI</span>
           <span class="lang-en" data-lang="en">EN</span>
         </div>
-        <button class="btn btn-secondary btn-sm" id="adminRefreshBtn" type="button" data-i18n="nav.refresh" data-i18n="admin.ledger.refresh">L�m m?i</button>
-        <button class="btn btn-ghost btn-sm" id="adminExportBtn" type="button" data-i18n="nav.exportCsv">Xu?t CSV</button>
-        <a href="/" class="btn btn-ghost btn-sm" data-i18n="nav.backHome">? Trang ch?</a>
+        <button class="btn btn-secondary btn-sm" id="adminRefreshBtn" type="button" data-i18n="nav.refresh" data-i18n="admin.ledger.refresh">Làm mới</button>
+        <button class="btn btn-ghost btn-sm" id="adminExportBtn" type="button" data-i18n="nav.exportCsv">Xuất CSV</button>
+        <a href="/" class="btn btn-ghost btn-sm" data-i18n="nav.backHome">← Trang chủ</a>
       </div>
     </div>
   </nav>
@@ -61,7 +45,7 @@
       <div class="sidebar-header">
         <div class="admin-avatar">AD</div>
         <div class="admin-info">
-          <h4 data-i18n="admin.welcome">Xin ch�o Admin</h4>
+          <h4 data-i18n="admin.welcome">Xin chào Admin</h4>
           <span class="admin-badge" data-i18n="admin.roleLabel">System Operator</span>
         </div>
       </div>
@@ -76,28 +60,28 @@
 
       <nav class="sidebar-menu">
         <button class="sidebar-link active" data-tab="overview">
-          <span class="menu-icon">01</span> <span data-i18n="admin.overview">T?ng quan</span>
+          <span class="menu-icon">01</span> <span data-i18n="admin.overview">Tổng quan</span>
         </button>
         <button class="sidebar-link" data-tab="orders">
-          <span class="menu-icon">02</span> <span data-i18n="admin.orders">�on h�ng</span>
+          <span class="menu-icon">02</span> <span data-i18n="admin.orders">Đơn hàng</span>
         </button>
         <button class="sidebar-link" data-tab="users">
-          <span class="menu-icon">03</span> <span data-i18n="admin.users">Ngu?i d�ng</span>
+          <span class="menu-icon">03</span> <span data-i18n="admin.users">Người dùng</span>
         </button>
         <button class="sidebar-link" data-tab="designs">
-          <span class="menu-icon">04</span> <span data-i18n="admin.designs">Thi?t k? AI</span>
+          <span class="menu-icon">04</span> <span data-i18n="admin.designs">Thiết kế AI</span>
         </button>
         <button class="sidebar-link" data-tab="vouchers">
           <span class="menu-icon">05</span> <span data-i18n="admin.vouchers">Voucher</span>
         </button>
         <button class="sidebar-link" data-tab="plans">
-          <span class="menu-icon">06</span> <span data-i18n="admin.plans">G�i AI</span>
+          <span class="menu-icon">06</span> <span data-i18n="admin.plans">Gói AI</span>
         </button>
         <button class="sidebar-link" data-tab="credits">
           <span class="menu-icon">07</span> <span data-i18n="admin.credits">Credits</span>
         </button>
         <button class="sidebar-link" data-tab="reports">
-          <span class="menu-icon">08</span> <span>B�o c�o</span>
+          <span class="menu-icon">08</span> <span>Báo cáo</span>
         </button>
       </nav>
     </aside>
@@ -107,8 +91,8 @@
         <div class="panel-header">
           <div>
             <span class="panel-kicker" data-i18n="admin.commandCenter">Admin Command Center</span>
-            <h2 data-i18n="admin.overviewTitle">T?ng quan v?n h�nh</h2>
-            <span class="panel-subtitle" data-i18n="admin.overviewSubtitle">Theo d�i don h�ng, doanh thu, thanh to�n QR v� ho?t d?ng t?o m?u.</span>
+            <h2 data-i18n="admin.overviewTitle">Tổng quan vận hành</h2>
+            <span class="panel-subtitle" data-i18n="admin.overviewSubtitle">Theo dõi đơn hàng, doanh thu, thanh toán QR và hoạt động tạo mẫu.</span>
           </div>
           <div class="panel-live-chip"><span></span> D? li?u realtime</div>
         </div>
@@ -117,20 +101,20 @@
           <div>
             <span class="ops-eyebrow" data-i18n="admin.opsEyebrow">BLANKUP OPS</span>
             <strong data-i18n="admin.opsTitle">Payment command center</strong>
-            <small data-i18n="admin.opsHint">Uu ti�n ki?m tra don QR, chuy?n thi?u v� don ch? x? l�.</small>
+            <small data-i18n="admin.opsHint">Ưu tiên kiểm tra đơn QR, chuyển thiếu và đơn chờ xử lý.</small>
           </div>
           <div class="ops-strip-metrics">
-            <span><b id="ops-paid-revenue">0d</b data-i18n="admin.opsReceived"> d� nh?n</span>
-            <span><b id="ops-awaiting-money">0d</b data-i18n="admin.opsAwaiting"> dang ch?</span>
-            <span><b id="ops-underpaid-count">0</b data-i18n="admin.opsUnderpaid"> chuy?n thi?u</span>
+            <span><b id="ops-paid-revenue">0d</b data-i18n="admin.opsReceived">đã nhận</span>
+            <span><b id="ops-awaiting-money">0d</b data-i18n="admin.opsAwaiting">đang chờ</span>
+            <span><b id="ops-underpaid-count">0</b data-i18n="admin.opsUnderpaid">chuyển thiếu</span>
           </div>
         </div>
 
         <div class="stats-grid">
           <div class="stat-card revenue-card animate-fade-in">
-            <div class="stat-icon">VN�</div>
+            <div class="stat-icon">VNĐ</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stat.revenue">Doanh thu th?c</span>
+              <span class="stat-label" data-i18n="admin.stat.revenue">Doanh thu thực</span>
               <h2 class="stat-value text-glow" id="stat-revenue">0d</h2>
             </div>
             <div class="card-glow"></div>
@@ -139,7 +123,7 @@
           <div class="stat-card pending-revenue-card animate-fade-in">
             <div class="stat-icon">...</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stat.pendingRevenue">Doanh thu ch?</span>
+              <span class="stat-label" data-i18n="admin.stat.pendingRevenue">Doanh thu chờ</span>
               <h2 class="stat-value" id="stat-pending-revenue">0d</h2>
             </div>
           </div>
@@ -147,7 +131,7 @@
           <div class="stat-card animate-fade-in">
             <div class="stat-icon">AVG</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stat.avgValue">Gi� tr? TB</span>
+              <span class="stat-label" data-i18n="admin.stat.avgValue">Giá trị TB</span>
               <h2 class="stat-value" id="stat-average-value">0d</h2>
             </div>
           </div>
@@ -155,7 +139,7 @@
           <div class="stat-card animate-fade-in">
             <div class="stat-icon">ORD</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stat.totalOrders">T?ng s? don</span>
+              <span class="stat-label" data-i18n="admin.stat.totalOrders">Tổng số đơn</span>
               <h2 class="stat-value" id="stat-total-orders">0</h2>
             </div>
           </div>
@@ -163,7 +147,7 @@
           <div class="stat-card animate-fade-in">
             <div class="stat-icon">PAY</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stat.paidOrders">�on d� thanh to�n</span>
+              <span class="stat-label" data-i18n="admin.stat.paidOrders">Đơn đã thanh toán</span>
               <h2 class="stat-value" id="stat-paid-orders">0</h2>
             </div>
           </div>
@@ -171,7 +155,7 @@
           <div class="stat-card animate-fade-in">
             <div class="stat-icon">QR</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.stat.awaitingTransfer">Ch? chuy?n kho?n</span>
+              <span class="stat-label" data-i18n="admin.stat.awaitingTransfer">Chờ chuyển khoản</span>
               <h2 class="stat-value" id="stat-awaiting-payment">0</h2>
             </div>
           </div>
@@ -179,7 +163,7 @@
           <div class="stat-card animate-fade-in">
             <div class="stat-icon">USR</div>
             <div class="stat-data">
-              <span class="stat-label" data-i18n="admin.users">Ngu?i d�ng</span>
+              <span class="stat-label" data-i18n="admin.users">Người dùng</span>
               <h2 class="stat-value" id="stat-users-count">0</h2>
             </div>
           </div>
@@ -195,35 +179,35 @@
 
         <div class="overview-grid">
           <div class="dashboard-card breakdown-card">
-            <h3 class="card-title" data-i18n="admin.categoryBreakdownTitle">Ph�n t�ch danh m?c</h3>
+            <h3 class="card-title" data-i18n="admin.categoryBreakdownTitle">Phân tích danh mục</h3>
             <div class="breakdown-list" id="categoryBreakdownList"></div>
           </div>
           <div class="dashboard-card status-summary-card">
-            <h3 class="card-title" data-i18n="admin.orderStatusSummary">Tr?ng th�i don h�ng</h3>
+            <h3 class="card-title" data-i18n="admin.orderStatusSummary">Trạng thái đơn hàng</h3>
             <div class="status-summary-stats">
               <div class="status-indicator completed">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.summary.completed">Ho�n th�nh</span>
+                <span class="indicator-label" data-i18n="admin.summary.completed">Hoàn thành</span>
                 <strong id="summary-completed">0</strong>
               </div>
               <div class="status-indicator pending">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.summary.pending">Chua ho�n th�nh</span>
+                <span class="indicator-label" data-i18n="admin.summary.pending">Chưa hoàn thành</span>
                 <strong id="summary-pending">0</strong>
               </div>
               <div class="status-indicator cancelled">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.summary.cancelled">�� h?y</span>
+                <span class="indicator-label" data-i18n="admin.summary.cancelled">Đã hủy</span>
                 <strong id="summary-cancelled">0</strong>
               </div>
               <div class="status-indicator paid">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.summary.paid">�� nh?n ti?n</span>
+                <span class="indicator-label" data-i18n="admin.summary.paid">Đã nhận tiền</span>
                 <strong id="summary-paid">0</strong>
               </div>
               <div class="status-indicator awaiting">
                 <span class="indicator-dot"></span>
-                <span class="indicator-label" data-i18n="admin.stat.awaitingTransfer">Ch? chuy?n kho?n</span>
+                <span class="indicator-label" data-i18n="admin.stat.awaitingTransfer">Chờ chuyển khoản</span>
                 <strong id="summary-awaiting">0</strong>
               </div>
             </div>
@@ -232,33 +216,33 @@
 
         <div class="dashboard-card revenue-chart-card">
           <div class="card-header-flex">
-            <h3 class="card-title" data-i18n="admin.revenue7d">Doanh thu 7 ng�y g?n nh?t</h3>
+            <h3 class="card-title" data-i18n="admin.revenue7d">Doanh thu 7 ngày gần nhất</h3>
             <span class="revenue-chart-total" id="revenueChartTotal"></span>
           </div>
           <div class="revenue-chart-wrap">
             <svg class="revenue-chart" id="revenueChart" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true"></svg>
-            <div class="revenue-chart-empty" id="revenueChartEmpty" data-i18n="admin.revenueEmpty">Chua c� d? li?u doanh thu trong 7 ng�y qua.</div>
+            <div class="revenue-chart-empty" id="revenueChartEmpty" data-i18n="admin.revenueEmpty">Chưa có dữ liệu doanh thu trong 7 ngày qua.</div>
           </div>
           <div class="revenue-chart-labels" id="revenueChartLabels"></div>
         </div>
 
         <div class="dashboard-card recent-orders-card">
           <div class="card-header-flex">
-            <h3 class="card-title" data-i18n="admin.recentOrders" data-i18n="admin.userDetail.recentOrders">�on h�ng g?n d�y</h3>
-            <button class="btn btn-ghost btn-sm" id="viewAllOrdersBtn" data-i18n="admin.viewAllOrders">Xem t?t c? don</button>
+            <h3 class="card-title" data-i18n="admin.recentOrders" data-i18n="admin.userDetail.recentOrders">Đơn hàng gần đây</h3>
+            <button class="btn btn-ghost btn-sm" id="viewAllOrdersBtn" data-i18n="admin.viewAllOrders">Xem tất cả đơn</button>
           </div>
           <div class="table-container">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.th.orderId">M� don</th>
-                  <th data-i18n="admin.th.customer">Kh�ch h�ng</th>
-                  <th data-i18n="admin.th.product">S?n ph?m</th>
-                  <th data-i18n="admin.th.total">T?ng ti?n</th>
-                  <th data-i18n="admin.th.payment">Thanh to�n</th>
-                  <th data-i18n="admin.th.status">Tr?ng th�i</th>
-                  <th data-i18n="admin.th.date">Ng�y d?t</th>
-                  <th data-i18n="admin.th.actions">Thao t�c</th>
+                  <th data-i18n="admin.th.orderId">Mã đơn</th>
+                  <th data-i18n="admin.th.customer">Khách hàng</th>
+                  <th data-i18n="admin.th.product">Sản phẩm</th>
+                  <th data-i18n="admin.th.total">Tổng tiền</th>
+                  <th data-i18n="admin.th.payment">Thanh toán</th>
+                  <th data-i18n="admin.th.status">Trạng thái</th>
+                  <th data-i18n="admin.th.date">Ngày đặt</th>
+                  <th data-i18n="admin.th.actions">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="recentOrdersTableBody"></tbody>
@@ -269,36 +253,36 @@
 
       <section class="tab-panel" id="panel-orders">
         <div class="panel-header">
-          <h2 data-i18n="admin.ordersTitle">Danh s�ch don h�ng</h2>
-          <span class="panel-subtitle" data-i18n="admin.ordersSubtitle">Qu?n l� COD, QR chuy?n kho?n, tr?ng th�i thanh to�n v� file thi?t k? c?a kh�ch.</span>
+          <h2 data-i18n="admin.ordersTitle">Danh sách đơn hàng</h2>
+          <span class="panel-subtitle" data-i18n="admin.ordersSubtitle">Quản lý COD, QR chuyển khoản, trạng thái thanh toán và file thiết kế của khách.</span>
         </div>
 
         <div class="filter-bar admin-order-toolbar">
           <div class="filter-group">
-            <button class="filter-pill active" data-filter="all" data-i18n="admin.filter.all">T?t c?</button>
-            <button class="filter-pill" data-filter="pending" data-i18n="admin.filter.pending">�ang x? l�</button>
-            <button class="filter-pill" data-filter="awaiting_payment" data-i18n="admin.filter.awaitingPayment">Ch? thanh to�n</button>
-            <button class="filter-pill" data-filter="processing" data-i18n="admin.filter.processing">�ang s?n xu?t</button>
-            <button class="filter-pill" data-filter="shipped" data-i18n="admin.filter.shipped">�� g?i h�ng</button>
-            <button class="filter-pill" data-filter="delivered" data-i18n="admin.filter.delivered">�� giao h�ng</button>
-            <button class="filter-pill" data-filter="completed" data-i18n="admin.summary.completed">Ho�n th�nh</button>
-            <button class="filter-pill" data-filter="payment_failed" data-i18n="admin.filter.paymentFailed">TT th?t b?i</button>
-            <button class="filter-pill" data-filter="cancelled" data-i18n="admin.summary.cancelled">�� h?y</button>
+            <button class="filter-pill active" data-filter="all" data-i18n="admin.filter.all">Tất cả</button>
+            <button class="filter-pill" data-filter="pending" data-i18n="admin.filter.pending">Đang xử lý</button>
+            <button class="filter-pill" data-filter="awaiting_payment" data-i18n="admin.filter.awaitingPayment">Chờ thanh toán</button>
+            <button class="filter-pill" data-filter="processing" data-i18n="admin.filter.processing">Đang sản xuất</button>
+            <button class="filter-pill" data-filter="shipped" data-i18n="admin.filter.shipped">Đã gửi hàng</button>
+            <button class="filter-pill" data-filter="delivered" data-i18n="admin.filter.delivered">Đã giao hàng</button>
+            <button class="filter-pill" data-filter="completed" data-i18n="admin.summary.completed">Hoàn thành</button>
+            <button class="filter-pill" data-filter="payment_failed" data-i18n="admin.filter.paymentFailed">Thanh toán thất bại</button>
+            <button class="filter-pill" data-filter="cancelled" data-i18n="admin.summary.cancelled">Đã hủy</button>
           </div>
-          <select class="admin-select" id="paymentFilterSelect" aria-label="L?c thanh to�n" data-i18n-title="admin.filter.payAll">
-            <option value="all" data-i18n="admin.filter.payAll">T?t c? thanh to�n</option>
-            <option value="BANK_TRANSFER" data-i18n="admin.filter.payBank">QR chuy?n kho?n</option>
+          <select class="admin-select" id="paymentFilterSelect" aria-label="Lọc thanh toán" data-i18n-title="admin.filter.payAll">
+            <option value="all" data-i18n="admin.filter.payAll">Tất cả thanh toán</option>
+            <option value="BANK_TRANSFER" data-i18n="admin.filter.payBank">QR chuyển khoản</option>
             <option value="COD" data-i18n="admin.filter.payCod">COD</option>
-            <option value="paid" data-i18n="admin.filter.payPaid">�� thanh to�n</option>
-            <option value="awaiting_transfer" data-i18n="admin.stat.awaitingTransfer">Ch? chuy?n kho?n</option>
-            <option value="underpaid" data-i18n="admin.filter.payUnderpaid">Chuy?n thi?u</option>
+            <option value="paid" data-i18n="admin.filter.payPaid">Đã thanh toán</option>
+            <option value="awaiting_transfer" data-i18n="admin.stat.awaitingTransfer">Chờ chuyển khoản</option>
+            <option value="underpaid" data-i18n="admin.filter.payUnderpaid">Chuyển thiếu</option>
           </select>
-          <input class="admin-search" id="orderSearchInput" type="search" placeholder="T�m m� don, kh�ch, S�T, n?i dung CK..." data-i18n-placeholder="admin.searchOrder">
+          <input class="admin-search" id="orderSearchInput" type="search" placeholder="Tìm mã đơn, khách, SĐT, nội dung CK..." data-i18n-placeholder="admin.searchOrder">
           <button type="button" class="filter-chip" id="orderUserFilterChip" style="display:none;">
             <span class="filter-chip-label"></span>
             <span class="filter-chip-clear" id="orderUserFilterClear">?</span>
           </button>
-          <span class="orders-result-count" id="ordersResultCount">0 don</span>
+          <span class="orders-result-count" id="ordersResultCount">0 đơn</span>
         </div>
 
         <div class="dashboard-card">
@@ -306,14 +290,14 @@
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.th.orderId">M� don</th>
-                  <th data-i18n="admin.th.customer">Kh�ch h�ng</th>
-                  <th data-i18n="admin.th.product">S?n ph?m</th>
-                  <th data-i18n="admin.th.total">T?ng ti?n</th>
-                  <th data-i18n="admin.th.payment">Thanh to�n</th>
-                  <th data-i18n="admin.th.status">Tr?ng th�i</th>
-                  <th data-i18n="admin.th.date">Ng�y d?t</th>
-                  <th data-i18n="admin.th.actions">Thao t�c</th>
+                  <th data-i18n="admin.th.orderId">Mã đơn</th>
+                  <th data-i18n="admin.th.customer">Khách hàng</th>
+                  <th data-i18n="admin.th.product">Sản phẩm</th>
+                  <th data-i18n="admin.th.total">Tổng tiền</th>
+                  <th data-i18n="admin.th.payment">Thanh toán</th>
+                  <th data-i18n="admin.th.status">Trạng thái</th>
+                  <th data-i18n="admin.th.date">Ngày đặt</th>
+                  <th data-i18n="admin.th.actions">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="allOrdersTableBody"></tbody>
@@ -326,28 +310,28 @@
         <div class="panel-header">
           <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
             <div>
-              <h2 data-i18n="admin.usersTitle">Danh s�ch ngu?i d�ng</h2>
-              <span class="panel-subtitle" data-i18n="admin.usersSubtitle">Ngu?i d�ng d� dang k� t�i kho?n tr�n h? th?ng.</span>
+              <h2 data-i18n="admin.usersTitle">Danh sách người dùng</h2>
+              <span class="panel-subtitle" data-i18n="admin.usersSubtitle">Người dùng đã đăng ký tài khoản trên hệ thống.</span>
             </div>
-            <button class="btn btn-primary btn-sm" id="createUserBtn" type="button" data-i18n="admin.createUser">+ T?o t�i kho?n</button>
+            <button class="btn btn-primary btn-sm" id="createUserBtn" type="button" data-i18n="admin.createUser">+ Tạo tài khoản</button>
           </div>
         </div>
         <div class="filter-bar admin-order-toolbar">
-          <input class="admin-search" id="userSearchInput" type="search" placeholder="T�m theo t�n dang nh?p ho?c h? t�n..." data-i18n-placeholder="admin.searchCredits" data-i18n-placeholder="admin.searchUser">
-          <span class="orders-result-count" id="usersResultCount">0 ngu?i d�ng</span>
+          <input class="admin-search" id="userSearchInput" type="search" placeholder="Tìm theo tên đăng nhập hoặc họ tên..." data-i18n-placeholder="admin.searchCredits" data-i18n-placeholder="admin.searchUser">
+          <span class="orders-result-count" id="usersResultCount">0 người dùng</span>
         </div>
         <div class="dashboard-card">
           <div class="table-container">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.th.username">T�n dang nh?p</th>
-                  <th data-i18n="admin.th.fullName">H? v� t�n</th>
-                  <th data-i18n="admin.th.role">Vai tr�</th>
-                  <th data-i18n="admin.th.registered">Ng�y dang k�</th>
-                  <th data-i18n="admin.th.ordersCount">S? don</th>
-                  <th data-i18n="admin.th.totalSpend">�� chi ti�u</th>
-                  <th data-i18n="admin.th.actions">Thao t�c</th>
+                  <th data-i18n="admin.th.username">Tên đăng nhập</th>
+                  <th data-i18n="admin.th.fullName">Họ và tên</th>
+                  <th data-i18n="admin.th.role">Vai trò</th>
+                  <th data-i18n="admin.th.registered">Ngày đăng ký</th>
+                  <th data-i18n="admin.th.ordersCount">Số đơn</th>
+                  <th data-i18n="admin.th.totalSpend">Đã chi tiêu</th>
+                  <th data-i18n="admin.th.actions">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="usersTableBody"></tbody>
@@ -358,14 +342,14 @@
 
       <section class="tab-panel" id="panel-designs">
         <div class="panel-header">
-          <h2 data-i18n="admin.designsTitle">Thu vi?n thi?t k?</h2>
-          <span class="panel-subtitle" data-i18n="admin.designsSubtitle">T?t c? m?u thi?t k? du?c kh�ch t?o b?ng AI � ki?m duy?t tru?c khi hi?n c�ng khai.</span>
+          <h2 data-i18n="admin.designsTitle">Thư viện thiết kế</h2>
+          <span class="panel-subtitle" data-i18n="admin.designsSubtitle">Tất cả mẫu thiết kế được khách tạo bằng AI — kiểm duyệt trước khi hiện công khai.</span>
         </div>
         <div class="filter-bar admin-order-toolbar">
           <div class="filter-group">
-            <button class="filter-pill design-filter-pill active" data-design-filter="all" data-i18n="admin.filter.all">T?t c?</button>
-            <button class="filter-pill design-filter-pill" data-design-filter="shared" data-i18n="admin.filter.public">C�ng khai</button>
-            <button class="filter-pill design-filter-pill" data-design-filter="hidden" data-i18n="admin.filter.hidden">�� ?n</button>
+            <button class="filter-pill design-filter-pill active" data-design-filter="all" data-i18n="admin.filter.all">Tất cả</button>
+            <button class="filter-pill design-filter-pill" data-design-filter="shared" data-i18n="admin.filter.public">Công khai</button>
+            <button class="filter-pill design-filter-pill" data-design-filter="hidden" data-i18n="admin.filter.hidden">Đã ẩn</button>
           </div>
           <span class="orders-result-count" id="designsResultCount">0 thi?t k?</span>
         </div>
@@ -376,14 +360,14 @@
         <div class="panel-header">
           <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
             <div>
-              <h2 data-i18n="admin.vouchersTitle">Voucher khuy?n m�i</h2>
-              <span class="panel-subtitle" data-i18n="admin.vouchersSubtitle">T?o, ch?nh s?a v� b?t/t?t m� gi?m gi� cho don h�ng v� g�i AI.</span>
+              <h2 data-i18n="admin.vouchersTitle">Voucher khuyến mãi</h2>
+              <span class="panel-subtitle" data-i18n="admin.vouchersSubtitle">Tạo, chỉnh sửa và bật/tắt mã giảm giá cho đơn hàng và gói AI.</span>
             </div>
-            <button class="btn btn-primary btn-sm" id="createVoucherBtn" type="button" data-i18n="admin.createVoucher">+ T?o voucher</button>
+            <button class="btn btn-primary btn-sm" id="createVoucherBtn" type="button" data-i18n="admin.createVoucher">+ Tạo voucher</button>
           </div>
         </div>
         <div class="filter-bar admin-order-toolbar">
-          <input class="admin-search" id="voucherSearchInput" type="search" placeholder="T�m theo m� ho?c ti�u d?..." data-i18n-placeholder="admin.searchVoucher">
+          <input class="admin-search" id="voucherSearchInput" type="search" placeholder="Tìm theo mã hoặc tiêu đề?..." data-i18n-placeholder="admin.searchVoucher">
           <span class="orders-result-count" id="vouchersResultCount">0 voucher</span>
         </div>
         <div class="dashboard-card">
@@ -391,14 +375,14 @@
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th>M�</th>
-                  <th data-i18n="admin.th.title">Ti�u d?</th>
-                  <th data-i18n="admin.th.discount">Gi?m gi�</th>
-                  <th data-i18n="admin.th.appliesTo">�p d?ng</th>
-                  <th data-i18n="admin.th.validity">Hi?u l?c</th>
-                  <th data-i18n="admin.th.usedCount">�� d�ng</th>
-                  <th data-i18n="admin.th.status">Tr?ng th�i</th>
-                  <th data-i18n="admin.th.actions">Thao t�c</th>
+                  <th>Mã</th>
+                  <th data-i18n="admin.th.title">Tiêu đề</th>
+                  <th data-i18n="admin.th.discount">Giảm giá</th>
+                  <th data-i18n="admin.th.appliesTo">Áp dụng</th>
+                  <th data-i18n="admin.th.validity">Hiệu lực</th>
+                  <th data-i18n="admin.th.usedCount">Đã dùng</th>
+                  <th data-i18n="admin.th.status">Trạng thái</th>
+                  <th data-i18n="admin.th.actions">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="vouchersTableBody"></tbody>
@@ -411,10 +395,10 @@
         <div class="panel-header">
           <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
             <div>
-              <h2 data-i18n="admin.plans">G�i AI</h2>
-              <span class="panel-subtitle" data-i18n="admin.plansSubtitle">Qu?n l� g�i credit AI: gi�, s? lu?t t?o v� ch?t lu?ng output.</span>
+              <h2 data-i18n="admin.plans">Gói AI</h2>
+              <span class="panel-subtitle" data-i18n="admin.plansSubtitle">Quản lý gói credit AI: giá, số lượt tạo và chất lượng output.</span>
             </div>
-            <button class="btn btn-primary btn-sm" id="createPlanBtn" type="button" data-i18n="admin.createPlan">+ T?o g�i</button>
+            <button class="btn btn-primary btn-sm" id="createPlanBtn" type="button" data-i18n="admin.createPlan">+ Tạo gói</button>
           </div>
         </div>
         <div class="dashboard-card">
@@ -422,15 +406,15 @@
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th>M�</th>
-                  <th data-i18n="admin.th.planName">T�n g�i</th>
-                  <th data-i18n="admin.th.price">Gi�</th>
+                  <th>Mã</th>
+                  <th data-i18n="admin.th.planName">Tên gói</th>
+                  <th data-i18n="admin.th.price">Giá</th>
                   <th data-i18n="admin.th.credits" data-i18n="admin.credits">Credits</th>
-                  <th data-i18n="admin.th.quality">Ch?t lu?ng</th>
+                  <th data-i18n="admin.th.quality">Chất lượng</th>
                   <th data-i18n="admin.th.rank">Rank</th>
-                  <th data-i18n="admin.th.purchases">�� mua</th>
-                  <th data-i18n="admin.th.status">Tr?ng th�i</th>
-                  <th data-i18n="admin.th.actions">Thao t�c</th>
+                  <th data-i18n="admin.th.purchases">Đã mua</th>
+                  <th data-i18n="admin.th.status">Trạng thái</th>
+                  <th data-i18n="admin.th.actions">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="plansTableBody"></tbody>
@@ -443,26 +427,26 @@
         <div class="panel-header">
           <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
             <div>
-              <h2 data-i18n="admin.creditsTitle">Credits ngu?i d�ng</h2>
-              <span class="panel-subtitle" data-i18n="admin.creditsSubtitle">S? du High/Low credit c?a t?ng t�i kho?n � c?ng/tr? th? c�ng khi c?n.</span>
+              <h2 data-i18n="admin.creditsTitle">Credits người dùng</h2>
+              <span class="panel-subtitle" data-i18n="admin.creditsSubtitle">Số dư High/Low credit của từng tài khoản — cộng/trừ thủ công khi cần.</span>
             </div>
           </div>
         </div>
         <div class="filter-bar admin-order-toolbar">
-          <input class="admin-search" id="creditsSearchInput" type="search" placeholder="T�m theo t�n dang nh?p ho?c h? t�n..." data-i18n-placeholder="admin.searchCredits" data-i18n-placeholder="admin.searchUser">
-          <span class="orders-result-count" id="creditsResultCount">0 t�i kho?n</span>
+          <input class="admin-search" id="creditsSearchInput" type="search" placeholder="Tìm theo tên đăng nhập hoặc họ tên..." data-i18n-placeholder="admin.searchCredits" data-i18n-placeholder="admin.searchUser">
+          <span class="orders-result-count" id="creditsResultCount">0 tài khoản</span>
         </div>
         <div class="dashboard-card">
           <div class="table-container">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th data-i18n="admin.th.user" data-i18n="admin.users">Ngu?i d�ng</th>
-                  <th data-i18n="admin.th.displayPlan">G�i hi?n th?</th>
+                  <th data-i18n="admin.th.user" data-i18n="admin.users">Người dùng</th>
+                  <th data-i18n="admin.th.displayPlan">Gói hiển thị</th>
                   <th data-i18n="admin.th.highCredit">High credit</th>
                   <th data-i18n="admin.th.lowCredit">Low credit</th>
-                  <th data-i18n="admin.th.dailyFree">Mi?n ph� h�m nay</th>
-                  <th data-i18n="admin.th.actions">Thao t�c</th>
+                  <th data-i18n="admin.th.dailyFree">Miễn phí hôm nay</th>
+                  <th data-i18n="admin.th.actions">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="creditsTableBody"></tbody>
@@ -474,53 +458,53 @@
       <section class="tab-panel" id="panel-reports">
         <div class="panel-header">
           <div>
-            <h2>B�o c�o d?nh k?</h2>
-            <span class="panel-subtitle">T?ng h?p doanh thu, don h�ng theo th�ng / qu� / nam v� xu?t b�o c�o CSV.</span>
+            <h2>Báo cáo d?nh k?</h2>
+            <span class="panel-subtitle">Tổng hợp doanh thu, đơn hàng theo tháng / quý / năm và xuất báo cáo CSV.</span>
           </div>
           <div style="display:flex;gap:10px;align-items:center;">
-            <button class="btn btn-primary btn-sm" id="reportExportBtn" type="button">Xu?t b�o c�o CSV</button>
+            <button class="btn btn-primary btn-sm" id="reportExportBtn" type="button">Xuất báo cáo CSV</button>
           </div>
         </div>
 
         <div class="filter-bar admin-order-toolbar">
-          <label style="font-weight:700;font-size:0.9rem;">K? b�o c�o:</label>
+          <label style="font-weight:700;font-size:0.9rem;">Kỳ báo cáo:</label>
           <select class="admin-select" id="reportPeriodSelect" style="min-width:160px;">
-            <option value="month">Theo th�ng</option>
-            <option value="quarter">Theo qu�</option>
-            <option value="year">Theo nam</option>
+            <option value="month">Theo tháng</option>
+            <option value="quarter">Theo quý</option>
+            <option value="year">Theo năm</option>
           </select>
-          <label style="font-weight:700;font-size:0.9rem;">Nam:</label>
+          <label style="font-weight:700;font-size:0.9rem;">Năm:</label>
           <select class="admin-select" id="reportYearSelect" style="min-width:120px;"></select>
-          <button class="btn btn-secondary btn-sm" id="reportLoadBtn" type="button">Xem b�o c�o</button>
+          <button class="btn btn-secondary btn-sm" id="reportLoadBtn" type="button">Xem báo cáo</button>
           <span class="orders-result-count" id="reportResultCount"></span>
         </div>
 
         <div class="stats-grid" id="reportSummaryGrid" style="margin-bottom:20px;">
           <div class="stat-card revenue-card">
-            <div class="stat-icon">VN�</div>
+            <div class="stat-icon">VNĐ</div>
             <div class="stat-data">
-              <span class="stat-label">T?ng doanh thu</span>
+              <span class="stat-label">Tổng doanh thu</span>
               <h2 class="stat-value text-glow" id="report-total-revenue">0d</h2>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon">ORD</div>
             <div class="stat-data">
-              <span class="stat-label">T?ng don</span>
+              <span class="stat-label">Tổng đơn</span>
               <h2 class="stat-value" id="report-total-orders">0</h2>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon">AVG</div>
             <div class="stat-data">
-              <span class="stat-label">Gi� tr? TB</span>
+              <span class="stat-label">Giá trị TB</span>
               <h2 class="stat-value" id="report-avg-value">0d</h2>
             </div>
           </div>
           <div class="stat-card">
             <div class="stat-icon">?</div>
             <div class="stat-data">
-              <span class="stat-label">Ho�n th�nh</span>
+              <span class="stat-label">Hoàn thành</span>
               <h2 class="stat-value" id="report-completed">0</h2>
             </div>
           </div>
@@ -528,33 +512,33 @@
 
         <div class="dashboard-card" style="margin-bottom:20px;">
           <div class="card-header-flex">
-            <h3 class="card-title" id="reportChartTitle">Bi?u d? doanh thu theo k?</h3>
+            <h3 class="card-title" id="reportChartTitle">Biểu đồ doanh thu theo kỳ</h3>
             <span class="revenue-chart-total" id="reportChartTotal">0d</span>
           </div>
           <div class="revenue-chart-wrap">
             <svg class="revenue-chart" id="reportChart" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true"></svg>
-            <div class="revenue-chart-empty" id="reportChartEmpty">Chua c� d? li?u cho k? n�y.</div>
+            <div class="revenue-chart-empty" id="reportChartEmpty">Chưa có dữ liệu cho kỳ này.</div>
           </div>
           <div class="revenue-chart-labels" id="reportChartLabels"></div>
         </div>
 
         <div class="dashboard-card">
           <div class="card-header-flex">
-            <h3 class="card-title">Chi ti?t theo k?</h3>
+            <h3 class="card-title">Chi tiết theo kỳ</h3>
             <span class="orders-result-count" id="reportTableCount"></span>
           </div>
           <div class="table-container">
             <table class="admin-table">
               <thead>
                 <tr>
-                  <th>K?</th>
-                  <th>T?ng don</th>
-                  <th>Ho�n th�nh</th>
-                  <th>Ch? x? l�</th>
-                  <th>�� h?y</th>
-                  <th>Doanh thu th?c</th>
-                  <th>Doanh thu ch?</th>
-                  <th>TB / don</th>
+                  <th>Kỳ</th>
+                  <th>Tổng đơn</th>
+                  <th>Hoàn thành</th>
+                  <th>Chờ xử lý</th>
+                  <th>Đã hủy</th>
+                  <th>Doanh thu thực</th>
+                  <th>Doanh thu chờ</th>
+                  <th>TB / đơn</th>
                 </tr>
               </thead>
               <tbody id="reportsTableBody"></tbody>
@@ -568,18 +552,18 @@
   <div class="modal-overlay" id="designPreviewModal">
     <div class="modal design-preview-modal">
       <div class="modal-header">
-        <h3 class="modal-title" data-i18n="admin.orderDetailTitle">Chi ti?t don h�ng</h3>
-        <button class="modal-close" id="previewModalClose">�</button>
+        <h3 class="modal-title" data-i18n="admin.orderDetailTitle">Chi tiết đơn hàng</h3>
+        <button class="modal-close" id="previewModalClose">×</button>
       </div>
       <div class="modal-body">
         <div class="preview-layout">
           <div class="shirt-mockup-wrapper">
             <div class="admin-preview-side-toggle" id="adminPreviewSideToggle">
-              <button class="admin-side-btn active" data-side="front" data-i18n="admin.side.front">M?t tru?c</button>
-              <button class="admin-side-btn" data-side="back" data-i18n="admin.side.back">M?t sau</button>
+              <button class="admin-side-btn active" data-side="front" data-i18n="admin.side.front">Mặt trước</button>
+              <button class="admin-side-btn" data-side="back" data-i18n="admin.side.back">Mặt sau</button>
             </div>
             <div class="mockup-container-admin" id="mockupContainerAdmin">
-              <img class="mockup-tshirt-admin" id="mockupTshirtAdmin" src="" alt="Mockup �o">
+              <img class="mockup-tshirt-admin" id="mockupTshirtAdmin" src="" alt="Mockup áo">
               <div class="mockup-design-overlay-admin" id="mockupDesignAdmin"></div>
             </div>
             <div class="preview-color-selector">
@@ -593,28 +577,28 @@
           </div>
 
           <div class="design-details-info">
-            <h4 class="info-heading" data-i18n="admin.orderInfo">Th�ng tin don h�ng</h4>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.orderId">M� don:</span><span class="info-val" id="prev-order-id">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.customer">Kh�ch h�ng:</span><span class="info-val" id="prev-customer-name">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.contact">Li�n h?:</span><span class="info-val" id="prev-customer-contact">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.address">�?a ch?:</span><span class="info-val" id="prev-customer-address">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.note">Ghi ch�:</span><span class="info-val" id="prev-customer-note">N/A</span></div>
+            <h4 class="info-heading" data-i18n="admin.orderInfo">Thông tin đơn hàng</h4>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.orderId">Mã đơn:</span><span class="info-val" id="prev-order-id">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.customer">Khách hàng:</span><span class="info-val" id="prev-customer-name">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.contact">Liên hệ:</span><span class="info-val" id="prev-customer-contact">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.address">Địa chỉ:</span><span class="info-val" id="prev-customer-address">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.note">Ghi chú:</span><span class="info-val" id="prev-customer-note">N/A</span></div>
             <hr>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.product">S?n ph?m:</span><span class="info-val" id="prev-product-details">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.quantity">S? lu?ng:</span><span class="info-val" id="prev-quantity">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.author">Ngu?i t?o:</span><span class="info-val" id="prev-author">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.payment">Thanh to�n:</span><span class="info-val" id="prev-payment">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.transferContent">N?i dung CK:</span><span class="info-val" id="prev-transfer-content">N/A</span></div>
-            <div class="info-row"><span class="info-label" data-i18n="admin.info.paidAt">Th?i gian nh?n:</span><span class="info-val" id="prev-paid-at">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.product">Sản phẩm:</span><span class="info-val" id="prev-product-details">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.quantity">Số lượng:</span><span class="info-val" id="prev-quantity">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.author">Người tạo:</span><span class="info-val" id="prev-author">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.payment">Thanh toán:</span><span class="info-val" id="prev-payment">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.transferContent">Nội dung CK:</span><span class="info-val" id="prev-transfer-content">N/A</span></div>
+            <div class="info-row"><span class="info-label" data-i18n="admin.info.paidAt">Thời gian nhận:</span><span class="info-val" id="prev-paid-at">N/A</span></div>
             <hr>
             <div class="info-row" style="align-items:center;">
-              <span class="info-label" style="padding-top:0;" data-i18n="admin.info.orderStatus">Tr?ng th�i don:</span>
+              <span class="info-label" style="padding-top:0;" data-i18n="admin.info.orderStatus">Trạng thái đơn:</span>
               <select id="prev-status-select" class="admin-select" style="flex:1;min-width:0;padding:8px 10px;border-radius:8px;font-size:0.85rem;"></select>
-              <button type="button" class="btn btn-primary btn-sm" id="prev-status-save" data-i18n="admin.info.save">Luu</button>
+              <button type="button" class="btn btn-primary btn-sm" id="prev-status-save" data-i18n="admin.info.save">Lưu</button>
             </div>
             <div class="design-svg-source-wrapper">
-              <span class="info-label" data-i18n="admin.info.designFile">File thi?t k?:</span>
-              <a href="" id="downloadSvgLink" class="btn btn-secondary btn-sm" download="blankup-custom.png" data-i18n="admin.actions.download">T?i file thi?t k?</a>
+              <span class="info-label" data-i18n="admin.info.designFile">File thiết kế:</span>
+              <a href="" id="downloadSvgLink" class="btn btn-secondary btn-sm" download="blankup-custom.png" data-i18n="admin.actions.download">Tải file</a>
             </div>
           </div>
         </div>
@@ -626,22 +610,22 @@
   <div class="modal-overlay" id="userFormModal">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title" id="userFormTitle">T?o t�i kho?n m?i</h3>
-        <button class="modal-close" id="userFormModalClose">�</button>
+        <h3 class="modal-title" id="userFormTitle">T?o tài kho?n m?i</h3>
+        <button class="modal-close" id="userFormModalClose">×</button>
       </div>
       <div class="modal-body">
         <form id="userForm" style="display:flex;flex-direction:column;gap:16px;">
           <input type="hidden" id="uf-edit-id" value="">
           <div>
-            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.username">T�n dang nh?p <span style="color:var(--error);">*</span></label>
+            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.username">Tên đăng nhập<span style="color:var(--error);">*</span></label>
             <input type="text" id="uf-username" required placeholder="username" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div id="uf-password-group">
-            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.password">M?t kh?u <span style="color:var(--error);">*</span></label>
+            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.password">Mật khẩu<span style="color:var(--error);">*</span></label>
             <input type="password" id="uf-password" placeholder="M?t kh?u" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div>
-            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.fullName">H? v� t�n <span style="color:var(--error);">*</span></label>
+            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.fullName">Họ và tên<span style="color:var(--error);">*</span></label>
             <input type="text" id="uf-fullname" required placeholder="Nguy?n Van A" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div>
@@ -649,15 +633,15 @@
             <input type="email" id="uf-email" placeholder="email@example.com" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div>
-            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.role">Vai tr�</label>
+            <label style="display:block;font-weight:600;margin-bottom:6px;font-size:0.9rem;" data-i18n="admin.form.role">Vai trò</label>
             <select id="uf-role" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
               <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
           </div>
           <div style="display:flex;gap:12px;justify-content:flex-end;padding-top:8px;">
-            <button type="button" class="btn btn-secondary btn-sm" id="userFormCancel" data-i18n="admin.form.cancel">H?y</button>
-            <button type="submit" class="btn btn-primary btn-sm" id="userFormSubmit" data-i18n="admin.form.submitCreate">T?o t�i kho?n</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="userFormCancel" data-i18n="admin.form.cancel">Hủy</button>
+            <button type="submit" class="btn btn-primary btn-sm" id="userFormSubmit" data-i18n="admin.form.submitCreate">Tạo</button>
           </div>
         </form>
       </div>
@@ -669,95 +653,95 @@
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title" id="voucherFormTitle">T?o voucher m?i</h3>
-        <button class="modal-close" id="voucherFormModalClose">�</button>
+        <button class="modal-close" id="voucherFormModalClose">×</button>
       </div>
       <div class="modal-body">
         <form id="voucherForm" style="display:flex;flex-direction:column;gap:14px;">
           <input type="hidden" id="vf-edit-id" value="">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.voucherCode">M� voucher <span style="color:var(--error);">*</span></label>
+              <label class="vf-label" data-i18n="admin.form.voucherCode">Mã voucher<span style="color:var(--error);">*</span></label>
               <input type="text" id="vf-code" required placeholder="VD: GIAM50K" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);text-transform:uppercase;">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.discountType">Lo?i gi?m gi� <span style="color:var(--error);">*</span></label>
+              <label class="vf-label" data-i18n="admin.form.discountType">Loại giảm giá<span style="color:var(--error);">*</span></label>
               <select id="vf-discount-type" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
-                <option value="fixed" data-i18n="admin.form.fixed">C? d?nh (VN�)</option>
-                <option value="percent" data-i18n="admin.form.percent">Ph?n tram (%)</option>
+                <option value="fixed" data-i18n="admin.form.fixed">Cố định (VNĐ)</option>
+                <option value="percent" data-i18n="admin.form.percent">Phần trăm (%)</option>
               </select>
             </div>
           </div>
           <div>
-            <label class="vf-label" data-i18n="admin.form.title">Ti�u d? <span style="color:var(--error);">*</span></label>
-            <input type="text" id="vf-title" required placeholder="VD: Gi?m 50,000d cho don t? 100,000d" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
+            <label class="vf-label" data-i18n="admin.form.title">Tiêu đề<span style="color:var(--error);">*</span></label>
+            <input type="text" id="vf-title" required placeholder="VD: Gi?m 50,000d cho đơn t? 100,000d" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div>
-            <label class="vf-label" data-i18n="admin.form.description">M� t?</label>
-            <textarea id="vf-description" rows="2" placeholder="M� t? ng?n cho kh�ch..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);resize:vertical;"></textarea>
+            <label class="vf-label" data-i18n="admin.form.description">Mô tả</label>
+            <textarea id="vf-description" rows="2" placeholder="Mã t? ng?n cho khách..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);resize:vertical;"></textarea>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.discountValue">Gi� tr? gi?m <span style="color:var(--error);">*</span></label>
+              <label class="vf-label" data-i18n="admin.form.discountValue">Giá trị giảm<span style="color:var(--error);">*</span></label>
               <input type="number" id="vf-discount-value" required min="0" value="50000" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.maxDiscount">T?i da gi?m (d)</label>
-              <input type="number" id="vf-max-discount" min="0" placeholder="Kh�ng gi?i h?n" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
+              <label class="vf-label" data-i18n="admin.form.maxDiscount">Tối đa giảm (đ)</label>
+              <input type="number" id="vf-max-discount" min="0" placeholder="Không gi?i h?n" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.minOrder">�on t?i thi?u (d)</label>
+              <label class="vf-label" data-i18n="admin.form.minOrder">Đơn tối thiểu (đ)</label>
               <input type="number" id="vf-min-order" min="0" value="0" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.appliesTo">�p d?ng cho</label>
+              <label class="vf-label" data-i18n="admin.form.appliesTo">Áp dụng cho</label>
               <select id="vf-applies-to" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
-                <option value="all" data-i18n="admin.filter.all">T?t c?</option>
-                <option value="order" data-i18n="admin.form.appliesOrder">�on h�ng �o</option>
-                <option value="plan" data-i18n="admin.plans">G�i AI</option>
+                <option value="all" data-i18n="admin.filter.all">Tất cả</option>
+                <option value="order" data-i18n="admin.form.appliesOrder">Đơn hàng áo</option>
+                <option value="plan" data-i18n="admin.plans">Gói AI</option>
               </select>
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.planCodes">G�i du?c �p d?ng (plan codes)</label>
+              <label class="vf-label" data-i18n="admin.form.planCodes">Gói được áp dụng (plan codes)</label>
               <input type="text" id="vf-plan-codes" placeholder="VD: pro,studio_plus (b? tr?ng = t?t c?)" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.bonusHigh">T?ng High credit</label>
+              <label class="vf-label" data-i18n="admin.form.bonusHigh">Tặng High credit</label>
               <input type="number" id="vf-bonus-high" min="0" value="0" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.bonusLow">T?ng Low credit</label>
+              <label class="vf-label" data-i18n="admin.form.bonusLow">Tặng Low credit</label>
               <input type="number" id="vf-bonus-low" min="0" value="0" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.perUserLimit">Gi?i h?n / ngu?i</label>
+              <label class="vf-label" data-i18n="admin.form.perUserLimit">Giới hạn / người</label>
               <input type="number" id="vf-per-user" min="1" value="1" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.totalUsage">T?ng lu?t d�ng</label>
-              <input type="number" id="vf-total-usage" min="0" placeholder="Kh�ng gi?i h?n" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
+              <label class="vf-label" data-i18n="admin.form.totalUsage">Tổng lượt dùng</label>
+              <input type="number" id="vf-total-usage" min="0" placeholder="Không gi?i h?n" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.startsAt">B?t d?u</label>
+              <label class="vf-label" data-i18n="admin.form.startsAt">Bắt đầu</label>
               <input type="datetime-local" id="vf-starts-at" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.expiresAt">H?t h?n</label>
+              <label class="vf-label" data-i18n="admin.form.expiresAt">Hết hạn</label>
               <input type="datetime-local" id="vf-expires-at" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div>
-            <label class="vf-label" data-i18n="admin.form.internalNote">Ghi ch� n?i b?</label>
+            <label class="vf-label" data-i18n="admin.form.internalNote">Ghi chú nội bộ</label>
             <input type="text" id="vf-internal-note" placeholder="Ch? admin th?y" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div style="display:flex;gap:12px;justify-content:flex-end;padding-top:8px;">
-            <button type="button" class="btn btn-secondary btn-sm" id="voucherFormCancel" data-i18n="admin.form.cancel">H?y</button>
-            <button type="submit" class="btn btn-primary btn-sm" id="voucherFormSubmit" data-i18n="admin.form.submitCreate">T?o voucher</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="voucherFormCancel" data-i18n="admin.form.cancel">Hủy</button>
+            <button type="submit" class="btn btn-primary btn-sm" id="voucherFormSubmit" data-i18n="admin.form.submitCreate">Tạo</button>
           </div>
         </form>
       </div>
@@ -768,29 +752,29 @@
   <div class="modal-overlay" id="planFormModal">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title" id="planFormTitle">T?o g�i AI m?i</h3>
-        <button class="modal-close" id="planFormModalClose">�</button>
+        <h3 class="modal-title" id="planFormTitle">T?o gói AI m?i</h3>
+        <button class="modal-close" id="planFormModalClose">×</button>
       </div>
       <div class="modal-body">
         <form id="planForm" style="display:flex;flex-direction:column;gap:14px;">
           <input type="hidden" id="pf-edit-id" value="">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.planCode">M� g�i <span style="color:var(--error);">*</span></label>
+              <label class="vf-label" data-i18n="admin.form.planCode">Mã gói<span style="color:var(--error);">*</span></label>
               <input type="text" id="pf-code" required placeholder="VD: premium" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.planName">T�n g�i <span style="color:var(--error);">*</span></label>
+              <label class="vf-label" data-i18n="admin.form.planName">Tên gói<span style="color:var(--error);">*</span></label>
               <input type="text" id="pf-name" required placeholder="VD: Premium" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div>
-            <label class="vf-label" data-i18n="admin.form.description">M� t?</label>
-            <textarea id="pf-description" rows="2" placeholder="M� t? g�i..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);resize:vertical;"></textarea>
+            <label class="vf-label" data-i18n="admin.form.description">Mô tả</label>
+            <textarea id="pf-description" rows="2" placeholder="Mã t? gói..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);resize:vertical;"></textarea>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.price">Gi� (VN�)</label>
+              <label class="vf-label" data-i18n="admin.form.price">Giá (VNĐ)</label>
               <input type="number" id="pf-price" min="0" value="0" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
@@ -804,36 +788,34 @@
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.dailyFreeLow">Low mi?n ph� / ng�y</label>
+              <label class="vf-label" data-i18n="admin.form.dailyFreeLow">Low miễn phí / ngày</label>
               <input type="number" id="pf-daily-free" min="0" value="0" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.outputQuality">Ch?t lu?ng output</label>
+              <label class="vf-label" data-i18n="admin.form.outputQuality">Chất lượng output</label>
               <select id="pf-quality" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
                 <option value="high" data-i18n="admin.creditsHigh">High</option>
                 <option value="low" data-i18n="admin.creditsLow">Low</option>
               </select>
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.planRank">Rank (th? h?ng g�i)</label>
+              <label class="vf-label" data-i18n="admin.form.planRank">Rank (thứ hạng gói)</label>
               <input type="number" id="pf-rank" min="0" value="0" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div style="display:flex;gap:20px;align-items:center;">
             <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;font-weight:600;cursor:pointer;">
-              <input type="checkbox" id="pf-is-paid" data-i18n="admin.form.isPaid"> G�i tr? ph�
-            </label>
+              <input type="checkbox" id="pf-is-paid" data-i18n="admin.form.isPaid">Gói trả phí</label>
             <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;font-weight:600;cursor:pointer;">
-              <input type="checkbox" id="pf-is-comeback" data-i18n="admin.form.isComeback"> G�i Comeback Offer
-            </label>
+              <input type="checkbox" id="pf-is-comeback" data-i18n="admin.form.isComeback">Gói Comeback Offer</label>
             <div style="display:flex;align-items:center;gap:8px;">
-              <label class="vf-label" style="margin:0;" data-i18n="admin.form.comebackWindow">C?a s? comeback (ng�y)</label>
+              <label class="vf-label" style="margin:0;" data-i18n="admin.form.comebackWindow">Cửa sổ comeback (ngày)</label>
               <input type="number" id="pf-comeback-days" min="0" placeholder="7" style="width:90px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;font-size:0.9rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div style="display:flex;gap:12px;justify-content:flex-end;padding-top:8px;">
-            <button type="button" class="btn btn-secondary btn-sm" id="planFormCancel" data-i18n="admin.form.cancel">H?y</button>
-            <button type="submit" class="btn btn-primary btn-sm" id="planFormSubmit" data-i18n="admin.form.submitCreate">T?o g�i</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="planFormCancel" data-i18n="admin.form.cancel">Hủy</button>
+            <button type="submit" class="btn btn-primary btn-sm" id="planFormSubmit" data-i18n="admin.form.submitCreate">Tạo</button>
           </div>
         </form>
       </div>
@@ -844,8 +826,8 @@
   <div class="modal-overlay" id="creditAdjustModal">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title" data-i18n="admin.modal.adjustCredit">�i?u ch?nh credit</h3>
-        <button class="modal-close" id="creditAdjustModalClose">�</button>
+        <h3 class="modal-title" data-i18n="admin.modal.adjustCredit">Điều chỉnh credit</h3>
+        <button class="modal-close" id="creditAdjustModalClose">×</button>
       </div>
       <div class="modal-body">
         <div id="creditAdjustUserInfo" style="font-size:0.9rem;color:var(--text-muted);margin-bottom:16px;">-</div>
@@ -853,49 +835,49 @@
           <input type="hidden" id="ca-user-id" value="">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label class="vf-label" data-i18n="admin.form.creditType">Lo?i credit</label>
+              <label class="vf-label" data-i18n="admin.form.creditType">Loại credit</label>
               <select id="ca-credit-type" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
                 <option value="high" data-i18n="admin.creditsHigh">High</option>
                 <option value="low" data-i18n="admin.creditsLow">Low</option>
               </select>
             </div>
             <div>
-              <label class="vf-label" data-i18n="admin.form.amount">S? lu?ng (+/-)</label>
+              <label class="vf-label" data-i18n="admin.form.amount">Số lượng (+/-)</label>
               <input type="number" id="ca-amount" required value="1" placeholder="VD: 10 ho?c -5" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
             </div>
           </div>
           <div>
-            <label class="vf-label" data-i18n="admin.form.reason">L� do</label>
+            <label class="vf-label" data-i18n="admin.form.reason">Lý do</label>
             <select id="ca-reason" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
-              <option value="admin_adjust" data-i18n="admin.reason.manual">�i?u ch?nh th? c�ng</option>
-              <option value="support_bonus" data-i18n="admin.reason.support">B?i ho�n h? tr?</option>
-              <option value="refund" data-i18n="admin.reason.refund">Ho�n ti?n / thu h?i</option>
-              <option value="test_credit" data-i18n="admin.reason.test">Credit th? nghi?m</option>
+              <option value="admin_adjust" data-i18n="admin.reason.manual">Điều chỉnh thủ công</option>
+              <option value="support_bonus" data-i18n="admin.reason.support">Bồi hoàn hỗ trợ</option>
+              <option value="refund" data-i18n="admin.reason.refund">Hoàn tiền / thu hồi</option>
+              <option value="test_credit" data-i18n="admin.reason.test">Credit thử nghiệm</option>
             </select>
           </div>
           <div>
-            <label class="vf-label" data-i18n="admin.form.note">Ghi ch�</label>
+            <label class="vf-label" data-i18n="admin.form.note">Ghi chú</label>
             <input type="text" id="ca-note" placeholder="Chi ti?t di?u ch?nh..." style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:0.95rem;background:var(--bg-secondary);color:var(--text-primary);">
           </div>
           <div style="display:flex;gap:12px;justify-content:flex-end;padding-top:8px;">
-            <button type="button" class="btn btn-secondary btn-sm" id="creditAdjustCancel" data-i18n="admin.form.cancel">H?y</button>
-            <button type="submit" class="btn btn-primary btn-sm" data-i18n="admin.form.submitSave">Luu di?u ch?nh</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="creditAdjustCancel" data-i18n="admin.form.cancel">Hủy</button>
+            <button type="submit" class="btn btn-primary btn-sm" data-i18n="admin.form.submitSave">Lưu thay đổi</button>
           </div>
         </form>
         <hr style="margin:18px 0;border-color:var(--border);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <h4 style="margin:0;font-size:0.95rem;" data-i18n="admin.ledger.title">L?ch s? credit</h4>
-          <button type="button" class="btn btn-ghost btn-sm" id="ledgerRefreshBtn" data-i18n="nav.refresh" data-i18n="admin.ledger.refresh">L�m m?i</button>
+          <h4 style="margin:0;font-size:0.95rem;" data-i18n="admin.ledger.title">Lịch sử credit</h4>
+          <button type="button" class="btn btn-ghost btn-sm" id="ledgerRefreshBtn" data-i18n="nav.refresh" data-i18n="admin.ledger.refresh">Làm mới</button>
         </div>
         <div class="table-container" style="max-height:260px;overflow-y:auto;">
           <table class="admin-table" style="font-size:0.85rem;">
             <thead>
               <tr>
-                <th data-i18n="admin.ledger.th.time">Th?i gian</th>
-                <th data-i18n="admin.ledger.th.type">Lo?i</th>
-                <th data-i18n="admin.ledger.th.amount">S? lu?ng</th>
-                <th data-i18n="admin.ledger.th.balance">S? du</th>
-                <th data-i18n="admin.ledger.th.reason">L� do</th>
+                <th data-i18n="admin.ledger.th.time">Thời gian</th>
+                <th data-i18n="admin.ledger.th.type">Loại</th>
+                <th data-i18n="admin.ledger.th.amount">Số lượng</th>
+                <th data-i18n="admin.ledger.th.balance">Số dư</th>
+                <th data-i18n="admin.ledger.th.reason">Lý do</th>
               </tr>
             </thead>
             <tbody id="ledgerTableBody"></tbody>
@@ -909,17 +891,17 @@
   <div class="modal-overlay" id="userDetailModal">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title" data-i18n="admin.modal.userDetail">Chi ti?t ngu?i d�ng</h3>
-        <button class="modal-close" id="userDetailModalClose">�</button>
+        <h3 class="modal-title" data-i18n="admin.modal.userDetail">Chi tiết người dùng</h3>
+        <button class="modal-close" id="userDetailModalClose">×</button>
       </div>
       <div class="modal-body">
         <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;">
           <div style="flex:1;min-width:200px;">
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.username">T�n dang nh?p</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.username">Tên đăng nhập</div>
             <div id="ud-username" style="font-weight:700;font-size:1.1rem;color:var(--accent);">@-</div>
           </div>
           <div style="flex:1;min-width:200px;">
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.fullName">H? v� t�n</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.fullName">Họ và tên</div>
             <div id="ud-fullname" style="font-weight:600;">-</div>
           </div>
         </div>
@@ -929,36 +911,36 @@
             <div id="ud-email">-</div>
           </div>
           <div>
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.role">Vai tr�</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.role">Vai trò</div>
             <div id="ud-role"><span class="badge badge-muted">-</span></div>
           </div>
           <div>
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.provider">Ngu?n dang k�</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.provider">Nguồn đăng ký</div>
             <div id="ud-provider">-</div>
           </div>
           <div>
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.registered">Ng�y dang k�</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.registered">Ngày đăng ký</div>
             <div id="ud-registered">-</div>
           </div>
           <div>
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.orderCount">S? don h�ng</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.orderCount">Số đơn hàng</div>
             <div id="ud-orders-count" style="font-weight:700;font-size:1.2rem;">0</div>
           </div>
           <div>
-            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.totalSpend">T?ng chi ti�u</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;" data-i18n="admin.userDetail.totalSpend">Tổng chi tiêu</div>
             <div id="ud-total-spend" style="font-weight:700;font-size:1.2rem;color:var(--accent);">0d</div>
           </div>
         </div>
-        <h4 style="font-weight:700;margin-bottom:12px;border-top:1px solid var(--border);padding-top:16px;" data-i18n="admin.recentOrders" data-i18n="admin.userDetail.recentOrders">�on h�ng g?n d�y</h4>
+        <h4 style="font-weight:700;margin-bottom:12px;border-top:1px solid var(--border);padding-top:16px;" data-i18n="admin.recentOrders" data-i18n="admin.userDetail.recentOrders">Đơn hàng gần đây</h4>
         <div class="table-container">
           <table class="admin-table">
             <thead>
               <tr>
-                <th data-i18n="admin.th.orderId">M� don</th>
-                <th data-i18n="admin.th.product">S?n ph?m</th>
-                <th data-i18n="admin.th.total">T?ng ti?n</th>
-                <th data-i18n="admin.th.status">Tr?ng th�i</th>
-                <th data-i18n="admin.th.date">Ng�y d?t</th>
+                <th data-i18n="admin.th.orderId">Mã đơn</th>
+                <th data-i18n="admin.th.product">Sản phẩm</th>
+                <th data-i18n="admin.th.total">Tổng tiền</th>
+                <th data-i18n="admin.th.status">Trạng thái</th>
+                <th data-i18n="admin.th.date">Ngày đặt</th>
               </tr>
             </thead>
             <tbody id="ud-recent-orders"></tbody>

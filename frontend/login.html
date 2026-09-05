@@ -175,16 +175,7 @@
 
   <!-- Scripts -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script>
-    // ====== CẤU HÌNH ĐĂNG NHẬP MẠNG XÃ HỘI ======
-    // Google: tạo OAuth 2.0 Client ID tại https://console.cloud.google.com/apis/credentials
-    // - Thêm "http://localhost:3000" vào Authorized JavaScript origins
-    // - Điền Client ID vào googleClientId bên dưới (cùng giá trị GOOGLE_CLIENT_ID trong backend/.env)
-    window.BLANKUP_SOCIAL = {
-      googleClientId: '116646431316-5kkndeufqeikrqer21492rkm0k6bi4ih.apps.googleusercontent.com',
-      facebookAppId: '',
-    };
-  </script>
+  <script src="js/social-config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/toast.js"></script>

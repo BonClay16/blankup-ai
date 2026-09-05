@@ -232,6 +232,7 @@
               src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 360'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f8f8f8'/%3E%3Cstop offset='100%25' stop-color='%23e8e8e8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M75 50 L30 80 L10 140 L55 150 L65 100 L65 330 L235 330 L235 100 L245 150 L290 140 L270 80 L225 50 L195 65 Q175 80 150 80 Q125 80 105 65 Z' fill='url(%23g)' stroke='%23ddd' stroke-width='1'/%3E%3Cellipse cx='150' cy='52' rx='30' ry='15' fill='none' stroke='%23ddd' stroke-width='1'/%3E%3C/svg%3E"
               alt="T-shirt mockup">
             <div class="viewer-design-overlay" id="mockupDesign"></div>
+            <div class="garment-unavailable-msg" id="garmentUnavailableMsg" hidden></div>
             <div class="viewer-side-badge" id="viewerSideBadge">MẶT TRƯỚC</div>
           </div>
         </div>
@@ -294,10 +295,16 @@
             <button class="placement-preset-btn" data-pp="stomach">Bụng</button>
           </div>
           <div class="placement-presets" id="printSizePresets">
-            <button class="placement-preset-btn" data-ps="small">Nhỏ</button>
             <button class="placement-preset-btn active" data-ps="medium">Trung bình</button>
             <button class="placement-preset-btn" data-ps="large">Lớn</button>
             <button class="placement-preset-btn" data-ps="xl">Rất lớn</button>
+          </div>
+          <div class="layer-section" id="layerSection">
+            <div class="placement-panel-header">
+              <span>Mẫu trên áo · <em class="placement-side-tag" id="layerCountTag"></em></span>
+            </div>
+            <div id="layerList" class="layer-list"></div>
+            <div class="layer-hint">Bấm “Tạo Design” để thêm mẫu mới vào mặt này. Bấm vào mẫu để chọn rồi chỉnh riêng.</div>
           </div>
           <div class="placement-sliders">
             <div class="placement-slider-group">
@@ -311,6 +318,10 @@
             <div class="placement-slider-group">
               <label>Kích thước</label>
               <input type="range" id="printScale" min="20" max="220" value="100">
+            </div>
+            <div class="placement-slider-group">
+              <label>Xoay (°)</label>
+              <input type="range" id="printRotation" min="0" max="360" value="0">
             </div>
           </div>
           <div class="placement-panel-header" style="margin-top:8px;">

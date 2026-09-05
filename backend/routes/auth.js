@@ -11,6 +11,7 @@ const { sendMail } = require('../services/mailer');
 const { verifyGoogleIdToken } = require('../services/google-auth.service');
 const { signToken } = require('../services/jwt.service');
 const { verifyCode, createVerificationCode, OTP_EXPIRY_MINUTES, isAlreadyVerified } = require('../services/otp.service');
+const pendingReg = require('../services/pending-registration.service');
 const { generateResetAuthToken, validateResetAuthToken } = require('../services/reset-auth.service');
 const { authenticate } = require('../middleware/auth');
 const crypto = require('crypto');
@@ -151,18 +152,75 @@ async function sendVerificationEmail(email, code) {
   });
 }
 
+/**
+ * Mask an email for safe logging: "ab***@gmail.com".
+ * Never log passwords, secrets, or full OTPs in production paths.
+ */
+function maskEmail(email) {
+  const s = String(email || '');
+  const at = s.indexOf('@');
+  if (at <= 0) return '***';
+  return s.slice(0, Math.min(2, at)) + '***' + s.slice(at);
+}
+
 function sendVerificationSms(phone, code) {
-  // TODO: Integrate with SMS gateway (Twilio, Viettel, etc.)
-  console.log('\n──────── [SMS] Verification code (SMS not configured) ────────');
+  // DEMO SMS provider: no real gateway yet. The demo code is generated and
+  // verified by the pending-registration service; this function only logs
+  // delivery locally. Do NOT treat log output as verification.
+  console.log('\n──────── [SMS] Verification code (DEMO provider) ────────');
   console.log(`To:      ${phone}`);
   console.log(`Code:    ${code}`);
-  console.log(`Expires: ${OTP_EXPIRY_MINUTES} minutes`);
+  console.log(`Expires: ${pendingReg.OTP_EXPIRY_MINUTES} minutes`);
   console.log('─────────────────────────────────────────────────────────────\n');
-  return { sent: false, reason: 'sms_not_configured' };
+  return { sent: false, reason: 'sms_demo_provider' };
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/auth/register  (Local registration)
+// Lightweight in-process mutex for registration (prevents double-submit /
+// concurrent duplicate pending rows for the same username)
+// ---------------------------------------------------------------------------
+const registerMutexes = new Map();
+async function withRegisterLock(key, fn) {
+  while (registerMutexes.get(key)) {
+    await new Promise(r => setTimeout(r, 10));
+  }
+  registerMutexes.set(key, true);
+  try {
+    return await fn();
+  } finally {
+    registerMutexes.delete(key);
+  }
+}
+
+async function findActivePending(pool, { username, email, phone }) {
+  // NOTE: Node stores UTC datetimes; SQL Server GETDATE() is server-local time.
+  // All expiry comparisons must use GETUTCDATE() to match stored values.
+  const result = await pool.request()
+    .input('username', sql.NVarChar, username)
+    .query(`SELECT * FROM PendingRegistrations WHERE username = @username AND status = 'pending' AND expiresAt > GETUTCDATE()`);
+  let rows = result.recordset;
+  if (email) {
+    const byEmail = await pool.request()
+      .input('email', sql.NVarChar, email)
+      .query(`SELECT * FROM PendingRegistrations WHERE email = @email AND status = 'pending' AND expiresAt > GETUTCDATE() AND email IS NOT NULL`);
+    rows = rows.concat(byEmail.recordset.filter(r => !rows.some(x => x.id === r.id)));
+  }
+  if (phone) {
+    const byPhone = await pool.request()
+      .input('phone', sql.NVarChar, phone)
+      .query(`SELECT * FROM PendingRegistrations WHERE phone = @phone AND status = 'pending' AND expiresAt > GETUTCDATE() AND phone IS NOT NULL`);
+    rows = rows.concat(byPhone.recordset.filter(r => !rows.some(x => x.id === r.id)));
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/register  (Local registration — verify-before-create)
+//
+// Creates ONLY a PendingRegistrations row. A real Users row is created
+// atomically later, when ALL required channels verify (see POST /verify).
+// Response keeps `userId` = pendingId for frontend compatibility, plus
+// an explicit `pendingId` field.
 // ---------------------------------------------------------------------------
 router.post('/register', async (req, res) => {
   try {
@@ -182,59 +240,178 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const normalizedUsername = username.trim().toLowerCase();
+    const normalizedUsername = String(username).trim().toLowerCase();
+    const trimmedFullName = String(fullName).trim();
+    const normalizedEmail = email ? String(email).trim() : null;
+    const normalizedPhone = phone ? String(phone).trim() : null;
+    if (!trimmedFullName) {
+      return res.status(400).json({ success: false, error: 'Họ và tên là bắt buộc.' });
+    }
+
     const pool = getPool();
+    const idempotencyKey = req.headers['idempotency-key'] || req.headers['Idempotency-Key'] || null;
+    // Same-key requests must serialize globally so a reused key with a
+    // different body is reliably rejected (409) instead of racing.
+    const lockKey = idempotencyKey
+      ? 'register:key:' + String(idempotencyKey)
+      : 'register:' + normalizedUsername;
 
-    // Check if user already exists
-    const existing = await pool.request()
-      .input('username', sql.NVarChar, normalizedUsername)
-      .query('SELECT id FROM Users WHERE username = @username');
+    const result = await withRegisterLock(lockKey, async () => {
+      // Global idempotency check first: the same key may never map to two
+      // different registration bodies.
+      if (idempotencyKey) {
+        const keyRes = await pool.request()
+          .input('idempotencyKey', sql.NVarChar, String(idempotencyKey))
+          .query(`SELECT * FROM PendingRegistrations WHERE idempotencyKey = @idempotencyKey AND status = 'pending' AND expiresAt > GETUTCDATE()`);
+        const keyed = keyRes.recordset[0];
+        if (keyed) {
+          const expectedHash = pendingReg.hashIdempotency([
+            normalizedUsername, trimmedFullName, normalizedEmail || '', normalizedPhone || '',
+          ]);
+          if (keyed.idempotencyHash && keyed.idempotencyHash !== expectedHash) {
+            return { error: 'Idempotency-Key đã được sử dụng với dữ liệu khác. Vui lòng tạo key mới.', status: 409 };
+          }
+          return {
+            idempotent: true,
+            pendingId: keyed.id,
+            verificationMethods: pendingReg.requiredMethods(keyed),
+          };
+        }
+      }
 
-    if (existing.recordset.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Tên đăng nhập đã tồn tại trên hệ thống.',
+      // A. Duplicate check against real accounts
+      const existing = await pool.request()
+        .input('username', sql.NVarChar, normalizedUsername)
+        .query('SELECT id FROM Users WHERE username = @username');
+      if (existing.recordset.length > 0) {
+        return { error: 'Tên đăng nhập đã tồn tại trên hệ thống.', status: 400 };
+      }
+      if (normalizedEmail) {
+        const dupEmail = await pool.request()
+          .input('email', sql.NVarChar, normalizedEmail)
+          .query('SELECT id FROM Users WHERE email = @email');
+        if (dupEmail.recordset.length > 0) {
+          return { error: 'Email đã được sử dụng.', status: 400 };
+        }
+      }
+      if (normalizedPhone) {
+        const dupPhone = await pool.request()
+          .input('phone', sql.NVarChar, normalizedPhone)
+          .query('SELECT id FROM Users WHERE phone = @phone');
+        if (dupPhone.recordset.length > 0) {
+          return { error: 'Số điện thoại đã được sử dụng.', status: 400 };
+        }
+      }
+
+      // B. Duplicate check against active pending registrations
+      const actives = await findActivePending(pool, {
+        username: normalizedUsername,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+      });
+
+      const conflicting = actives.find(p => {
+        if (p.username === normalizedUsername) return true;
+        if (normalizedEmail && p.email && String(p.email).toLowerCase() === normalizedEmail.toLowerCase()) return true;
+        if (normalizedPhone && p.phone === normalizedPhone) return true;
+        return false;
+      });
+      if (conflicting) {
+        return {
+          error: 'Thông tin đăng ký đang chờ xác thực. Vui lòng hoàn tất xác thực hoặc yêu cầu mã mới.',
+          status: 409,
+          pendingId: conflicting.id,
+          verificationMethods: pendingReg.requiredMethods(conflicting),
+        };
+      }
+
+      // C. Create pending registration (no Users row yet)
+      const hashedPassword = bcrypt.hashSync(String(password), 10);
+      const created = await pendingReg.createPending(pool, {
+        username: normalizedUsername,
+        passwordHash: hashedPassword,
+        fullName: trimmedFullName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        idempotencyKey: idempotencyKey ? String(idempotencyKey) : null,
+      });
+      return { created };
+    });
+
+    if (result.error) {
+      const payload = { success: false, error: result.error };
+      if (result.pendingId) {
+        payload.requiresVerification = true;
+        payload.userId = result.pendingId;
+        payload.pendingId = result.pendingId;
+        payload.verificationMethods = result.verificationMethods || [];
+      }
+      return res.status(result.status || 400).json(payload);
+    }
+
+    if (result.idempotent) {
+      console.log(`[Auth] Idempotent register replay: ${result.pendingId} (${normalizedUsername})`);
+      return res.status(200).json({
+        success: true,
+        idempotent: true,
+        requiresVerification: true,
+        verificationMethods: result.verificationMethods,
+        userId: result.pendingId,
+        pendingId: result.pendingId,
+        resendAvailableAt: result.resendAvailableAt
+          ? new Date(result.resendAvailableAt).toISOString()
+          : new Date(Date.now() + pendingReg.RESEND_COOLDOWN_SECONDS * 1000).toISOString(),
+        message: 'Phiên đăng ký đã được tạo trước đó. Vui lòng xác thực để hoàn tất.',
       });
     }
 
-    const newId = 'u-' + Date.now();
-    const hashedPassword = bcrypt.hashSync(password, 10);
-    await pool.request()
-      .input('id', sql.NVarChar, newId)
-      .input('username', sql.NVarChar, normalizedUsername)
-      .input('password', sql.NVarChar, hashedPassword)
-      .input('fullName', sql.NVarChar, fullName.trim())
-      .input('email', sql.NVarChar, email || null)
-      .input('phone', sql.NVarChar, phone || null)
-      .input('role', sql.NVarChar, 'user')
-      .input('provider', sql.NVarChar, 'local')
-      .query(`
-        INSERT INTO Users (id, username, password, fullName, email, phone, role, provider)
-        VALUES (@id, @username, @password, @fullName, @email, @phone, @role, @provider)
-      `);
+    const { pendingId, emailOtp, phoneOtp, verificationMethods, resendAvailableAt } = result.created;
+    console.log(`[Auth] Pending registration created: ${pendingId} (${normalizedUsername})`);
 
-    console.log(`[Auth] Registered new user: ${normalizedUsername}`);
-
-    // Send verification codes
-    const verificationMethods = [];
-    if (email) {
-      const emailOtp = await createVerificationCode(newId, 'email');
-      await sendVerificationEmail(email, emailOtp.code);
-      verificationMethods.push('email');
+    // D. Deliver verification challenges. Failures here do NOT create a user
+    //    (the user does not exist yet), but the response MUST reflect the
+    //    real delivery state — never claim "sent" when the provider failed.
+    let emailSent = null;
+    try {
+      if (normalizedEmail && emailOtp) {
+        const emailRes = await sendVerificationEmail(normalizedEmail, emailOtp);
+        emailSent = emailRes && emailRes.sent === true;
+        if (!emailSent) {
+          console.error(`[Auth] Initial email delivery failed: pending=${pendingId} to=${maskEmail(normalizedEmail)} reason=${(emailRes && emailRes.reason) || 'unknown'}`);
+        }
+      }
+      if (normalizedPhone && phoneOtp) {
+        sendVerificationSms(normalizedPhone, phoneOtp);
+      }
+    } catch (deliveryErr) {
+      console.error(`[Auth] Verification delivery failed: pending=${pendingId} error=${deliveryErr.message}`);
+      return res.status(201).json({
+        success: true,
+        requiresVerification: true,
+        verificationMethods,
+        userId: pendingId,
+        pendingId,
+        emailSent: false,
+        resendAvailableAt: resendAvailableAt ? resendAvailableAt.toISOString() : null,
+        deliveryWarning: 'Không thể gửi mã xác thực tự động. Vui lòng dùng chức năng gửi lại mã.',
+        message: 'Đã tạo phiên đăng ký. Vui lòng xác thực email/SĐT để hoàn tất.',
+      });
     }
-    if (phone) {
-      const phoneOtp = await createVerificationCode(newId, 'phone');
-      sendVerificationSms(phone, phoneOtp.code);
-      verificationMethods.push('phone');
-    }
 
-    res.status(201).json({
+    const responsePayload = {
       success: true,
       requiresVerification: true,
       verificationMethods,
-      userId: newId,
-      message: 'Đăng ký thành công! Vui lòng xác thực email/SĐT để đăng nhập.',
-    });
+      userId: pendingId,
+      pendingId,
+      resendAvailableAt: resendAvailableAt ? resendAvailableAt.toISOString() : null,
+      message: 'Đã tạo phiên đăng ký. Vui lòng xác thực email/SĐT để hoàn tất.',
+    };
+    if (emailSent === false) {
+      responsePayload.emailSent = false;
+      responsePayload.deliveryWarning = 'Email xác thực chưa gửi được. Mã vẫn có hiệu lực khi gửi lại thành công — vui lòng dùng chức năng gửi lại mã sau ít phút.';
+    }
+    res.status(201).json(responsePayload);
   } catch (err) {
     console.error('[Auth] Error registering user:', err.message);
     res.status(500).json({ success: false, error: 'Đăng ký thất bại. Vui lòng thử lại.' });
@@ -263,6 +440,27 @@ router.post('/login', async (req, res) => {
       .query('SELECT id, username, password, fullName, email, phone, emailVerified, phoneVerified, avatar, provider, role FROM Users WHERE username = @username AND provider = \'local\'');
 
     if (result.recordset.length === 0) {
+      // No real account — but a pending registration may exist. If the
+      // password matches the pending hash, guide the user back to
+      // verification instead of creating any session.
+      try {
+        const pendingRes = await pool.request()
+          .input('username', sql.NVarChar, normalizedUsername)
+          .query(`SELECT * FROM PendingRegistrations WHERE username = @username AND status = 'pending' AND expiresAt > GETUTCDATE()`);
+        const pending = pendingRes.recordset[0];
+        if (pending && pending.passwordHash && pending.passwordHash.startsWith('$2')
+            && bcrypt.compareSync(String(password), pending.passwordHash)) {
+          return res.status(403).json({
+            success: false,
+            requiresVerification: true,
+            requiresRegistration: true,
+            verificationMethods: pendingReg.requiredMethods(pending),
+            userId: pending.id,
+            pendingId: pending.id,
+            error: 'Tài khoản chưa hoàn tất xác thực đăng ký. Vui lòng xác thực email/SĐT.',
+          });
+        }
+      } catch (_) { /* fall through to generic 401 */ }
       return res.status(401).json({
         success: false,
         error: 'Tên đăng nhập hoặc mật khẩu không đúng.',
@@ -458,6 +656,71 @@ router.post('/send-verification', async (req, res) => {
     }
 
     const pool = getPool();
+
+    // New flow first: pending registration
+    const pendingRes = await pool.request()
+      .input('id', sql.NVarChar, userId)
+      .query('SELECT id, email, phone FROM PendingRegistrations WHERE id = @id AND status = \'pending\'');
+    if (pendingRes.recordset.length > 0) {
+      const pending = pendingRes.recordset[0];
+      if (type === 'email' && !pending.email) {
+        return res.status(400).json({ success: false, error: 'Phiên đăng ký không có email.' });
+      }
+      if (type === 'phone' && !pending.phone) {
+        return res.status(400).json({ success: false, error: 'Phiên đăng ký không có số điện thoại.' });
+      }
+      const renewed = await pendingReg.resendPendingOtp(pool, userId, type);
+      if (!renewed.ok) {
+        // Cooldown rejections must NOT reset the window and must tell the
+        // client how long to wait. Rejected requests change nothing.
+        if (renewed.cooldown) {
+          return res.status(429).json({
+            success: false,
+            error: renewed.error,
+            retryAfterSeconds: renewed.retryAfterSeconds,
+          });
+        }
+        return res.status(400).json({ success: false, error: renewed.error });
+      }
+      if (type === 'email') {
+        let emailSent = null;
+        try {
+          const emailRes = await sendVerificationEmail(pending.email, renewed.code);
+          emailSent = emailRes && emailRes.sent === true;
+        } catch (sendErr) {
+          console.error(`[Auth] Resend email delivery failed: pending=${userId} to=${maskEmail(pending.email)} error=${sendErr.message}`);
+          return res.json({
+            success: true,
+            emailSent: false,
+            resendAvailableAt: renewed.resendAvailableAt ? renewed.resendAvailableAt.toISOString() : null,
+            deliveryWarning: 'Mã mới đã được tạo nhưng email chưa gửi được. Vui lòng thử gửi lại sau khi hết cooldown.',
+          });
+        }
+        if (!emailSent) {
+          console.error(`[Auth] Resend email delivery failed: pending=${userId} to=${maskEmail(pending.email)} reason=smtp`);
+          return res.json({
+            success: true,
+            emailSent: false,
+            resendAvailableAt: renewed.resendAvailableAt ? renewed.resendAvailableAt.toISOString() : null,
+            deliveryWarning: 'Mã mới đã được tạo nhưng email chưa gửi được. Vui lòng thử gửi lại sau khi hết cooldown.',
+          });
+        }
+        return res.json({
+          success: true,
+          emailSent: true,
+          resendAvailableAt: renewed.resendAvailableAt ? renewed.resendAvailableAt.toISOString() : null,
+          message: 'Đã gửi mã xác thực qua email.',
+        });
+      }
+      sendVerificationSms(pending.phone, renewed.code);
+      return res.json({
+        success: true,
+        resendAvailableAt: renewed.resendAvailableAt ? renewed.resendAvailableAt.toISOString() : null,
+        message: 'Đã gửi mã xác thực qua SĐT.',
+      });
+    }
+
+    // Legacy fallback: Users row
     const userResult = await pool.request()
       .input('id', sql.NVarChar, userId)
       .query('SELECT id, email, phone FROM Users WHERE id = @id');
@@ -492,6 +755,9 @@ router.post('/send-verification', async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/auth/verify  (Verify OTP)
+// Accepts a PendingRegistrations id (new flow) or a legacy Users id.
+// For pending registrations, the final channel atomically creates the
+// real Users row — nothing is created before both channels verify.
 // ---------------------------------------------------------------------------
 router.post('/verify', async (req, res) => {
   try {
@@ -506,6 +772,39 @@ router.post('/verify', async (req, res) => {
     }
 
     const pool = getPool();
+
+    // New flow first: pending registration
+    const pendingRes = await pool.request()
+      .input('id', sql.NVarChar, userId)
+      .query('SELECT id FROM PendingRegistrations WHERE id = @id');
+    if (pendingRes.recordset.length > 0) {
+      const out = await pendingReg.verifyPendingOtp(pool, userId, type, code);
+      if (!out.valid) {
+        const status = out.locked ? 429 : 400;
+        return res.status(status).json({ success: false, error: out.error });
+      }
+      if (out.completed) {
+        console.log(`[Auth] Pending ${userId} completed -> user ${out.userId}`);
+        return res.json({
+          success: true,
+          allVerified: true,
+          completed: true,
+          userId: out.userId,
+          message: 'Đăng ký thành công! Bạn có thể đăng nhập.',
+        });
+      }
+      if (out.alreadyVerified) {
+        return res.json({ success: true, allVerified: out.allVerified === true, message: 'Phương thức này đã được xác thực.' });
+      }
+      console.log(`[Auth] Pending ${userId} verified ${type} (partial)`);
+      return res.json({
+        success: true,
+        allVerified: false,
+        message: `Đã xác thực ${type === 'email' ? 'email' : 'SĐT'} thành công. Vui lòng hoàn thành phần còn lại.`,
+      });
+    }
+
+    // Legacy fallback: unverified Users rows created before verify-before-create
     const userResult = await pool.request()
       .input('id', sql.NVarChar, userId)
       .query('SELECT id, email, phone, emailVerified, phoneVerified FROM Users WHERE id = @id');

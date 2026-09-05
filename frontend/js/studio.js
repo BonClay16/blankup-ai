@@ -26,6 +26,12 @@ const state = {
   uploadedFile: null,
   printDesignUrl: null,
   preparedDesignUrls: { front: null, back: null },
+  // Multi-design layers: independent entities per garment side.
+  // layer = { id, url, x, y, scale, rotation, visible, z, name,
+  //           designId, prompt, style }
+  designLayers: { front: [], back: [] },
+  selectedLayerId: { front: null, back: null },
+  lastGenerated: { front: null, back: null },
   customText: '',
   printPlacement: { x: 0, y: -12, scale: 1 },
   textPlacement: { x: 0, y: 18, scale: 1 },
@@ -64,8 +70,9 @@ function getSideCustomText(side = state.currentView) {
   return '';
 }
 function sideKey(side = state.currentView) { return side === 'back' ? 'back' : 'front'; }
-function hasBackDesign() { return !!(state.preparedDesignUrls.back || getBackDesignUrl()); }
+function hasBackDesign() { return hasLayerDesigns('back') || !!(state.preparedDesignUrls.back || getBackDesignUrl()); }
 function hasBackContent() { return hasBackDesign() || !!getSideCustomText('back'); }
+function hasFrontContent() { return hasLayerDesigns('front') || !!(state.preparedDesignUrls.front || getFrontDesignUrl()) || !!getSideCustomText('front'); }
 function getSidePrintPlacement(side = state.currentView) {
   const k = sideKey(side);
   const stored = state.sidePrintPlacement?.[k];
@@ -122,19 +129,37 @@ function updateBackDesignControls() {
 function initBackDesignControls() {
   document.getElementById('backGenerateBtn')?.addEventListener('click', () => generateFromPrompt('back'));
   document.getElementById('backClearBtn')?.addEventListener('click', () => {
+    clearSideLayers('back');
     state.preparedDesignUrls.back = null;
     if (state.currentDesign) state.currentDesign.backDesignUrl = '';
     state.compositeCacheKey = '';
     updateDesignOverlayForSide();
     applyCurrentDesignToViewer();
     updateBackDesignControls();
+    showToast('Đã bỏ toàn bộ mẫu ở mặt sau.', 'info');
   });
   syncCustomTextInputs();
   updateSideBadge();
   updateBackDesignControls();
 }
-function getCompositeCacheKey(designs) {
-  return JSON.stringify({ designs, customText: state.customText, customTextSides: state.customTextSides, sidePrintPlacement: state.sidePrintPlacement, sideTextPlacement: state.sideTextPlacement });
+function getCompositeCacheKey() {
+  const snap = (side) => sideLayers(side).map(l => [l.id, l.url, l.x, l.y, l.scale, l.rotation, l.visible, l.z]);
+  return JSON.stringify({
+    front: snap('front'), back: snap('back'),
+    customText: state.customText, customTextSides: state.customTextSides,
+    sideTextPlacement: state.sideTextPlacement,
+  });
+}
+
+// Debounced 3D refresh: slider drags rebuild the composite live in 2D, but
+// the 3D decal recompute is throttled so interaction never wedges the UI.
+let viewerUpdateTimer = null;
+function scheduleViewerUpdate() {
+  if (viewerUpdateTimer) clearTimeout(viewerUpdateTimer);
+  viewerUpdateTimer = setTimeout(() => {
+    viewerUpdateTimer = null;
+    applyCurrentDesignToViewer().catch(() => {});
+  }, 350);
 }
 
 /* ============================================================
@@ -289,11 +314,16 @@ function initGenProgress() {
   genProgress.percentEl = document.getElementById('genProgressPercent');
 }
 
+// Max time we wait for the AI backend before failing honestly.
+// Backend provider timeout is ~90s; 120s leaves margin for upload/save.
+const GEN_FETCH_TIMEOUT_MS = 120000;
+
 function startGenProgress() {
   if (!genProgress.overlay) initGenProgress();
   genProgress.done = false;
   genProgress.currentPct = 0;
   genProgress.stageIdx = 0;
+  genProgress.startedAt = Date.now();
   genProgress.overlay.classList.remove('error', 'success');
   genProgress.overlay.classList.add('active');
   updateGenProgressUI(0, GEN_STAGES[0].msg);
@@ -309,6 +339,12 @@ function startGenProgress() {
         genProgress.stageIdx = i;
         msg = GEN_STAGES[i].msg;
       }
+    }
+    // Honesty at the 95% cap: the bar is capped while the backend request is
+    // still in flight, so show elapsed wait time instead of a frozen stage.
+    if (next >= GEN_STAGES[GEN_STAGES.length - 1].pct && genProgress.startedAt) {
+      const waited = Math.round((Date.now() - genProgress.startedAt) / 1000);
+      msg = `Đang chờ AI phản hồi… (${waited}s)`;
     }
     updateGenProgressUI(next, msg);
   }, 650);
@@ -352,32 +388,43 @@ function loadImageForCanvas(url) {
   });
 }
 
-async function buildCompositePrintUrl(designUrl, side = state.currentView) {
-  const sideText = getSideCustomText(side);
-  if (!designUrl && !sideText) return '';
+async function drawLayerOnContext(ctx, size, layer) {
+  // Same mapping as the 2D overlay so 2D == composite == 3D decal.
+  try {
+    const img = await loadImageForCanvas(layer.url);
+    if (!img) return;
+    const maxW = size * 0.58 * layer.scale, maxH = size * 0.58 * layer.scale;
+    const ratio = Math.min(maxW / img.width, maxH / img.height);
+    const w = img.width * ratio, h = img.height * ratio;
+    const cx = size * (0.5 + layer.x / 100), cy = size * (0.44 + layer.y / 100);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(((layer.rotation || 0) * Math.PI) / 180);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  } catch (e) {
+    console.warn('Composite print error:', e);
+    // UX reliability: composite failure must not be silent — design may not render on mockup
+    if (window.showToast) window.showToast('Không thể dựng bản in trên mockup. Vui lòng thử lại.', 'warning');
+  }
+}
+
+// Composite of ALL visible layers of one side (+ slogan text). This single
+// image is what the user sees in 2D-equivalent form, what goes on the 3D
+// decal, what is ordered, and what is shared — one source of truth.
+async function buildSideComposite(side = state.currentView) {
+  const k = side === 'back' ? 'back' : 'front';
+  const layers = [...sideLayers(k)].filter(l => l.visible !== false && l.url).sort((a, b) => a.z - b.z);
+  const sideText = getSideCustomText(k);
+  if (!layers.length && !sideText) return '';
   const size = 1024;
   const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, size, size);
-  const ip = getSidePrintPlacement(side);
-  const tp = getSideTextPlacement(side);
-
-  if (designUrl) {
-    try {
-      const img = await loadImageForCanvas(designUrl);
-      if (img) {
-        const maxW = size * 0.58 * ip.scale, maxH = size * 0.58 * ip.scale;
-        const ratio = Math.min(maxW / img.width, maxH / img.height);
-        const w = img.width * ratio, h = img.height * ratio;
-        const x = size * (0.5 + ip.x / 100) - w / 2, y = size * (0.44 + ip.y / 100) - h / 2;
-        ctx.drawImage(img, x, y, w, h);
-      }
-    } catch (e) {
-      console.warn('Composite print error:', e);
-      // UX reliability: composite failure must not be silent — design may not render on mockup
-      if (window.showToast) window.showToast('Không thể dựng bản in trên mockup. Vui lòng thử lại.', 'warning');
-    }
+  for (const layer of layers) {
+    await drawLayerOnContext(ctx, size, layer);
   }
   if (sideText) {
+    const tp = getSideTextPlacement(k);
     const text = sideText.toUpperCase();
     const fs = Math.max(34, 82 * tp.scale);
     const x = size * (0.5 + tp.x / 100), y = size * (0.5 + tp.y / 100);
@@ -390,14 +437,37 @@ async function buildCompositePrintUrl(designUrl, side = state.currentView) {
   return canvas.toDataURL('image/png');
 }
 
-async function getCompositeDesignsForViewer(designs) {
-  const key = getCompositeCacheKey(designs);
+async function buildCompositePrintUrl(designUrl, side = state.currentView) {
+  // Legacy single-URL entry kept for compatibility; the layered composite
+  // is authoritative for render/order/share.
+  if (!designUrl) return buildSideComposite(side);
+  const k = side === 'back' ? 'back' : 'front';
+  const layers = sideLayers(k).filter(l => l.visible !== false && l.url);
+  if (layers.length === 1 && layers[0].url === designUrl) return buildSideComposite(k);
+  const sideText = getSideCustomText(k);
+  const size = 1024;
+  const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, size, size);
+  await drawLayerOnContext(ctx, size, { url: designUrl, x: 0, y: -12, scale: 1, rotation: 0 });
+  if (sideText) {
+    const tp = getSideTextPlacement(k);
+    ctx.font = `900 ${Math.max(34, 82 * tp.scale)}px Outfit, Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#111827';
+    ctx.fillText(sideText.toUpperCase(), size * (0.5 + tp.x / 100), size * (0.5 + tp.y / 100));
+  }
+  return canvas.toDataURL('image/png');
+}
+
+async function getCompositeDesignsForViewer() {
+  const key = getCompositeCacheKey();
   if (state.compositeCacheKey === key) return state.compositeDesignUrls;
   const [front, back] = await Promise.all([
-    buildCompositePrintUrl(designs.front, 'front'),
-    designs.back ? buildCompositePrintUrl(designs.back, 'back') : Promise.resolve(null),
+    buildSideComposite('front'),
+    buildSideComposite('back'),
   ]);
-  state.compositeCacheKey = key; state.compositeDesignUrls = { front, back };
+  state.compositeCacheKey = key;
+  state.compositeDesignUrls = { front: front || null, back: back || null };
   return state.compositeDesignUrls;
 }
 
@@ -405,25 +475,116 @@ async function getCompositeDesignsForViewer(designs) {
    DESIGN OVERLAY
    ============================================================ */
 function updateDesignOverlayForSide() {
+  renderLayersOverlay();
+}
+
+function renderLayersOverlay() {
   const overlay = document.getElementById('mockupDesign');
   if (!overlay) return;
-  if (state.currentView === 'back' && !hasBackContent()) {
-    state.printDesignUrl = '';
+  const side = state.currentView;
+  const layers = [...sideLayers(side)]
+    .filter(l => l.visible !== false && l.url)
+    .sort((a, b) => a.z - b.z);
+  const activeText = getSideCustomText();
+  if (!layers.length && !activeText) {
     overlay.innerHTML = '';
+    state.printDesignUrl = '';
     updateOverlayPlacement();
     updateThreeTexture();
+    renderLayerList();
     return;
   }
-  const activeUrl = getPreparedDesignUrl();
-  const activeText = getSideCustomText();
-  if (!activeUrl && !activeText) return;
-  state.printDesignUrl = activeUrl;
-  overlay.innerHTML = [
-    activeUrl ? `<img src="${escapeAttr(activeUrl)}" alt="Design" class="mockup-print-design" draggable="false">` : '',
-    activeText ? `<div class="mockup-print-text">${escapeHtml(activeText)}</div>` : '',
-  ].join('');
+  const selected = getSelectedLayer(side);
+  overlay.innerHTML = layers.map(l => {
+    const isSel = selected && selected.id === l.id;
+    const style = `left:0;top:0;width:46%;max-width:320px;transform:translate(calc(-50% + ${l.x}%), calc(-50% + ${l.y}%)) scale(${l.scale}) rotate(${l.rotation || 0}deg);z-index:${10 + l.z};cursor:pointer;${isSel ? 'outline:2px dashed var(--s-accent, #ff6b00);outline-offset:3px;' : ''}`;
+    return `<img src="${escapeAttr(l.url)}" alt="${escapeAttr(l.name || 'Design')}" class="mockup-print-design" data-layer-id="${escapeAttr(l.id)}" draggable="false" style="${style}">`;
+  }).join('') + (activeText ? `<div class="mockup-print-text">${escapeHtml(activeText)}</div>` : '');
+  // Click-to-select a specific layer (controls then affect ONLY it).
+  overlay.querySelectorAll('img[data-layer-id]').forEach(img => {
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectLayer(side, img.dataset.layerId);
+      showToast(`Đang chỉnh: ${getSelectedLayer(side)?.name || ''}`, 'info', 1500);
+      refreshSideViews();
+    });
+  });
   updateOverlayPlacement();
   updateThreeTexture();
+  renderLayerList();
+}
+
+function renderLayerList() {
+  const list = document.getElementById('layerList');
+  const countTag = document.getElementById('layerCountTag');
+  if (!list) return;
+  const side = state.currentView;
+  const layers = [...sideLayers(side)].sort((a, b) => b.z - a.z);
+  if (countTag) countTag.textContent = layers.length ? `${layers.length} mẫu · ${side === 'back' ? 'mặt sau' : 'mặt trước'}` : '';
+  if (!layers.length) {
+    list.innerHTML = `<div class="layer-empty">Chưa có mẫu nào ở mặt này. Hãy tạo thiết kế rồi chọn “Thêm vào áo”.</div>`;
+    return;
+  }
+  const selected = getSelectedLayer(side);
+  list.innerHTML = layers.map((l, idx) => `
+    <div class="layer-row${selected && selected.id === l.id ? ' selected' : ''}" data-layer-id="${escapeAttr(l.id)}">
+      <img class="layer-thumb" src="${escapeAttr(l.url)}" alt="">
+      <div class="layer-info">
+        <div class="layer-name">${escapeHtml(l.name || 'Mẫu')}</div>
+        <div class="layer-meta">x:${Math.round(l.x)} y:${Math.round(l.y)} · ${Math.round(l.scale * 100)}%${l.rotation ? ` · ${Math.round(l.rotation)}°` : ''}${l.visible === false ? ' · ẩn' : ''}</div>
+      </div>
+      <div class="layer-actions">
+        <button class="layer-btn" data-action="up" title="Đưa lên trên" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="layer-btn" data-action="down" title="Đưa xuống dưới" ${idx === layers.length - 1 ? 'disabled' : ''}>▼</button>
+        <button class="layer-btn" data-action="toggle" title="Ẩn/hiện">${l.visible === false ? '👁‍🗨' : '👁'}</button>
+        <button class="layer-btn" data-action="replace" title="Thay bằng mẫu mới nhất">⟳</button>
+        <button class="layer-btn layer-del" data-action="delete" title="Xóa mẫu">✕</button>
+      </div>
+    </div>`).join('');
+  list.querySelectorAll('.layer-row').forEach(row => {
+    const id = row.dataset.layerId;
+    row.addEventListener('click', (e) => {
+      const action = e.target.closest('[data-action]')?.dataset.action;
+      if (!action) {
+        selectLayer(side, id);
+        refreshSideViews();
+        return;
+      }
+      e.stopPropagation();
+      handleLayerAction(side, id, action);
+    });
+  });
+}
+
+async function handleLayerAction(side, id, action) {
+  const layers = sideLayers(side);
+  const layer = layers.find(l => l.id === id);
+  if (action === 'delete') {
+    removeLayer(side, id);
+    showToast('Đã xóa mẫu khỏi áo.', 'info');
+  } else if (action === 'toggle') {
+    if (layer) layer.visible = layer.visible === false ? true : false;
+  } else if (action === 'up') {
+    moveLayerZ(side, id, +1);
+  } else if (action === 'down') {
+    moveLayerZ(side, id, -1);
+  } else if (action === 'replace') {
+    const fresh = state.lastGenerated[side === 'back' ? 'back' : 'front'];
+    if (!fresh) {
+      showToast('Chưa có mẫu mới nào. Hãy bấm “Tạo Design” trước.', 'warning');
+      return;
+    }
+    if (layer) {
+      layer.url = fresh;
+      showToast('Đã thay mẫu đang chọn bằng mẫu mới nhất.', 'success');
+    }
+  } else {
+    selectLayer(side, id);
+  }
+  if (!getSelectedLayer(side) && sideLayers(side).length) {
+    selectLayer(side, sideLayers(side).sort((a, b) => b.z - a.z)[0].id);
+  }
+  await refreshSideViews();
 }
 
 function updateOverlayPlacement() {
@@ -440,20 +601,21 @@ function updateOverlayPlacement() {
 }
 
 function updateThreeTexture() {
-  try { window.tshirt360Viewer?.setDesign?.(state.printDesignUrl || null); } catch (e) { /* ignore */ }
+  // Debounced: rebuilds the side composite and pushes it to the 3D decal.
+  // Cache + viewer guards make no-op updates cheap.
+  scheduleViewerUpdate();
 }
 
 async function applyCurrentDesignToViewer() {
-  const designs = { front: state.preparedDesignUrls.front || getFrontDesignUrl(), back: state.preparedDesignUrls.back || getBackDesignUrl() };
-  state.printDesignUrl = getPreparedDesignUrl();
+  // The side composite (all visible layers + text) is the single image the
+  // 3D decal shows — 2D and 3D always agree. The viewer skips recompute when
+  // the composite URL is unchanged, so color/product/rotate updates stay
+  // instant and only real composition changes re-run decal clipping.
+  const vd = await getCompositeDesignsForViewer();
+  const activeComposite = state.currentView === 'back' ? (vd.back || vd.front) : (vd.front || vd.back);
+  state.printDesignUrl = activeComposite || '';
+  try { window.tshirt360Viewer?.setDesign?.(activeComposite || null); } catch (e) { /* */ }
   updateOverlayPlacement();
-  if (state.interactionMode !== 'rotate') {
-    try { window.tshirt360Viewer?.setDesign?.(null); } catch (e) { /* */ }
-    updateThreeTexture(); return;
-  }
-  const vd = await getCompositeDesignsForViewer(designs);
-  try { window.tshirt360Viewer?.setDesign?.(vd.front || state.printDesignUrl); } catch (e) { /* */ }
-  updateThreeTexture();
 }
 
 function setInteractionMode(mode = 'position') {
@@ -487,31 +649,52 @@ const PRINT_SIZE_PRESETS = {
   xl:     { scale: 1.6,  label: 'Rất lớn' },
 };
 
+function requireSelectedLayer() {
+  const sel = getSelectedLayer();
+  if (!sel) {
+    showToast('Hãy chọn một mẫu trên áo trước (bấm vào mẫu hoặc trong danh sách lớp).', 'warning');
+    return null;
+  }
+  return sel;
+}
+
 function applyPrintPositionPreset(key) {
   const preset = PRINT_POSITION_PRESETS[key];
   if (!preset) return;
-  state.printPlacement = { x: preset.x, y: preset.y, scale: preset.scale };
+  const sel = requireSelectedLayer();
+  if (!sel) return;
+  sel.x = preset.x; sel.y = preset.y; sel.scale = preset.scale;
+  state.printPlacement = { x: sel.x, y: sel.y, scale: sel.scale };
   commitActivePlacements();
   syncPlacementInputs();
-  updateOverlayPlacement();
-  applyCurrentDesignToViewer();
+  refreshSideViews();
   syncPresetChips();
 }
 
 function applyPrintSizePreset(key) {
   const preset = PRINT_SIZE_PRESETS[key];
   if (!preset) return;
-  if (!state.printPlacement) state.printPlacement = { ...PRINT_POSITION_PRESETS.chest };
-  state.printPlacement.scale = preset.scale;
+  const sel = requireSelectedLayer();
+  if (!sel) return;
+  sel.scale = preset.scale;
+  state.printPlacement = { x: sel.x, y: sel.y, scale: sel.scale };
   commitActivePlacements();
   syncPlacementInputs();
-  updateOverlayPlacement();
-  applyCurrentDesignToViewer();
+  refreshSideViews();
   syncPresetChips();
 }
 
+function applyRotationToSelected(deg) {
+  const sel = requireSelectedLayer();
+  if (!sel) return;
+  sel.rotation = clampNum(deg, ...LAYER_BOUNDS.rotation);
+  commitActivePlacements();
+  syncPlacementInputs();
+  refreshSideViews();
+}
+
 function syncPresetChips() {
-  const ip = state.printPlacement || { x: 0, y: -12, scale: 1 };
+  const ip = selectedLayerPlacement();
   let posKey = '';
   for (const [k, v] of Object.entries(PRINT_POSITION_PRESETS)) {
     if (Math.abs(v.x - ip.x) <= 3 && Math.abs(v.y - ip.y) <= 3 && Math.abs(v.scale - ip.scale) <= 0.08) { posKey = k; break; }
@@ -538,8 +721,13 @@ function initPrintPresets() {
   });
 }
 
+function selectedLayerPlacement(side = state.currentView) {
+  const sel = getSelectedLayer(side);
+  return sel ? { x: sel.x, y: sel.y, scale: sel.scale } : getSidePrintPlacement(side);
+}
+
 function getPrintPositionLabel(side = state.currentView) {
-  const ip = getSidePrintPlacement(side);
+  const ip = selectedLayerPlacement(side);
   for (const [k, v] of Object.entries(PRINT_POSITION_PRESETS)) {
     if (Math.abs(v.x - ip.x) <= 3 && Math.abs(v.y - ip.y) <= 3 && Math.abs(v.scale - ip.scale) <= 0.08) return v.label;
   }
@@ -547,7 +735,7 @@ function getPrintPositionLabel(side = state.currentView) {
 }
 
 function getPrintSizeLabel(side = state.currentView) {
-  const ip = getSidePrintPlacement(side);
+  const ip = selectedLayerPlacement(side);
   for (const [k, v] of Object.entries(PRINT_SIZE_PRESETS)) {
     if (Math.abs(v.scale - ip.scale) <= 0.08) return v.label;
   }
@@ -596,7 +784,7 @@ async function openPrintPreview() {
   if (!state.currentDesign && !getActiveDesignUrl()) return;
 
   commitActivePlacements();
-  const frontUrl = getPreparedDesignUrl('front');
+  const frontUrl = await buildSideComposite('front');
   const hasBack = hasBackContent();
   if (!frontUrl && !hasBack) return;
 
@@ -622,14 +810,13 @@ async function openPrintPreview() {
   const thumb = document.getElementById('printSheetDesign');
   thumb.src = frontUrl;
 
-  const composite = frontUrl ? await buildCompositePrintUrl(frontUrl, 'front') : null;
-  const frontSheet = await buildPrintSheetMockup(composite);
+  const frontSheet = await buildPrintSheetMockup(frontUrl || null);
   document.getElementById('printSheetMockup').src = frontSheet;
 
   const backBox = document.getElementById('printSheetBack');
   if (hasBack && backBox) {
-    const backComposite = await buildCompositePrintUrl(getPreparedDesignUrl('back'), 'back');
-    const backSheet = await buildPrintSheetMockup(backComposite);
+    const backComposite = await buildSideComposite('back');
+    const backSheet = await buildPrintSheetMockup(backComposite || null);
     backBox.querySelector('img').src = backSheet;
     backBox.style.display = '';
   } else if (backBox) {
@@ -692,27 +879,33 @@ function generateMockDesign(style, prompt) {
 /* ============================================================
    SHOW DESIGN ON MOCKUP
    ============================================================ */
-async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlank, targetSide) {
+async function showDesignOnMockup(designUrl, productMockupUrl, productMockupBlank, targetSide, meta = {}) {
   const viewer = document.getElementById('canvasViewer');
   const empty = document.getElementById('canvasEmpty');
   if (viewer) viewer.style.display = 'flex';
   if (empty) empty.style.display = 'none';
 
-  state.preparedDesignUrls = { front: null, back: null };
-  if (designUrl) state.preparedDesignUrls.front = designUrl;
-  if (state.currentDesign?.backDesignUrl) state.preparedDesignUrls.back = state.currentDesign.backDesignUrl;
-  if (targetSide === 'back' && designUrl) {
-    state.preparedDesignUrls.front = getFrontDesignUrl() || state.preparedDesignUrls.front;
-    state.preparedDesignUrls.back = designUrl;
+  // ADDITIVE: a new design becomes a new layer — existing layers are kept.
+  // (This fixes generate-B-wipes-A.) Returns the created layer (or null).
+  let created = null;
+  if (designUrl) {
+    const side = targetSide === 'back' ? 'back' : state.currentView;
+    created = addLayer(side, {
+      url: designUrl,
+      name: meta.name,
+      designId: meta.designId || state.currentDesign?.designId || null,
+      prompt: meta.prompt || state.currentDesign?.prompt || '',
+      style: meta.style || state.currentDesign?.style || state.selectedStyle,
+    });
   }
 
-  updateDesignOverlayForSide();
-  applyCurrentDesignToViewer();
+  await refreshSideViews();
   document.getElementById('placementPanel')?.style && (document.getElementById('placementPanel').style.display = 'block');
   updatePrice();
   updateActionButtons(true);
   updateSideBadge();
   updateBackDesignControls();
+  return created;
 }
 
 /* ============================================================
@@ -900,9 +1093,32 @@ function initColorPicker() {
 /* ============================================================
    PRODUCT TYPE SELECTOR
    ============================================================ */
+function syncProductAvailabilityBadges(retries = 10) {
+  const viewer = window.tshirt360Viewer;
+  if (!viewer?.getRegistry) {
+    // tshirt-360.js is an ES module (deferred) and may initialize after this
+    // classic script. Retry briefly; badges are UX-only, never blocking.
+    if (retries > 0) setTimeout(() => syncProductAvailabilityBadges(retries - 1), 500);
+    return;
+  }
+  viewer.getRegistry().forEach((g) => {
+    const btn = document.querySelector(`.product-type-btn[data-product-type="${g.id}"]`);
+    if (!btn) return;
+    btn.classList.toggle('product-3d-missing', !g.available3D);
+    if (!g.available3D && !btn.querySelector('.product-3d-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'product-3d-badge';
+      badge.textContent = '3D sắp có';
+      btn.appendChild(badge);
+    }
+    if (g.available3D) btn.querySelector('.product-3d-badge')?.remove();
+  });
+}
+
 function initProductTypeSelector() {
   const options = document.getElementById('productTypeOptions');
   if (!options) return;
+  syncProductAvailabilityBadges();
   options.querySelectorAll('.product-type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const pt = btn.dataset.productType;
@@ -912,6 +1128,16 @@ function initProductTypeSelector() {
       btn.classList.add('active');
       updatePrice();
       updateMockupColor();
+      // 3D model switch is registry-driven. Unavailable garments (no real
+      // asset yet) NEVER fall back to another garment's model — the viewer
+      // enters a controlled unavailable state and the 2D preview stays.
+      try {
+        const result = window.tshirt360Viewer?.setProduct?.(pt);
+        if (result && result.status === 'unavailable') {
+          const label = pt === 'hoodie' ? 'Hoodie' : pt === 'polo' ? 'Polo' : pt;
+          showToast(`Mẫu 3D ${label} đang được bổ sung — bạn vẫn xem trước 2D và đặt hàng bình thường.`, 'info', 5000);
+        }
+      } catch (e) { /* 3D optional; 2D preview continues */ }
       if (state.currentDesign?.designUrl) applyCurrentDesignToViewer();
     });
   });
@@ -1019,13 +1245,19 @@ function getHistory() {
 function saveToHistory(design) {
   if (!design || design.isDraft) return;
   const history = getHistory();
+  const snapLayers = (side) => sideLayers(side).map(l => ({
+    url: l.url, x: l.x, y: l.y, scale: l.scale, rotation: l.rotation || 0,
+    visible: l.visible !== false, z: l.z, name: l.name,
+    designId: l.designId, prompt: l.prompt, style: l.style,
+  }));
   const entry = {
     id: design.designId || 'design-' + Date.now(),
     prompt: design.prompt || '',
     style: design.style || 'minimalist',
     designUrl: design.designUrl || '',
     frontDesignUrl: design.frontDesignUrl || '',
-    backDesignUrl: design.backDesignUrl || '',
+    backDesignUrl: design.backDesignUrl,
+    layers: { front: snapLayers('front'), back: snapLayers('back') },
     timestamp: Date.now(),
   };
   history.unshift(entry);
@@ -1052,13 +1284,28 @@ function renderHistory() {
   }).join('');
 
   list.querySelectorAll('.history-item').forEach(item => {
-    item.addEventListener('click', (e) => {
+    item.addEventListener('click', async (e) => {
       if (e.target.closest('.history-item-delete')) return;
       const id = item.dataset.id;
       const entry = history.find(h => h.id === id);
       if (entry) {
         state.currentDesign = { success: true, designId: entry.id, designUrl: entry.designUrl, frontDesignUrl: entry.frontDesignUrl || entry.designUrl, backDesignUrl: entry.backDesignUrl, prompt: entry.prompt, style: entry.style, author: 'History' };
-        showDesignOnMockup(state.currentDesign.designUrl);
+        // Restore full multi-layer composition when available; otherwise
+        // fall back to adding the single snapshot URL as one layer.
+        if (entry.layers && (entry.layers.front?.length || entry.layers.back?.length)) {
+          for (const side of ['front', 'back']) {
+            clearSideLayers(side);
+            (entry.layers[side] || []).forEach((l) => {
+              const added = addLayer(side, { url: l.url, name: l.name, designId: l.designId, prompt: l.prompt, style: l.style });
+              if (added) Object.assign(added, { x: l.x, y: l.y, scale: l.scale, rotation: l.rotation || 0, visible: l.visible !== false, z: l.z });
+            });
+          }
+          await refreshSideViews();
+          updateBackDesignControls();
+          updateShareButton();
+        } else {
+          showDesignOnMockup(state.currentDesign.designUrl);
+        }
         const promptInput = document.getElementById('promptInput');
         if (promptInput && entry.prompt) promptInput.value = entry.prompt;
         showToast('Đã khôi phục thiết kế', 'success');
@@ -1127,49 +1374,79 @@ async function generateFromPrompt(targetSide = 'front') {
 
   const draft = generateMockDesign(state.selectedStyle, prompt);
   draft.isDraft = true;
+  // The draft is a real layer marked draft; the AI result REPLACES this same
+  // layer on success (no duplicate) or stays visible on failure.
+  let draftLayerId = null;
   if (isBack) {
     if (!state.currentDesign) state.currentDesign = draft;
     state.currentDesign.backDesignUrl = draft.designUrl;
-    state.preparedDesignUrls.back = draft.designUrl;
-    await showDesignOnMockup(getFrontDesignUrl() || draft.designUrl, null, null, 'back');
+    const created = await showDesignOnMockup(draft.designUrl, null, null, 'back', { name: 'Đang tạo (sau)…', designId: draft.designId, prompt, style: state.selectedStyle });
+    if (created) { created.isDraft = true; draftLayerId = created.id; }
   } else {
     state.currentDesign = draft;
     state.isGeneratingAi = true;
-    await showDesignOnMockup(draft.designUrl);
+    const created = await showDesignOnMockup(draft.designUrl, null, null, undefined, { name: 'Đang tạo…', designId: draft.designId, prompt, style: state.selectedStyle });
+    if (created) { created.isDraft = true; draftLayerId = created.id; }
   }
 
+  const genController = new AbortController();
+  const genTimeout = setTimeout(() => genController.abort(), GEN_FETCH_TIMEOUT_MS);
   try {
     const resp = await fetch(`${API_BASE}/ai-design/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
       body: JSON.stringify({ prompt, style: state.selectedStyle, customText: state.customText, author: auth.user?.fullName || auth.user?.username || '' }),
+      signal: genController.signal,
     });
+    clearTimeout(genTimeout);
     const data = await resp.json();
     if (!resp.ok || data.success === false) throw new Error(formatAiError(data));
     if (data.success && data.designUrl) {
       state.isGeneratingAi = false;
       completeGenProgress(true);
+      const side = isBack ? 'back' : 'front';
+      // Replace the draft layer in place (same id/placement) — never append
+      // a second layer for one generation, never wipe sibling layers.
+      const draftLayer = draftLayerId ? sideLayers(side).find(l => l.id === draftLayerId) : null;
+      if (draftLayer) {
+        draftLayer.url = data.designUrl;
+        draftLayer.isDraft = false;
+        draftLayer.name = data.prompt ? String(data.prompt).slice(0, 24) : draftLayer.name;
+        draftLayer.designId = data.designId || draftLayer.designId;
+        draftLayer.prompt = data.prompt || draftLayer.prompt;
+        draftLayer.style = data.style || draftLayer.style;
+        state.selectedLayerId[side] = draftLayer.id;
+      }
+      state.lastGenerated[side] = data.designUrl;
       if (isBack) {
         if (!state.currentDesign) state.currentDesign = data;
         state.currentDesign.backDesignUrl = data.designUrl;
         state.preparedDesignUrls.back = data.designUrl;
-        updateDesignOverlayForSide();
-        applyCurrentDesignToViewer();
+        await refreshSideViews();
         updateBackDesignControls();
         setViewerSide('back');
         saveToHistory(state.currentDesign);
       } else {
         state.currentDesign = data;
         state.customTextSides = data.customTextSides || state.customTextSides;
-        await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+        state.preparedDesignUrls.front = data.designUrl;
+        await refreshSideViews();
         updateShareButton();
         saveToHistory(data);
       }
+      showToast(`Đã thêm mẫu mới vào mặt ${isBack ? 'sau' : 'trước'}.`, 'success');
     } else {
       failGenProgress();
     }
   } catch (e) {
+    clearTimeout(genTimeout);
     state.isGeneratingAi = false;
+    if (e && e.name === 'AbortError') {
+      failGenProgress('Quá thời gian chờ AI (120s). Vui lòng thử lại.');
+      shakeButton(btn);
+      showToast('AI phản hồi quá lâu (quá 120s). Yêu cầu có thể vẫn đang xử lý ở server — vui lòng đợi một lúc rồi kiểm tra lại, tránh bấm tạo liên tục.', 'error', 7000);
+      setLoading(btn, false); return;
+    }
     failGenProgress();
     if (e.message && e.message !== 'Failed to fetch') {
       shakeButton(btn);
@@ -1215,25 +1492,38 @@ async function generateFromImage() {
     formData.append('customText', state.customText);
     formData.append('author', auth.user?.fullName || auth.user?.username || '');
 
+    const imgController = new AbortController();
+    const imgTimeout = setTimeout(() => imgController.abort(), GEN_FETCH_TIMEOUT_MS);
     const resp = await fetch(`${API_BASE}/ai-design/generate-from-image`, {
       method: 'POST',
       headers: { Authorization: auth.token ? `Bearer ${auth.token}` : '' },
       body: formData,
+      signal: imgController.signal,
     });
+    clearTimeout(imgTimeout);
     const data = await resp.json();
     if (!resp.ok || data.success === false) throw new Error(formatAiError(data));
     if (data.success && data.designUrl) {
       state.currentDesign = data;
       completeGenProgress(true);
-      showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank);
+      state.lastGenerated.front = data.designUrl;
+      await showDesignOnMockup(data.designUrl, data.productMockupUrl, data.productMockupBlank, undefined, { name: String(data.prompt || 'Ảnh remix').slice(0, 24), designId: data.designId, prompt: data.prompt, style: data.style });
       updateShareButton();
       saveToHistory(data);
       showButtonSuccess(btn, '✓ Đã tạo');
+      showToast('Đã thêm mẫu mới vào mặt trước.', 'success');
     } else {
       shakeButton(btn);
       failGenProgress();
     }
   } catch (e) {
+    clearTimeout(imgTimeout);
+    if (e && e.name === 'AbortError') {
+      failGenProgress('Quá thời gian chờ AI (120s). Vui lòng thử lại.');
+      shakeButton(btn);
+      showToast('AI phản hồi quá lâu (quá 120s). Yêu cầu có thể vẫn đang xử lý ở server — vui lòng đợi một lúc rồi kiểm tra lại, tránh bấm tạo liên tục.', 'error', 7000);
+      setLoading(btn, false); return;
+    }
     failGenProgress();
     if (e.message && e.message !== 'Failed to fetch') {
       shakeButton(btn);
@@ -1263,7 +1553,7 @@ function initViewToggle() {
 function setViewerSide(side) {
   const next = side === 'back' ? 'back' : 'front';
   if (state.currentView === next) {
-    if (state.currentDesign || state.printDesignUrl) { updateDesignOverlayForSide(); applyCurrentDesignToViewer(); }
+    if (state.currentDesign || state.printDesignUrl || hasLayerDesigns(next)) { updateDesignOverlayForSide(); applyCurrentDesignToViewer(); }
     updateSideBadge();
     updateBackDesignControls();
     return;
@@ -1279,7 +1569,7 @@ function setViewerSide(side) {
   syncCustomTextInputs();
   updateSideBadge();
   updateBackDesignControls();
-  if (state.currentDesign || state.preparedDesignUrls.front || state.preparedDesignUrls.back) {
+  if (state.currentDesign || state.preparedDesignUrls.front || state.preparedDesignUrls.back || hasLayerDesigns('front') || hasLayerDesigns('back')) {
     updateDesignOverlayForSide();
     applyCurrentDesignToViewer();
   }
@@ -1292,12 +1582,18 @@ function initInteractionMode() {
   document.getElementById('placementModeBtn')?.addEventListener('click', () => setInteractionMode('position'));
   document.getElementById('rotateModeBtn')?.addEventListener('click', () => setInteractionMode('rotate'));
   document.getElementById('resetViewBtn')?.addEventListener('click', () => {
-    state.printPlacement = { ...PRINT_POSITION_PRESETS[state.currentView === 'back' ? 'back' : 'chest'] };
+    // Reset ONLY the selected layer (never the whole side).
+    const sel = getSelectedLayer();
+    const defaults = PRINT_POSITION_PRESETS[state.currentView === 'back' ? 'back' : 'chest'];
+    if (sel) {
+      sel.x = defaults.x; sel.y = defaults.y; sel.scale = defaults.scale; sel.rotation = 0;
+      state.printPlacement = { x: sel.x, y: sel.y, scale: sel.scale };
+    } else {
+      state.printPlacement = { ...defaults };
+    }
     state.textPlacement = getSideTextPlacement(state.currentView);
     commitActivePlacements();
-    syncPlacementInputs();
-    updateOverlayPlacement();
-    applyCurrentDesignToViewer();
+    refreshSideViews();
     try { window.tshirt360Viewer?.showSide?.(state.currentView); } catch (e) { /* */ }
   });
   document.getElementById('removeWhiteBgBtn')?.addEventListener('click', () => {
@@ -1312,12 +1608,28 @@ function initInteractionMode() {
    ============================================================ */
 function syncPlacementInputs() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  set('printPosX', Math.round(state.printPlacement.x));
-  set('printPosY', Math.round(state.printPlacement.y));
-  set('printScale', Math.round(state.printPlacement.scale * 100));
+  const sel = getSelectedLayer();
+  const ip = sel || state.printPlacement;
+  set('printPosX', Math.round(ip.x));
+  set('printPosY', Math.round(ip.y));
+  set('printScale', Math.round(ip.scale * 100));
+  set('printRotation', Math.round(sel ? (sel.rotation || 0) : 0));
   set('textPosX', Math.round(state.textPlacement.x));
   set('textPosY', Math.round(state.textPlacement.y));
   set('textScale', Math.round(state.textPlacement.scale * 100));
+}
+
+// Master refresh for one side: overlay (per-layer DOM) + inputs + list +
+// composite-driven 3D. All transform edits funnel through here.
+async function refreshSideViews() {
+  renderLayersOverlay();
+  syncPlacementInputs();
+  syncPresetChips();
+  try {
+    await applyCurrentDesignToViewer();
+  } catch (e) {
+    console.warn('Viewer refresh failed:', e?.message || e);
+  }
 }
 
 function initPrintControls() {
@@ -1333,13 +1645,27 @@ function initPrintControls() {
     });
   });
 
-  // Image placement
+  // Image placement — always edits the SELECTED layer (never the whole side).
   const bind = (ids, stateKey, defaults) => {
     ids.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener('input', () => {
-        setActivePlacementLayer(stateKey === 'printPlacement' ? 'image' : 'text');
+        if (stateKey === 'printPlacement') {
+          const sel = requireSelectedLayer();
+          if (!sel) return;
+          setActivePlacementLayer('image');
+          sel.x = clampNum(Number(document.getElementById(ids[0])?.value ?? defaults.x), ...LAYER_BOUNDS.x);
+          sel.y = clampNum(Number(document.getElementById(ids[1])?.value ?? defaults.y), ...LAYER_BOUNDS.y);
+          sel.scale = clampNum(Number(document.getElementById(ids[2])?.value ?? defaults.scale * 100) / 100, ...LAYER_BOUNDS.scale, 1);
+          const rotEl = document.getElementById('printRotation');
+          if (rotEl) sel.rotation = clampNum(Number(rotEl.value ?? 0), ...LAYER_BOUNDS.rotation);
+          state.printPlacement = { x: sel.x, y: sel.y, scale: sel.scale };
+          commitActivePlacements();
+          refreshSideViews();
+          return;
+        }
+        setActivePlacementLayer('text');
         state[stateKey] = {
           x: Number(document.getElementById(ids[0])?.value || defaults.x),
           y: Number(document.getElementById(ids[1])?.value || defaults.y),
@@ -1354,15 +1680,27 @@ function initPrintControls() {
   };
   bind(['printPosX', 'printPosY', 'printScale'], 'printPlacement', { x: 0, y: -12, scale: 1 });
   bind(['textPosX', 'textPosY', 'textScale'], 'textPlacement', { x: 0, y: 18, scale: 1 });
+  document.getElementById('printRotation')?.addEventListener('input', (e) => {
+    const sel = requireSelectedLayer();
+    if (!sel) return;
+    sel.rotation = clampNum(Number(e.target.value ?? 0), ...LAYER_BOUNDS.rotation);
+    commitActivePlacements();
+    refreshSideViews();
+  });
 
   document.getElementById('placementReset')?.addEventListener('click', () => {
-    state.printPlacement = { ...PRINT_POSITION_PRESETS[state.currentView === 'back' ? 'back' : 'chest'] };
+    // Reset ONLY the selected layer (never the whole side).
+    const sel = getSelectedLayer();
+    const defaults = PRINT_POSITION_PRESETS[state.currentView === 'back' ? 'back' : 'chest'];
+    if (sel) {
+      sel.x = defaults.x; sel.y = defaults.y; sel.scale = defaults.scale; sel.rotation = 0;
+      state.printPlacement = { x: sel.x, y: sel.y, scale: sel.scale };
+    } else {
+      state.printPlacement = { ...defaults };
+    }
     state.textPlacement = getSideTextPlacement(state.currentView);
     commitActivePlacements();
-    syncPlacementInputs();
-    updateOverlayPlacement();
-    applyCurrentDesignToViewer();
-    syncPresetChips();
+    refreshSideViews();
   });
 
   // Keyboard nudge
@@ -1387,13 +1725,159 @@ function nudgePlacement(layer, dx, dy) {
     state.textPlacement.x = Math.max(-80, Math.min(80, state.textPlacement.x + dx));
     state.textPlacement.y = Math.max(-75, Math.min(45, state.textPlacement.y + dy));
   } else {
-    state.printPlacement.x = Math.max(-80, Math.min(80, state.printPlacement.x + dx));
-    state.printPlacement.y = Math.max(-75, Math.min(45, state.printPlacement.y + dy));
+    const target = getSelectedLayer();
+    if (!target) return;
+    target.x = clampNum(target.x + dx, ...LAYER_BOUNDS.x);
+    target.y = clampNum(target.y + dy, ...LAYER_BOUNDS.y);
   }
   commitActivePlacements();
   syncPlacementInputs();
-  updateOverlayPlacement();
-  applyCurrentDesignToViewer();
+  renderLayersOverlay();
+  scheduleViewerUpdate();
+}
+
+/* ============================================================
+   MULTI-DESIGN LAYERS — independent entities per garment side
+   ============================================================ */
+const LAYER_BOUNDS = { x: [-80, 80], y: [-75, 45], scale: [0.2, 2.2], rotation: [0, 360] };
+
+function clampNum(v, min, max, fallback = 0) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function layerUid(prefix) {
+  return (prefix || 'layer') + '-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
+}
+
+function sideLayers(side) {
+  const k = side === 'back' ? 'back' : 'front';
+  if (!state.designLayers) state.designLayers = { front: [], back: [] };
+  if (!Array.isArray(state.designLayers[k])) state.designLayers[k] = [];
+  return state.designLayers[k];
+}
+
+function sanitizeLayer(l) {
+  l.x = clampNum(l.x, ...LAYER_BOUNDS.x);
+  l.y = clampNum(l.y, ...LAYER_BOUNDS.y);
+  l.scale = clampNum(l.scale, ...LAYER_BOUNDS.scale, 1);
+  l.rotation = clampNum(l.rotation, ...LAYER_BOUNDS.rotation);
+  l.visible = l.visible !== false;
+  if (!Number.isFinite(l.z)) l.z = 0;
+  return l;
+}
+
+function getSelectedLayer(side = state.currentView) {
+  const layers = sideLayers(side).filter(l => l.visible !== false);
+  if (!layers.length) return null;
+  const k = side === 'back' ? 'back' : 'front';
+  const sel = layers.find(l => l.id === state.selectedLayerId[k]);
+  if (sel) return sel;
+  return [...layers].sort((a, b) => b.z - a.z)[0];
+}
+
+function syncCurrentDesignFromSelection(side = state.currentView) {
+  // Compatibility: share/order/download read state.currentDesign.
+  // It mirrors the SELECTED layer's metadata (never merges layers).
+  const sel = getSelectedLayer(side);
+  if (!sel) return;
+  state.currentDesign = {
+    success: true,
+    designId: sel.designId || ('layer-' + sel.id),
+    designUrl: sel.url,
+    frontDesignUrl: sel.url,
+    backDesignUrl: '',
+    prompt: sel.prompt || '',
+    style: sel.style || 'minimalist',
+    author: 'You',
+  };
+}
+
+function selectLayer(side, id) {
+  const k = side === 'back' ? 'back' : 'front';
+  const layers = sideLayers(k);
+  if (id != null && !layers.some(l => l.id === id)) return null;
+  state.selectedLayerId[k] = id;
+  const sel = getSelectedLayer(k);
+  if (sel) {
+    // Mirror selection into legacy single-placement buffer for inputs.
+    state.printPlacement = { x: sel.x, y: sel.y, scale: sel.scale };
+    syncCurrentDesignFromSelection(k);
+  }
+  syncPlacementInputs();
+  syncPresetChips();
+  renderLayersOverlay();
+  renderLayerList();
+  return sel;
+}
+
+function addLayer(side, { url, name, designId, prompt, style, x, y, scale, rotation } = {}) {
+  if (!url) return null;
+  const k = side === 'back' ? 'back' : 'front';
+  const layers = sideLayers(k);
+  const maxZ = layers.reduce((m, l) => Math.max(m, Number(l.z) || 0), 0);
+  const layer = sanitizeLayer({
+    id: layerUid('layer'),
+    url,
+    kind: 'image',
+    x: x !== undefined ? x : 0,
+    y: y !== undefined ? y : -12,
+    scale: scale !== undefined ? scale : 1,
+    rotation: rotation !== undefined ? rotation : 0,
+    visible: true,
+    z: maxZ + 1,
+    name: name || `Mẫu ${layers.length + 1}`,
+    designId: designId || null,
+    prompt: prompt || '',
+    style: style || 'minimalist',
+    createdAt: Date.now(),
+  });
+  layers.push(layer);
+  state.selectedLayerId[k] = layer.id;
+  state.printPlacement = { x: layer.x, y: layer.y, scale: layer.scale };
+  syncCurrentDesignFromSelection(k);
+  return layer;
+}
+
+function removeLayer(side, id) {
+  const k = side === 'back' ? 'back' : 'front';
+  const layers = sideLayers(k);
+  const idx = layers.findIndex(l => l.id === id);
+  if (idx === -1) return false;
+  layers.splice(idx, 1);
+  // Renormalize z to keep order dense.
+  [...layers].sort((a, b) => a.z - b.z).forEach((l, i) => { l.z = i + 1; });
+  if (state.selectedLayerId[k] === id) state.selectedLayerId[k] = null;
+  return true;
+}
+
+function moveLayerZ(side, id, dir) {
+  const layers = [...sideLayers(side)].sort((a, b) => a.z - b.z);
+  const idx = layers.findIndex(l => l.id === id);
+  const j = idx + dir;
+  if (idx === -1 || j < 0 || j >= layers.length) return false;
+  const [moved] = layers.splice(idx, 1);
+  layers.splice(j, 0, moved);
+  layers.forEach((l, i) => { l.z = i + 1; });
+  return true;
+}
+
+function replaceLayerUrl(side, id, url) {
+  const layer = sideLayers(side).find(l => l.id === id);
+  if (!layer || !url) return false;
+  layer.url = url;
+  return true;
+}
+
+function clearSideLayers(side) {
+  const k = side === 'back' ? 'back' : 'front';
+  state.designLayers[k] = [];
+  state.selectedLayerId[k] = null;
+}
+
+function hasLayerDesigns(side) {
+  return sideLayers(side).some(l => l.visible !== false && l.url);
 }
 
 /* ============================================================
@@ -1515,10 +1999,14 @@ async function submitOrder() {
   submitBtn.style.willChange = 'transform';
 
   commitActivePlacements();
+  // The order captures the full side compositions (all layers + text),
+  // never a single design URL — what you see is what gets printed.
+  const orderFrontComposite = await buildSideComposite('front');
+  const orderBackComposite = await buildSideComposite('back');
   const orderData = {
-    designUrl: state.currentDesign?.designUrl || '',
-    frontDesignUrl: getFrontDesignUrl(),
-    backDesignUrl: getBackDesignUrl(),
+    designUrl: orderFrontComposite || state.currentDesign?.designUrl || '',
+    frontDesignUrl: orderFrontComposite || getFrontDesignUrl(),
+    backDesignUrl: orderBackComposite || getBackDesignUrl(),
     productType: state.selectedProductType,
     color: state.selectedColor,
     size: state.selectedSize,
@@ -1619,7 +2107,8 @@ function showOrderSuccess(orderId, payment, transferContent) {
 function initDownload() {
   document.getElementById('downloadBtn')?.addEventListener('click', async () => {
     if (requireAuth()) return;
-    const url = getActiveDesignUrl();
+    // Download what is actually on the current side (full composition).
+    const url = await buildSideComposite(state.currentView) || getActiveDesignUrl();
     if (!url) return;
     const link = document.createElement('a');
     if (url.startsWith('data:')) {
@@ -1646,23 +2135,37 @@ function initDownload() {
 function initShareDesign() {
   document.getElementById('shareDesignBtn')?.addEventListener('click', async () => {
     if (requireAuth()) return;
-    if (!state.currentDesign?.designId || state.currentDesign?.isDraft || state.currentDesign?.designId?.startsWith('community-') || state.currentDesign?.designId?.startsWith('text-only-')) {
+    // Share = publish the CURRENT garment composition under the selected
+    // layer's source design identity. Identity is verified server-side from
+    // the session; nothing sensitive is sent from the client.
+    const sel = getSelectedLayer();
+    const designId = sel?.designId || state.currentDesign?.designId;
+    if (!designId || state.currentDesign?.isDraft || String(designId).startsWith('community-') || String(designId).startsWith('text-only-')) {
       showToast('Cần có thiết kế AI thật để chia sẻ!', 'warning'); return;
     }
+    if (!confirm('Chia sẻ mẫu này lên cộng đồng? Ảnh và tên hiển thị của bạn sẽ công khai.')) return;
     const btn = document.getElementById('shareDesignBtn');
     btn.disabled = true; btn.textContent = 'Đang chia sẻ…';
     try {
-      const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(state.currentDesign.designId)}/share`, {
+      const frontComposite = await buildSideComposite('front');
+      const backComposite = await buildSideComposite('back');
+      const resp = await fetch(`${API_BASE}/ai-design/${encodeURIComponent(designId)}/share`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth.token ? `Bearer ${auth.token}` : '' },
-        body: JSON.stringify({ designUrl: state.currentDesign.designUrl, frontDesignUrl: getFrontDesignUrl(), backDesignUrl: getBackDesignUrl(), prompt: state.currentDesign.prompt, style: state.currentDesign.style, author: auth.user?.fullName || auth.user?.username || '', userId: auth.user?.id || null, authorUsername: auth.user?.username || null }),
+        body: JSON.stringify({
+          designUrl: sel?.url || frontComposite || state.currentDesign.designUrl,
+          frontDesignUrl: frontComposite || getFrontDesignUrl(),
+          backDesignUrl: backComposite || getBackDesignUrl(),
+          prompt: sel?.prompt || state.currentDesign.prompt,
+          style: sel?.style || state.currentDesign.style,
+        }),
       });
       const result = await resp.json();
       if (!resp.ok || result.success === false) throw new Error(result.error || 'Share failed');
-      state.currentDesign.isShared = true;
+      if (state.currentDesign) state.currentDesign.isShared = true;
       updateShareButton();
       loadCommunityDesigns();
-      showToast('Đã chia sẻ thiết kế!', 'success');
+      showToast(result.alreadyShared ? 'Mẫu này đã được chia sẻ trước đó.' : 'Đã chia sẻ thiết kế!', 'success');
     } catch (e) { showToast(e.message || 'Chia sẻ thất bại', 'error'); }
     btn.disabled = false; btn.textContent = 'Chia sẻ';
   });
@@ -1711,11 +2214,13 @@ async function loadCommunityDesigns() {
   grid.querySelectorAll('.community-card-img-wrap').forEach(wrap => {
     wrap.addEventListener('click', () => {
       state.currentDesign = { success: true, designId: 'community-' + Date.now(), designUrl: wrap.dataset.url, frontDesignUrl: wrap.dataset.url, backDesignUrl: wrap.dataset.back, prompt: wrap.dataset.prompt, style: wrap.dataset.style, author: wrap.dataset.author };
-      showDesignOnMockup(wrap.dataset.url);
+      // Additive like every other source: community picks join the layers.
+      showDesignOnMockup(wrap.dataset.url, null, null, undefined, { name: String(wrap.dataset.prompt || 'Cộng đồng').slice(0, 24), designId: state.currentDesign.designId, prompt: wrap.dataset.prompt, style: wrap.dataset.style });
       const pi = document.getElementById('promptInput');
       if (pi && wrap.dataset.prompt) pi.value = wrap.dataset.prompt;
       const sb = document.querySelector(`.style-chip[data-style="${wrap.dataset.style}"]`);
       if (sb) { document.querySelectorAll('.style-chip').forEach(b => b.classList.remove('active')); sb.classList.add('active'); state.selectedStyle = wrap.dataset.style; }
+      showToast('Đã thêm mẫu cộng đồng vào áo.', 'success');
     });
   });
 

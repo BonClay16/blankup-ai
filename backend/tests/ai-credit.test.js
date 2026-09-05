@@ -74,19 +74,21 @@ describe('P0-03: AI Credit — endpoint security', () => {
   });
 
   describe('POST /api/ai-design/:id/share', () => {
-    it('should share a design', async () => {
+    // Sharing requires owner authentication (privacy contract — see
+    // community-privacy.test.js for the authenticated paths).
+    it('should return 401 without token', async () => {
       const res = await request(app)
         .post('/api/ai-design/design-test/share')
         .send({ designUrl: '/uploads/test.png', prompt: 'test' });
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
     });
 
-    it('should return 400 without designUrl', async () => {
+    it('should return 401 without token even without designUrl (auth first)', async () => {
       const res = await request(app)
         .post('/api/ai-design/design-test/share')
         .send({ prompt: 'test' });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(401);
     });
   });
 

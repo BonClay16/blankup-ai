@@ -8,15 +8,7 @@
   <meta name="theme-color" content="#b43e12">
   <title>Tài khoản của tôi — Blankup</title>
 
-  <script>
-    (function() {
-      var token = localStorage.getItem('blankup_token');
-      var userStr = localStorage.getItem('blankup_user');
-      if (!token || !userStr) {
-        window.location.href = '/login.html';
-      }
-    })();
-  </script>
+  <script src="js/guard-account.js"></script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,8 +30,8 @@
         <span>BLANK<span class="logo-highlight">UP</span></span>
       </a>
       <div class="navbar-menu" id="navMenu">
-        <a href="/#hero" data-i18n="nav.home">Trang chủ</a>
-        <a href="/#products" data-i18n="nav.products">Bộ sưu tập</a>
+        <a href="/" data-i18n="nav.home">Trang chủ</a>
+        <a href="pricing.html">Gói AI</a>
         <a href="studio.html" data-i18n="nav.studio">AI Studio</a>
         <a href="showroom.html">3D Showroom</a>
       </div>
@@ -183,7 +175,28 @@
         </div>
         <div class="account-card">
           <div class="account-card-title">Mua gói AI</div>
-          <div class="account-card-desc">Nâng cấp gói để nhận thêm credit và chất lượng output cao hơn.</div>
+          <div class="account-card-desc">Nâng cấp gói để nhận thêm credit và chất lượng output cao hơn. Chọn voucher (không bắt buộc) để xem giá cuối cùng trước khi thanh toán.</div>
+          <!-- Voucher selector (Phase 1D+1E) -->
+          <div id="voucherPanel" style="margin-bottom:18px; padding:14px; border:1px dashed var(--border); border-radius:10px; background:var(--bg-secondary, #faf7f1);">
+            <div style="font-weight:700; font-size:0.88rem; margin-bottom:8px;">Voucher</div>
+            <div id="voucherAvailableList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.88rem;"><input type="radio" name="voucherChoice" value="" checked> <span>Không dùng voucher</span></label>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <input type="text" id="voucherInput" placeholder="Hoặc nhập mã voucher" style="flex:1; min-width:160px; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:0.88rem; text-transform:uppercase;">
+              <button type="button" class="btn btn-secondary btn-sm" id="voucherApplyBtn" style="white-space:nowrap;">Áp dụng</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="voucherClearBtn" style="white-space:nowrap;">Bỏ voucher</button>
+            </div>
+            <div id="voucherStatus" style="margin-top:10px; font-size:0.82rem; min-height:18px;"></div>
+            <div id="voucherQuotePreview" style="display:none; margin-top:12px; padding:12px; background:#fff; border:1px solid var(--border); border-radius:8px; font-size:0.86rem; line-height:1.5;">
+              <div>Giá gốc: <span id="quotePrice" style="font-weight:700;"></span></div>
+              <div>Giảm voucher: <span id="quoteDiscount" style="font-weight:700; color:#16a34a;"></span> <span id="quoteSaving" style="color:var(--text-muted);"></span></div>
+              <div>Tổng thanh toán: <strong id="quoteFinal" style="color:var(--rust); font-size:1rem;"></strong></div>
+              <div>Nhận: <span id="quoteCredits" style="font-weight:600;"></span></div>
+              <div id="quoteVoucherCode" style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;"></div>
+            </div>
+          </div>
+          <div class="account-card-desc" style="margin-bottom:10px; font-size:0.82rem;">Chọn gói bên dưới, hệ thống sẽ áp dụng voucher đã chọn và hiển thị giá cuối cùng trước khi tạo đơn.</div>
           <div class="account-plan-list" id="planList">
             <div class="account-loading">Đang tải danh sách gói...</div>
           </div>
@@ -199,21 +212,38 @@
     </div>
   </section>
 
-  <!-- Plan Purchase Modal -->
-  <div id="planPurchaseModal" class="modal-overlay" style="display:none;">
-    <div class="modal-content" style="max-width:420px; padding:32px; border-radius:16px;">
-      <button id="planPurchaseClose" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:20px; cursor:pointer; color:var(--s-text-muted);">✕</button>
-      <h3 id="planPurchaseTitle" style="margin:0 0 16px; font-size:1.1rem; font-weight:700;">Thanh toán</h3>
-      <div id="planPurchaseInfo" style="font-size:0.85rem; color:var(--s-text-muted); margin-bottom:16px;"></div>
-      <div style="text-align:center; margin-bottom:16px;">
-        <img id="planPurchaseQr" src="" alt="QR thanh toán" style="max-width:280px; border-radius:8px; border:1px solid var(--s-border);">
+  <!-- Plan Purchase Modal — Phase 1F+1G -->
+  <div id="planPurchaseModal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); align-items:center; justify-content:center; z-index:9999; padding:20px;">
+    <div class="modal-content" style="max-width:480px; width:100%; padding:28px; border-radius:16px; background:#fff; position:relative; max-height:90vh; overflow:auto;">
+      <button id="planPurchaseClose" style="position:absolute; top:12px; right:16px; background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);">✕</button>
+      <h3 id="planPurchaseTitle" style="margin:0 0 12px; font-size:1.15rem; font-weight:800;">Thanh toán</h3>
+      <!-- Quote breakdown (Phase 1F) -->
+      <div id="purchaseBreakdown" style="background:var(--bg-secondary, #faf7f1); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:16px; font-size:0.88rem; line-height:1.6; display:none;">
+        <div style="display:flex; justify-content:space-between;"><span>Tên gói</span><strong id="breakdownPlanName">—</strong></div>
+        <div style="display:flex; justify-content:space-between;"><span>Giá niêm yết</span><span id="breakdownPrice">—</span></div>
+        <div id="breakdownDiscountRow" style="display:flex; justify-content:space-between; color:#16a34a;"><span>Voucher <span id="breakdownVoucherCode"></span></span><span id="breakdownDiscount">—</span></div>
+        <div style="display:flex; justify-content:space-between; border-top:1px solid var(--border); margin-top:8px; padding-top:8px;"><span>Tổng thanh toán</span><strong id="breakdownFinal" style="color:var(--rust); font-size:1.05rem;">—</strong></div>
+        <div style="display:flex; justify-content:space-between; margin-top:6px; color:var(--text-muted); font-size:0.84rem;"><span>Nhận</span><span id="breakdownCredits">—</span></div>
       </div>
-      <div style="font-size:0.82rem; color:var(--s-text-muted); text-align:center; margin-bottom:12px;">
+      <div id="planPurchaseInfo" style="font-size:0.85rem; color:var(--text-muted); margin-bottom:14px; display:none;"></div>
+      <div id="qrSection" style="text-align:center; margin-bottom:14px; display:none;">
+        <img id="planPurchaseQr" src="" alt="QR thanh toán" style="max-width:280px; width:100%; border-radius:8px; border:1px solid var(--border);">
+      </div>
+      <div id="transferSection" style="font-size:0.82rem; color:var(--text-muted); text-align:center; margin-bottom:14px; display:none;">
         <div>Nội dung chuyển khoản:</div>
-        <div id="planPurchaseTransferContent" style="font-weight:700; color:var(--s-text); font-size:0.95rem; margin-top:4px; letter-spacing:0.5px;"></div>
+        <div id="planPurchaseTransferContent" style="font-weight:800; color:var(--text-heading); font-size:1rem; margin-top:4px; letter-spacing:0.5px; user-select:all;"></div>
       </div>
-      <div style="font-size:0.78rem; color:var(--s-text-muted); text-align:center;">
-        Sau khi chuyển khoản, credit sẽ được cộng tự động trong vài phút.
+      <div id="paymentStatusBox" style="text-align:center; font-size:0.88rem; margin-bottom:12px; display:none;">
+        <div id="paymentStatusText" style="font-weight:700;"></div>
+        <div id="paymentStatusHint" style="font-size:0.82rem; color:var(--text-muted); margin-top:6px;"></div>
+        <div id="pollingInfo" style="font-size:0.78rem; color:var(--text-muted); margin-top:8px;"></div>
+      </div>
+      <div id="postPurchaseActions" style="display:flex; gap:10px; justify-content:center; display:none;">
+        <button id="checkAgainBtn" class="btn btn-secondary btn-sm">Kiểm tra lại</button>
+        <button id="purchaseCloseDoneBtn" class="btn btn-primary btn-sm">Hoàn tất</button>
+      </div>
+      <div style="font-size:0.78rem; color:var(--text-muted); text-align:center; margin-top:10px;">
+        Sau khi chuyển khoản, credit sẽ được cộng tự động trong vài phút. QR dùng số tiền <strong>finalAmount</strong> từ backend.
       </div>
     </div>
   </div>

@@ -738,17 +738,26 @@ async function editOpenAIImage(file, idea, designId) {
   return { designUrl: saveGeneratedImage(extractBase64Image(data), designId), finalPrompt: prompt || legacyPrompt };
 }
 
-function saveDesignRecord({ designId, prompt, style, author, designUrl, productMockupUrl, productMockupBlank, sourceImage, finalPrompt, finalProductPrompt }) {
+function saveDesignRecord({ designId, prompt, style, author, userId, designUrl, productMockupUrl, productMockupBlank, sourceImage, finalPrompt, finalProductPrompt }) {
   const designs = readDesigns();
   designs.push({
-    id: designId,
+    designId,
     prompt,
     promptEn: prompt,
     style: style || DEFAULT_STYLE,
     author: author || 'Guest',
-    likes: 0,
-    createdAt: new Date().toISOString().split('T')[0],
+    userId: userId || null,
+    authorUsername: null,
     designUrl,
+    frontDesignUrl: designUrl,
+    backDesignUrl: '',
+    // Privacy default: a fresh generation is PRIVATE. It appears in the
+    // public gallery ONLY after the owner explicitly shares it.
+    isShared: false,
+    sharedAt: null,
+    likes: 0,
+    likedBy: [],
+    createdAt: new Date().toISOString(),
     productMockupUrl,
     productMockupBlank: Boolean(productMockupBlank),
     sourceImage,
@@ -860,6 +869,7 @@ router.post('/generate', authenticate, async (req, res) => {
       prompt,
       style: style || DEFAULT_STYLE,
       author: authorName,
+      userId: req.user.id,
       designUrl,
       productMockupUrl,
       productMockupBlank: Boolean(productMockupUrl),
@@ -953,6 +963,7 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
       prompt: idea || 'Remix from image',
       style: 'abstract',
       author,
+      userId: req.user.id,
       designUrl,
       sourceImage: `/uploads/${file.filename}`,
       finalPrompt,
@@ -976,11 +987,14 @@ router.post('/generate-from-image', authenticate, upload.single('image'), async 
 
 // ---------------------------------------------------------------------------
 // POST /api/ai-design/:id/share  — Share design to community gallery
+// Explicit owner consent. Requires authentication; the owner identity comes
+// from the session (JWT), never from client-supplied userId. Sharing is
+// idempotent: repeated calls do NOT create duplicate records.
 // ---------------------------------------------------------------------------
-router.post('/:id/share', galleryLimiter, (req, res) => {
+router.post('/:id/share', galleryLimiter, authenticate, (req, res) => {
   try {
     const designId = decodeURIComponent(req.params.id);
-    const { designUrl, frontDesignUrl, backDesignUrl, prompt, style, author, userId, authorUsername } = req.body;
+    const { designUrl, frontDesignUrl, backDesignUrl, prompt, style } = req.body;
 
     if (!designUrl) {
       return res.status(400).json({ success: false, error: 'designUrl is required' });
@@ -990,34 +1004,81 @@ router.post('/:id/share', galleryLimiter, (req, res) => {
     const existing = designs.find(d => d.designId === designId);
 
     if (existing) {
+      // Ownership: a design already owned by someone else cannot be shared
+      // by another user (IDOR protection).
+      if (existing.userId && existing.userId !== req.user.id) {
+        return res.status(403).json({ success: false, error: 'Bạn không có quyền chia sẻ thiết kế này.' });
+      }
+      const alreadyShared = existing.isShared === true;
       existing.isShared = true;
-      existing.sharedAt = new Date().toISOString();
-      if (userId && !existing.userId) existing.userId = userId;
-      if (authorUsername && !existing.authorUsername) existing.authorUsername = authorUsername;
+      if (!alreadyShared) existing.sharedAt = new Date().toISOString();
+      // Identity always comes from the authenticated session.
+      existing.userId = req.user.id;
+      existing.authorUsername = req.user.username;
+      existing.author = req.user.fullName || req.user.username || existing.author || 'Community';
       writeDesigns(designs);
-    } else {
-      designs.push({
-        designId,
-        prompt: prompt || '',
-        style: style || 'abstract',
-        author: author || 'Community',
-        userId: userId || null,
-        authorUsername: authorUsername || null,
-        designUrl,
-        frontDesignUrl: frontDesignUrl || designUrl,
-        backDesignUrl: backDesignUrl || '',
-        isShared: true,
-        sharedAt: new Date().toISOString(),
-        likes: 0,
-      });
-      writeDesigns(designs);
+      console.log(`[AI-Design] Design ${designId} shared to gallery by ${req.user.username}${alreadyShared ? ' (already shared, idempotent)' : ''}`);
+      return res.json({ success: true, message: 'Design shared successfully', alreadyShared });
     }
 
-    console.log(`[AI-Design] Design ${designId} shared to gallery`);
-    res.json({ success: true, message: 'Design shared successfully' });
+    // Sharing a client-side composition not yet stored server-side: create
+    // the record owned by the caller, shared from the start (explicit consent
+    // = this authenticated call).
+    designs.push({
+      designId,
+      prompt: prompt || '',
+      style: style || 'abstract',
+      author: req.user.fullName || req.user.username || 'Community',
+      userId: req.user.id,
+      authorUsername: req.user.username,
+      designUrl,
+      frontDesignUrl: frontDesignUrl || designUrl,
+      backDesignUrl: backDesignUrl || '',
+      isShared: true,
+      sharedAt: new Date().toISOString(),
+      likes: 0,
+      likedBy: [],
+    });
+    writeDesigns(designs);
+
+    console.log(`[AI-Design] Design ${designId} shared to gallery by ${req.user.username}`);
+    res.json({ success: true, message: 'Design shared successfully', alreadyShared: false });
   } catch (err) {
     console.error('[AI-Design] Error sharing design:', err.message);
     res.status(500).json({ success: false, error: 'Failed to share design' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/ai-design/:id/unshare  — Remove design from community gallery
+// Owner-only. The design itself is kept (private), only visibility changes.
+// ---------------------------------------------------------------------------
+router.post('/:id/unshare', galleryLimiter, authenticate, (req, res) => {
+  try {
+    const designId = decodeURIComponent(req.params.id);
+    const designs = readDesigns();
+    const existing = designs.find(d => d.designId === designId);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Design not found' });
+    }
+    if (existing.userId && existing.userId !== req.user.id) {
+      return res.status(403).json({ success: false, error: 'Bạn không có quyền gỡ chia sẻ thiết kế này.' });
+    }
+    // Legacy records without owner: only allow unshare when nothing proves
+    // another owner; bind ownership to the caller for future checks.
+    if (!existing.userId) {
+      existing.userId = req.user.id;
+      existing.authorUsername = existing.authorUsername || req.user.username;
+    }
+    existing.isShared = false;
+    writeDesigns(designs);
+
+    console.log(`[AI-Design] Design ${designId} unshared by ${req.user.username}`);
+    res.json({ success: true, message: 'Đã gỡ thiết kế khỏi cộng đồng.' });
+  } catch (err) {
+    console.error('[AI-Design] Error unsharing design:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to unshare design' });
   }
 });
 
@@ -1118,8 +1179,31 @@ router.post('/:id/comments', galleryLimiter, authenticate, (req, res) => {
 
 // ---------------------------------------------------------------------------
 // GET /api/ai-design/gallery
-// Return sample designs with their SVG thumbnails
+// PUBLIC endpoint: returns ONLY explicitly shared designs. Privacy filtering
+// happens server-side (isShared === true); private records never leave the
+// server in this response. Public payload exposes no userIds, emails, or
+// internal fields — only display-safe data + author display name.
 // ---------------------------------------------------------------------------
+function toPublicDesign(d, commentCount) {
+  const displayName = d.authorUsername || d.author || 'Community';
+  return {
+    designId: d.designId,
+    prompt: d.prompt || '',
+    style: d.style || 'abstract',
+    authorName: displayName,
+    author: displayName, // backward-compat alias for existing community cards
+    authorUsername: d.authorUsername || null,
+    designUrl: d.designUrl || (d.sourceImage ? getFromImageSvg() : getDesignSvg(d.style)),
+    frontDesignUrl: d.frontDesignUrl || d.designUrl || null,
+    backDesignUrl: d.backDesignUrl || '',
+    productMockupUrl: d.productMockupUrl || null,
+    likes: typeof d.likes === 'number' ? d.likes : 0,
+    commentCount: commentCount || 0,
+    sharedAt: d.sharedAt || null,
+    createdAt: d.createdAt || null,
+  };
+}
+
 router.get('/gallery', (req, res) => {
   try {
     const designs = readDesigns();
@@ -1128,25 +1212,18 @@ router.get('/gallery', (req, res) => {
       acc[c.designId] = (acc[c.designId] || 0) + 1;
       return acc;
     }, {});
-    const galleryWithImages = designs.map((d) => ({
-      ...d,
-      designUrl: d.designUrl || (d.sourceImage ? getFromImageSvg() : getDesignSvg(d.style)),
-      productMockupUrl: d.productMockupUrl || null,
-      commentCount: commentCountByDesign[d.designId] || 0,
-    }));
+    // Privacy boundary: ONLY shared designs, filtered here — never frontend.
+    const shared = designs.filter((d) => d.isShared === true && (d.designUrl || d.frontDesignUrl));
+    const galleryWithImages = shared.map((d) => toPublicDesign(d, commentCountByDesign[d.designId]));
     // Sort: newest first
     const sortedGallery = [...galleryWithImages].reverse();
-    // Pagination (R5)
-    let data = sortedGallery;
-    let pagination;
-    if (req.query.page != null || req.query.limit != null) {
-      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-      const offset = (page - 1) * limit;
-      data = sortedGallery.slice(offset, offset + limit);
-      pagination = { page, limit, total: sortedGallery.length, totalPages: Math.ceil(sortedGallery.length / limit) };
-    }
-    res.json({ success: true, count: data.length, total: sortedGallery.length, data, ...(pagination ? { pagination } : {}) });
+    // Pagination: always bounded (default 20) — never dump the whole store.
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    const data = sortedGallery.slice(offset, offset + limit);
+    const pagination = { page, limit, total: sortedGallery.length, totalPages: Math.ceil(sortedGallery.length / limit) };
+    res.json({ success: true, count: data.length, total: sortedGallery.length, data, pagination });
   } catch (err) {
     console.error('[AI-Design] Error fetching gallery:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch gallery' });

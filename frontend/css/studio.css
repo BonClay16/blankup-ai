@@ -1042,6 +1042,50 @@
   max-height: 400px;
 }
 
+/* Honest unavailable-garment state: never render another garment's model.
+   The WebGL canvas hides; the 2D preview + notice stay visible. */
+.garment-unavailable-msg {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  max-width: min(420px, 90%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(20, 16, 12, 0.82);
+  color: #f6f3ec;
+  font-size: 0.78rem;
+  text-align: center;
+  pointer-events: none;
+  z-index: 3;
+}
+.canvas-viewer.garment-unavailable .viewer-canvas {
+  display: none;
+}
+.canvas-viewer.garment-unavailable .garment-unavailable-msg:not([hidden]) {
+  display: block;
+}
+
+/* Product selector: mark garments without a real 3D asset yet. */
+.product-type-btn {
+  position: relative;
+}
+.product-3d-badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--s-surface, #2a2620);
+  border: 1px solid var(--s-border);
+  color: var(--s-text-muted, #a8a29e);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .viewer-design-overlay {
   position: absolute;
   top: 50%;
@@ -1291,6 +1335,98 @@
   background: var(--s-accent-glow);
   border-color: var(--s-accent);
   color: var(--s-accent);
+}
+
+/* Multi-design layer list */
+.layer-section {
+  margin-top: var(--s-space-3);
+}
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.layer-empty {
+  font-size: 0.78rem;
+  color: var(--s-text-muted);
+  border: 1px dashed var(--s-border);
+  border-radius: var(--s-radius);
+  padding: 10px 12px;
+}
+.layer-hint {
+  font-size: 0.72rem;
+  color: var(--s-text-muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  background: var(--s-card);
+  cursor: pointer;
+}
+.layer-row.selected {
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 1px var(--s-accent);
+}
+.layer-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--s-border);
+  flex-shrink: 0;
+}
+.layer-info {
+  flex: 1;
+  min-width: 0;
+}
+.layer-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--s-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.layer-meta {
+  font-size: 0.7rem;
+  color: var(--s-text-muted);
+}
+.layer-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.layer-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  border-radius: 8px;
+  border: 1px solid var(--s-border);
+  background: transparent;
+  color: var(--s-text-secondary);
+  cursor: pointer;
+}
+.layer-btn:hover:not(:disabled) {
+  border-color: var(--s-accent);
+  color: var(--s-accent);
+}
+.layer-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.layer-btn.layer-del:hover {
+  border-color: #dc2626;
+  color: #dc2626;
 }
 
 .placement-sliders {
@@ -2434,6 +2570,24 @@
   .gen-progress-card {
     padding: var(--s-space-6) var(--s-space-5);
   }
+
+  /* No horizontal page overflow on small phones: navbar shrinks, toolbar
+     scrolls internally, canvas controls wrap instead of overflowing. */
+  .navbar .container { gap: 8px; }
+  .navbar-actions { gap: 6px; margin-left: auto; }
+  .navbar-actions .btn span[data-i18n="nav.home"] { display: none; }
+  .navbar-actions .theme-toggle { display: none; }
+  .navbar-actions .btn { padding: 7px 10px; }
+  .navbar-actions .lang-toggle span { padding: 5px 8px; }
+  .studio-toolbar-inner {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .studio-toolbar-inner::-webkit-scrollbar { display: none; }
+  .toolbar-tab { padding: 12px 12px; flex-shrink: 0; }
+  .canvas-controls { flex-wrap: wrap; row-gap: 8px; }
+  .canvas-controls-right { margin-left: auto; }
 }
 
 /* ============================================================

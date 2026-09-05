@@ -253,6 +253,22 @@ async function createTables() {
       ALTER TABLE dbo.Designs ADD isShared BIT NOT NULL DEFAULT 1;
     IF COL_LENGTH(N'Designs', N'updatedAt') IS NULL
       ALTER TABLE dbo.Designs ADD updatedAt DATETIME NULL;
+
+    -- VerificationCodes: code must hold SHA-256 hex (64 chars); add attempts tracking
+    IF COL_LENGTH(N'VerificationCodes', N'code') IS NOT NULL
+      BEGIN
+        DECLARE @codeLen INT = (SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'VerificationCodes' AND COLUMN_NAME = 'code');
+        IF @codeLen IS NOT NULL AND @codeLen < 64
+          ALTER TABLE dbo.VerificationCodes ALTER COLUMN code NVARCHAR(64) NOT NULL;
+      END
+    IF COL_LENGTH(N'VerificationCodes', N'attempts') IS NULL
+      ALTER TABLE dbo.VerificationCodes ADD attempts INT NOT NULL DEFAULT 0;
+
+    -- PendingRegistrations: resend cooldown tracking (server-enforced, 120s)
+    IF COL_LENGTH(N'PendingRegistrations', N'lastEmailSentAt') IS NULL
+      ALTER TABLE dbo.PendingRegistrations ADD lastEmailSentAt DATETIME NULL;
+    IF COL_LENGTH(N'PendingRegistrations', N'lastPhoneSentAt') IS NULL
+      ALTER TABLE dbo.PendingRegistrations ADD lastPhoneSentAt DATETIME NULL;
   `);
 
   await request.query(`
@@ -375,19 +391,53 @@ async function createTables() {
   console.log('[DB] AI plans and voucher tables ready.');
 
   // --- VerificationCodes Table (OTP for email/phone verification) ---
+  // NOTE: code stores SHA-256 hex (64 chars). attempts tracks failed tries.
   await request.query(`
     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='VerificationCodes' AND xtype='U')
     CREATE TABLE VerificationCodes (
       id          NVARCHAR(50)   PRIMARY KEY,
       userId      NVARCHAR(50)   NOT NULL,
-      code        NVARCHAR(10)   NOT NULL,
+      code        NVARCHAR(64)   NOT NULL,
       type        NVARCHAR(20)   NOT NULL,
       expiresAt   DATETIME       NOT NULL,
       used        BIT            NOT NULL DEFAULT 0,
+      attempts    INT            NOT NULL DEFAULT 0,
       createdAt   DATETIME       NOT NULL DEFAULT GETDATE()
     )
   `);
   console.log('[DB] Table "VerificationCodes" ready.');
+
+  // --- PendingRegistrations Table (verify-before-create) ---
+  // Holds registration data BEFORE email+SMS verification completes.
+  // A real Users row is created ONLY after both required channels verify.
+  await request.query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='PendingRegistrations' AND xtype='U')
+    CREATE TABLE PendingRegistrations (
+      id                 NVARCHAR(50)   PRIMARY KEY,
+      username           NVARCHAR(100)  NOT NULL,
+      passwordHash       NVARCHAR(255)  NOT NULL,
+      fullName           NVARCHAR(200)  NOT NULL,
+      email              NVARCHAR(255)  NULL,
+      phone              NVARCHAR(20)   NULL,
+      emailVerified      BIT            NOT NULL DEFAULT 0,
+      phoneVerified      BIT            NOT NULL DEFAULT 0,
+      emailOtpHash       NVARCHAR(64)   NULL,
+      emailOtpExpiresAt  DATETIME       NULL,
+      emailOtpAttempts   INT            NOT NULL DEFAULT 0,
+      phoneOtpHash       NVARCHAR(64)   NULL,
+      phoneOtpExpiresAt  DATETIME       NULL,
+      phoneOtpAttempts   INT            NOT NULL DEFAULT 0,
+      status             NVARCHAR(20)   NOT NULL DEFAULT 'pending',
+      idempotencyKey     NVARCHAR(100)  NULL,
+      idempotencyHash    NVARCHAR(64)   NULL,
+      lastEmailSentAt    DATETIME       NULL,
+      lastPhoneSentAt    DATETIME       NULL,
+      createdAt          DATETIME       NOT NULL DEFAULT GETDATE(),
+      updatedAt          DATETIME       NULL,
+      expiresAt          DATETIME       NOT NULL
+    )
+  `);
+  console.log('[DB] Table "PendingRegistrations" ready.');
 
   await seedAiCommerce();
 }
@@ -450,6 +500,8 @@ async function ensureProfessionalConstraints() {
         ALTER TABLE dbo.AiCreditLedger ADD CONSTRAINT CK_AiCreditLedger_amount CHECK (amount <> 0);
       IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_Vouchers_amounts')
         ALTER TABLE dbo.Vouchers ADD CONSTRAINT CK_Vouchers_amounts CHECK (discountValue >= 0 AND minOrderAmount >= 0 AND bonusHighCredits >= 0 AND bonusLowCredits >= 0);
+      IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_PendingRegistrations_status')
+        ALTER TABLE dbo.PendingRegistrations ADD CONSTRAINT CK_PendingRegistrations_status CHECK (status IN (N'pending', N'completed', N'expired', N'cancelled'));
     `);
     console.log('[DB] CHECK constraints ensured.');
 
@@ -534,6 +586,14 @@ async function ensureProfessionalConstraints() {
         CREATE INDEX IX_VerificationCodes_expiresAt ON dbo.VerificationCodes(expiresAt) WHERE used = 0;
       IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_UserAiAccounts_displayPlanId' AND object_id = OBJECT_ID('dbo.UserAiAccounts'))
         CREATE INDEX IX_UserAiAccounts_displayPlanId ON dbo.UserAiAccounts(displayPlanId);
+      IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_PendingRegistrations_username' AND object_id = OBJECT_ID('dbo.PendingRegistrations'))
+        CREATE UNIQUE INDEX UX_PendingRegistrations_username ON dbo.PendingRegistrations(username) WHERE status = N'pending';
+      IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_PendingRegistrations_expiresAt' AND object_id = OBJECT_ID('dbo.PendingRegistrations'))
+        CREATE INDEX IX_PendingRegistrations_expiresAt ON dbo.PendingRegistrations(expiresAt) WHERE status = N'pending';
+      IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_PendingRegistrations_email' AND object_id = OBJECT_ID('dbo.PendingRegistrations'))
+        CREATE INDEX IX_PendingRegistrations_email ON dbo.PendingRegistrations(email) WHERE email IS NOT NULL AND status = N'pending';
+      IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_PendingRegistrations_phone' AND object_id = OBJECT_ID('dbo.PendingRegistrations'))
+        CREATE INDEX IX_PendingRegistrations_phone ON dbo.PendingRegistrations(phone) WHERE phone IS NOT NULL AND status = N'pending';
     `);
     console.log('[DB] Indexes ensured.');
 

@@ -12,7 +12,35 @@ const app = express();
 // ---------------------------------------------------------------------------
 // Security middleware
 // ---------------------------------------------------------------------------
-app.use(helmet());
+// CSP allows Google Identity Services (login.html) — everything else stays
+// 'self'. Inline scripts remain blocked; page guards/config live in
+// external js/ files. GIS needs script + frame + connect access.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'font-src': ["'self'", 'https:', 'data:'],
+      'form-action': ["'self'"],
+      'frame-ancestors': ["'self'"],
+      'frame-src': ["'self'", 'https://accounts.google.com'],
+      // img.vietqr.io serves the VietQR payment codes our own checkout builds
+      // (account.js / pricing.js / studio.js). Blocking it breaks payment QR.
+      'img-src': ["'self'", 'data:', 'https://img.vietqr.io'],
+      'object-src': ["'none'"],
+      // studio.html has exactly 2 audited inline scripts (auth entry guard +
+      // three.js importmap); both are allowlisted by hash, all other inline
+      // scripts stay blocked.
+      'script-src': ["'self'", 'https://accounts.google.com', "'sha256-0D02wsfS+NlpLpIAaINSYArAPVInknzt55IwQNA1bu4='", "'sha256-lMdEI/ms9EMEHl64ayq+BlkKR8SpDJ7eqgoKF2Asp0k='", "'wasm-unsafe-eval'"],
+      'script-src-attr': ["'none'"],
+      // Three.js GLB loader (meshopt) compiles WASM and spawns blob workers.
+      'worker-src': ["'self'", 'blob:'],
+      'style-src': ["'self'", 'https:', "'unsafe-inline'"],
+      'connect-src': ["'self'", 'blob:', 'https://accounts.google.com'],
+      'upgrade-insecure-requests': [],
+    },
+  },
+}));
 app.use(compression());
 
 // ---------------------------------------------------------------------------

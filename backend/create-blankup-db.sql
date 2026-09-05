@@ -257,11 +257,42 @@ IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='VerificationCodes' AND xtype
 CREATE TABLE dbo.VerificationCodes (
   id          NVARCHAR(50)   PRIMARY KEY,
   userId      NVARCHAR(50)   NOT NULL,
-  code        NVARCHAR(10)   NOT NULL,
+  code        NVARCHAR(64)   NOT NULL,
   type        NVARCHAR(20)   NOT NULL,
   expiresAt   DATETIME       NOT NULL,
   used        BIT            NOT NULL DEFAULT 0,
+  attempts    INT            NOT NULL DEFAULT 0,
   createdAt   DATETIME       NOT NULL DEFAULT GETDATE()
+);
+GO
+
+-- ------------------------------------------------------------
+-- 2.11 PendingRegistrations (verify-before-create)
+-- ------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='PendingRegistrations' AND xtype='U')
+CREATE TABLE dbo.PendingRegistrations (
+  id                 NVARCHAR(50)   PRIMARY KEY,
+  username           NVARCHAR(100)  NOT NULL,
+  passwordHash       NVARCHAR(255)  NOT NULL,
+  fullName           NVARCHAR(200)  NOT NULL,
+  email              NVARCHAR(255)  NULL,
+  phone              NVARCHAR(20)   NULL,
+  emailVerified      BIT            NOT NULL DEFAULT 0,
+  phoneVerified      BIT            NOT NULL DEFAULT 0,
+  emailOtpHash       NVARCHAR(64)   NULL,
+  emailOtpExpiresAt  DATETIME       NULL,
+  emailOtpAttempts   INT            NOT NULL DEFAULT 0,
+  phoneOtpHash       NVARCHAR(64)   NULL,
+  phoneOtpExpiresAt  DATETIME       NULL,
+  phoneOtpAttempts   INT            NOT NULL DEFAULT 0,
+  status             NVARCHAR(20)   NOT NULL DEFAULT 'pending',
+  idempotencyKey     NVARCHAR(100)  NULL,
+  idempotencyHash    NVARCHAR(64)   NULL,
+  lastEmailSentAt    DATETIME       NULL,
+  lastPhoneSentAt    DATETIME       NULL,
+  createdAt          DATETIME       NOT NULL DEFAULT GETDATE(),
+  updatedAt          DATETIME       NULL,
+  expiresAt          DATETIME       NOT NULL
 );
 GO
 
@@ -302,6 +333,17 @@ IF COL_LENGTH(N'Users', N'resetTokenHash') IS NULL
   ALTER TABLE dbo.Users ADD resetTokenHash NVARCHAR(255) NULL;
 IF COL_LENGTH(N'Users', N'resetTokenExpiresAt') IS NULL
   ALTER TABLE dbo.Users ADD resetTokenExpiresAt DATETIME NULL;
+IF COL_LENGTH(N'VerificationCodes', N'attempts') IS NULL
+  ALTER TABLE dbo.VerificationCodes ADD attempts INT NOT NULL DEFAULT 0;
+IF COL_LENGTH(N'PendingRegistrations', N'lastEmailSentAt') IS NULL
+  ALTER TABLE dbo.PendingRegistrations ADD lastEmailSentAt DATETIME NULL;
+IF COL_LENGTH(N'PendingRegistrations', N'lastPhoneSentAt') IS NULL
+  ALTER TABLE dbo.PendingRegistrations ADD lastPhoneSentAt DATETIME NULL;
+GO
+-- VerificationCodes.code must hold SHA-256 hex (64 chars)
+DECLARE @vcCodeLen INT = (SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'VerificationCodes' AND COLUMN_NAME = 'code');
+IF @vcCodeLen IS NOT NULL AND @vcCodeLen < 64
+  ALTER TABLE dbo.VerificationCodes ALTER COLUMN code NVARCHAR(64) NOT NULL;
 GO
 
 -- ============================================================
@@ -492,6 +534,13 @@ IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_VerificationCodes_expi
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_UserAiAccounts_displayPlanId' AND object_id = OBJECT_ID('dbo.UserAiAccounts'))
   CREATE INDEX IX_UserAiAccounts_displayPlanId ON dbo.UserAiAccounts(displayPlanId);
+
+IF NOT EXISTS (SELECT * FROM sys.check_constraints WHERE name = 'CK_PendingRegistrations_status')
+  ALTER TABLE dbo.PendingRegistrations ADD CONSTRAINT CK_PendingRegistrations_status CHECK (status IN (N'pending', N'completed', N'expired', N'cancelled'));
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_PendingRegistrations_username' AND object_id = OBJECT_ID('dbo.PendingRegistrations'))
+  CREATE UNIQUE INDEX UX_PendingRegistrations_username ON dbo.PendingRegistrations(username) WHERE status = N'pending';
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_PendingRegistrations_expiresAt' AND object_id = OBJECT_ID('dbo.PendingRegistrations'))
+  CREATE INDEX IX_PendingRegistrations_expiresAt ON dbo.PendingRegistrations(expiresAt) WHERE status = N'pending';
 GO
 
 -- ============================================================
